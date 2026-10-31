@@ -7,6 +7,10 @@
 }
 
 :80 {
+	# TLS ends at the tunnel, so this is the only place that can see a plain HTTP visit.
+	@insecure header X-Forwarded-Proto http
+	redir @insecure https://{host}{uri} 308
+
 	# The API rate-limits by client address. Cloudflare's header is trustworthy here
 	# because only the tunnel can reach this container.
 	handle_path /api/* {
