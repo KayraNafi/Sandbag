@@ -1,0 +1,45 @@
+{
+  "name": "@sandbag/mobile",
+  "version": "0.1.0",
+  "main": "expo-router/entry",
+  "dependencies": {
+    "@expo-google-fonts/barlow": "^0.4.1",
+    "@expo-google-fonts/barlow-condensed": "^0.4.1",
+    "@expo/metro-runtime": "~58.0.15",
+    "@react-native-async-storage/async-storage": "2.2.0",
+    "@sandbag/shared": "*",
+    "@tanstack/react-query": "^5",
+    "expo": "~58.0.21",
+    "expo-clipboard": "~58.0.4",
+    "expo-constants": "~58.0.14",
+    "expo-crypto": "~58.0.7",
+    "expo-font": "~58.0.11",
+    "expo-haptics": "~58.0.7",
+    "expo-linking": "~58.0.15",
+    "expo-router": "~58.0.28",
+    "expo-secure-store": "~58.0.2",
+    "expo-splash-screen": "~58.0.12",
+    "expo-status-bar": "~58.0.4",
+    "expo-system-ui": "~58.0.7",
+    "react": "19.3.0",
+    "react-dom": "19.3.0",
+    "react-native": "0.88.1",
+    "react-native-safe-area-context": "~5.10.1",
+    "react-native-screens": "~4.30.0",
+    "react-native-svg": "15.16.0",
+    "react-native-web": "^0.21.4",
+    "zustand": "^5"
+  },
+  "devDependencies": {
+    "@types/react": "~19.3.0"
+  },
+  "scripts": {
+    "start": "expo start",
+    "android": "expo run:android",
+    "web": "expo start --web",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "private": true,
+  "license": "AGPL-3.0-only"
+}

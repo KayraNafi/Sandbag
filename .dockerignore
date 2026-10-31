@@ -1,0 +1,8 @@
+node_modules
+**/node_modules
+.git
+.web-dist
+**/dist
+apps/mobile/android
+.env
+deploy

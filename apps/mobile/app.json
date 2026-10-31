@@ -1,0 +1,53 @@
+{
+  "expo": {
+    "name": "Sandbag",
+    "slug": "sandbag",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "dark",
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "dev.novaden.sandbag"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#0b0c09",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      },
+      "predictiveBackGestureEnabled": false,
+      "package": "dev.novaden.sandbag"
+    },
+    "web": {
+      "favicon": "./assets/favicon.png",
+      "bundler": "metro",
+      "output": "single",
+      "name": "Sandbag",
+      "themeColor": "#0b0c09",
+      "backgroundColor": "#0b0c09",
+      "display": "standalone"
+    },
+    "scheme": "sandbag",
+    "backgroundColor": "#0b0c09",
+    "newArchEnabled": true,
+    "plugins": [
+      [
+        "expo-router",
+        {
+          "asyncRoutes": false
+        }
+      ],
+      "expo-secure-store",
+      "expo-font",
+      "expo-splash-screen",
+      "./plugins/with-release-signing"
+    ],
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#0b0c09"
+    }
+  }
+}

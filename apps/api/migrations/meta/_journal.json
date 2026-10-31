@@ -1,0 +1,27 @@
+{
+  "version": "7",
+  "dialect": "postgresql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "7",
+      "when": 1793346719793,
+      "tag": "0000_powerful_shadow_king",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1793433625964,
+      "tag": "0001_burly_warbird",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1793436067430,
+      "tag": "0002_next_spectrum",
+      "breakpoints": true
+    }
+  ]
+}

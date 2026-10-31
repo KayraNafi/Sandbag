@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+  <defs>
+    <mask id="cuts">
+      <rect width="1024" height="1024" fill="#fff"/>
+      <rect x="244" y="356" width="18" height="372" fill="#000"/>
+      <rect x="762" y="356" width="18" height="372" fill="#000"/>
+      <polygon points="386,437 462,437 402,647 326,647" fill="#000"/>
+      <polygon points="504,437 580,437 520,647 444,647" fill="#000"/>
+      <polygon points="622,437 698,437 638,647 562,647" fill="#000"/>
+    </mask>
+  </defs>
+  <g transform="rotate(-9 512 512)" fill="#d4ff3a">
+    <path d="M300 372C300 262 440 262 440 372" fill="none" stroke="#d4ff3a" stroke-width="40"/>
+    <path d="M584 372C584 262 724 262 724 372" fill="none" stroke="#d4ff3a" stroke-width="40"/>
+    <rect x="110" y="356" width="804" height="372" rx="120" mask="url(#cuts)"/>
+  </g>
+</svg>

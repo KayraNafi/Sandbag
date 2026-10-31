@@ -1,0 +1,51 @@
+# Sandbag
+
+Log your lifts, share them with friends, and find out who's been holding back.
+
+*Sandbagging: looking weaker than you are, on purpose.* Friends can call you on a lift, your next session of it
+settles the call, and if you don't beat the number you wear the badge in the rankings for a week. Rankings use
+progress and consistency against your own numbers, so heavier friends get no head start.
+
+Sandbag is invite-only and self-hosted: you run the server, and your crew's data stays on it.
+
+## Layout
+
+| Path | What it is |
+| --- | --- |
+| `apps/mobile` | The app: Expo and React Native, for Android, iOS and the web |
+| `apps/api` | The API: Fastify, Drizzle and PostgreSQL |
+| `packages/shared` | Validation, scoring and the app's voice, used by both |
+| `deploy` | Compose file and Caddy example for hosting |
+
+The phone holds a working copy, so logging never waits for the network. Changes sync per document, last write wins.
+
+## Develop
+
+```sh
+npm install
+npm test && npm run typecheck
+npm run dev:memory -w @sandbag/api   # throwaway API on :8080, prints the first invite code
+EXPO_PUBLIC_API_URL=http://localhost:8080 npm run web -w @sandbag/mobile
+```
+
+The API has no CORS, so for the web, serve the export and the API on one origin as `deploy/Caddyfile` does.
+Phone builds call the API directly.
+
+## API
+
+Anyone with an account can read and add their own workouts with a personal key. See [docs/API.md](docs/API.md).
+
+## Host
+
+1. Copy `deploy/.env.example` to `deploy/.env` and fill it in.
+2. `docker compose -f deploy/compose.yaml up -d --build`
+3. `npx expo export -p web --output-dir ../../deploy/web` in `apps/mobile`. The web app calls `/api` on its own origin.
+4. Point your tunnel or reverse proxy at the `web` container. It serves plain HTTP, so TLS has to end in front of it.
+5. Register with the bootstrap invite code. Everyone after that uses a member's code.
+
+There's no email on file, so a forgotten password is reset by the admin:
+`docker compose -f deploy/compose.yaml exec api node dist/reset-password.js <username>`. Back up the Postgres data directory.
+
+## Licence
+
+[AGPL-3.0](LICENSE). If you host a modified version, you have to offer your users its source.
