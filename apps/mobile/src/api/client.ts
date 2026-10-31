@@ -1,3 +1,4 @@
+import { Platform } from 'react-native';
 import type {
   ApiKeyView, TrophyView, AuthResponse, AvatarId, CallView, InviteSummary, Me, NotificationView, Period, PostView, PublicUser, RankingRow,
   DataExport, ReplyView, SavedWorkout, SyncRequest, SyncResponse, Entry,
@@ -26,7 +27,9 @@ export function configureApi(options: { token: string | null; onUnauthorized?: (
 async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
   const headers: Record<string, string> = {};
   if (body !== undefined) headers['Content-Type'] = 'application/json';
-  if (authToken) headers.Authorization = `Bearer ${authToken}`;
+  // On the web the session is a cookie this code can't read. The header proves the request came from the app.
+  if (Platform.OS === 'web') headers['X-Sandbag-Web'] = '1';
+  else if (authToken) headers.Authorization = `Bearer ${authToken}`;
   const response = await fetch(`${BASE_URL}${path}`, {
     method,
     headers,

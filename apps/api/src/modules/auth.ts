@@ -2,7 +2,7 @@ import { createHash, randomBytes } from 'node:crypto';
 import { hash, verify } from '@node-rs/argon2';
 import { changePasswordSchema, defaultAvatar, loginSchema, registerSchema, updateProfileSchema, voice, type AuthResponse, type AvatarId, type DataExport, type Me, type PublicUser } from '@sandbag/shared';
 import { and, eq, lt, ne, sql } from 'drizzle-orm';
-import type { FastifyInstance, FastifyRequest } from 'fastify';
+import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import type { Db, DbOrTx } from '../db/client';
 import { apiKeys, authSessions, loggedWorkouts, posts, savedWorkouts, users } from '../db/schema';
 import { conflict, HttpError, unauthorized } from '../errors';
@@ -10,6 +10,15 @@ import { befriend } from './friends';
 import { notify } from './notifications';
 
 const SESSION_DAYS = 90;
+const DAY_MS = 86_400_000;
+
+// The web app keeps its session where page scripts can't read it. Phones use their
+// secure storage and a bearer token. The server decides when a session ends, so the
+// cookie just lasts as long as browsers allow.
+const SESSION_COOKIE = 'sandbag_session';
+const COOKIE_ATTRIBUTES = 'HttpOnly; Secure; SameSite=Strict; Path=/api';
+const COOKIE_MAX_AGE_SECONDS = 400 * 86_400;
+const WEB_CLIENT_HEADER = 'x-sandbag-web';
 // Spends the same time on an unknown username, so logins can't probe for accounts.
 const DUMMY_HASH = await hash('sandbag-timing-equalizer');
 
@@ -50,20 +59,41 @@ async function createSession(db: DbOrTx, userId: string): Promise<string> {
   await db.insert(authSessions).values({
     tokenHash: hashToken(token),
     userId,
-    expiresAt: new Date(Date.now() + SESSION_DAYS * 86_400_000),
+    expiresAt: new Date(Date.now() + SESSION_DAYS * DAY_MS),
   });
   return token;
 }
 
-export async function requireUser(db: Db, request: FastifyRequest): Promise<typeof users.$inferSelect> {
+function presentedToken(request: FastifyRequest): string | null {
   const header = request.headers.authorization;
-  if (!header?.startsWith('Bearer ')) throw unauthorized();
+  if (header?.startsWith('Bearer ')) return header.slice(7);
+  // Browsers attach cookies on their own, so a change also needs a header other sites can't send.
+  if (!['GET', 'HEAD'].includes(request.method) && !request.headers[WEB_CLIENT_HEADER]) return null;
+  return request.headers.cookie?.match(new RegExp(`(?:^|;\\s*)${SESSION_COOKIE}=([A-Za-z0-9_-]+)`))?.[1] ?? null;
+}
+
+function issueSession(request: FastifyRequest, reply: FastifyReply, token: string, user: Me): AuthResponse {
+  if (!request.headers[WEB_CLIENT_HEADER]) return { token, user };
+  reply.header('Set-Cookie', `${SESSION_COOKIE}=${token}; ${COOKIE_ATTRIBUTES}; Max-Age=${COOKIE_MAX_AGE_SECONDS}`);
+  return { token: '', user };
+}
+
+export async function requireUser(db: Db, request: FastifyRequest): Promise<typeof users.$inferSelect> {
+  const token = presentedToken(request);
+  if (!token) throw unauthorized();
+  const tokenHash = hashToken(token);
   const [row] = await db
     .select({ user: users, expiresAt: authSessions.expiresAt })
     .from(authSessions)
     .innerJoin(users, eq(users.id, authSessions.userId))
-    .where(eq(authSessions.tokenHash, hashToken(header.slice(7))));
-  if (!row || row.expiresAt < new Date()) throw unauthorized();
+    .where(eq(authSessions.tokenHash, tokenHash));
+  const now = Date.now();
+  if (!row || row.expiresAt.getTime() < now) throw unauthorized();
+  // Using the app keeps you signed in. Writing at most daily keeps this off every request.
+  const expiresAt = now + SESSION_DAYS * DAY_MS;
+  if (expiresAt - row.expiresAt.getTime() > DAY_MS) {
+    await db.update(authSessions).set({ expiresAt: new Date(expiresAt) }).where(eq(authSessions.tokenHash, tokenHash));
+  }
   return row.user;
 }
 
@@ -96,10 +126,10 @@ export function authRoutes(app: FastifyInstance, db: Db, config: { bootstrapInvi
       return { token: await createSession(tx, user.id), user: toMe(user) };
     });
     reply.code(201);
-    return result;
+    return issueSession(request, reply, result.token, result.user);
   });
 
-  app.post('/auth/login', strict, async (request): Promise<AuthResponse> => {
+  app.post('/auth/login', strict, async (request, reply): Promise<AuthResponse> => {
     const input = loginSchema.parse(request.body);
     assertLoginAllowed(input.username);
     const [user] = await db.select().from(users).where(eq(users.username, input.username));
@@ -110,14 +140,13 @@ export function authRoutes(app: FastifyInstance, db: Db, config: { bootstrapInvi
     }
     failedLogins.delete(input.username);
     await db.delete(authSessions).where(lt(authSessions.expiresAt, new Date()));
-    return { token: await createSession(db, user.id), user: toMe(user) };
+    return issueSession(request, reply, await createSession(db, user.id), toMe(user));
   });
 
   app.post('/auth/logout', async (request, reply) => {
-    const header = request.headers.authorization;
-    if (header?.startsWith('Bearer ')) {
-      await db.delete(authSessions).where(eq(authSessions.tokenHash, hashToken(header.slice(7))));
-    }
+    const token = presentedToken(request);
+    if (token) await db.delete(authSessions).where(eq(authSessions.tokenHash, hashToken(token)));
+    if (request.headers[WEB_CLIENT_HEADER]) reply.header('Set-Cookie', `${SESSION_COOKIE}=; ${COOKIE_ATTRIBUTES}; Max-Age=0`);
     reply.code(204);
   });
 
@@ -140,7 +169,7 @@ export function authRoutes(app: FastifyInstance, db: Db, config: { bootstrapInvi
     await db.transaction(async (tx) => {
       await tx.update(users).set({ passwordHash }).where(eq(users.id, user.id));
       await tx.delete(apiKeys).where(eq(apiKeys.userId, user.id));
-      await tx.delete(authSessions).where(and(eq(authSessions.userId, user.id), ne(authSessions.tokenHash, hashToken(request.headers.authorization!.slice(7)))));
+      await tx.delete(authSessions).where(and(eq(authSessions.userId, user.id), ne(authSessions.tokenHash, hashToken(presentedToken(request)!))));
     });
     reply.code(204);
   });

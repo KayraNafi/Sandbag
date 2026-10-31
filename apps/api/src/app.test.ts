@@ -1,5 +1,6 @@
 import { PGlite } from '@electric-sql/pglite';
 import type { ApiKeyView, AuthResponse, CallView, NotificationView, TrophyView, Entry, InviteSummary, LoggedWorkout, PostView, RankingRow, SyncResponse } from '@sandbag/shared';
+import { eq } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/pglite';
 import { migrate } from 'drizzle-orm/pglite/migrator';
 import type { FastifyInstance } from 'fastify';
@@ -12,9 +13,10 @@ import * as schema from './db/schema';
 
 const BOOTSTRAP = 'founder-invite-code-long-enough';
 let app: FastifyInstance;
+let db: ReturnType<typeof drizzle<typeof schema>>;
 
 beforeEach(async () => {
-  const db = drizzle(new PGlite(), { schema });
+  db = drizzle(new PGlite(), { schema });
   await migrate(db, { migrationsFolder: fileURLToPath(new URL('../migrations', import.meta.url)) });
   app = await buildApp(db as unknown as Db, { bootstrapInviteCode: BOOTSTRAP });
 });
@@ -448,6 +450,72 @@ describe('public API', () => {
     expect(saved.body.position).toBe(0);
     expect((await sync(founder.token, 0)).body.savedWorkouts).toHaveLength(1);
     expect((await call('DELETE', `/v1/saved-workouts/${saved.body.id}`, key)).status).toBe(204);
+  });
+});
+
+describe('web sessions', () => {
+  const PASSWORD = 'correct horse battery';
+  const WEB = { 'x-sandbag-web': '1' };
+  const signUpOnWeb = async () => {
+    const response = await app.inject({
+      method: 'POST', url: '/auth/register', headers: WEB,
+      payload: { username: 'founder', displayName: 'Founder', password: PASSWORD, inviteCode: BOOTSTRAP },
+    });
+    const header = String(response.headers['set-cookie']);
+    return { response, header, cookie: header.split(';')[0]! };
+  };
+
+  it('keeps the session out of reach of page scripts', async () => {
+    const { response, header } = await signUpOnWeb();
+    expect(response.statusCode).toBe(201);
+    expect(header).toMatch(/HttpOnly/);
+    expect(header).toMatch(/Secure/);
+    expect(header).toMatch(/SameSite=Strict/);
+    expect((JSON.parse(response.body) as AuthResponse).token).toBe('');
+  });
+
+  it('gives phones a token and no cookie', async () => {
+    const response = await app.inject({ method: 'POST', url: '/auth/register', payload: { username: 'founder', displayName: 'Founder', password: PASSWORD, inviteCode: BOOTSTRAP } });
+    expect(response.headers['set-cookie']).toBeUndefined();
+    expect((JSON.parse(response.body) as AuthResponse).token).not.toBe('');
+  });
+
+  it('reads with the cookie alone, but changes need the header other sites can’t send', async () => {
+    const { cookie } = await signUpOnWeb();
+    expect((await app.inject({ method: 'GET', url: '/me', headers: { cookie } })).statusCode).toBe(200);
+    const change = { method: 'PATCH', url: '/me', payload: { displayName: 'Changed' } } as const;
+    expect((await app.inject({ ...change, headers: { cookie } })).statusCode).toBe(401);
+    expect((await app.inject({ ...change, headers: { cookie, ...WEB } })).statusCode).toBe(200);
+  });
+
+  it('can’t reach the public API, keeps itself on password change, and ends on sign out', async () => {
+    const { cookie } = await signUpOnWeb();
+    expect((await app.inject({ method: 'GET', url: '/v1/me', headers: { cookie } })).statusCode).toBe(401);
+    const changed = await app.inject({ method: 'POST', url: '/me/password', headers: { cookie, ...WEB }, payload: { currentPassword: PASSWORD, newPassword: 'a new long password' } });
+    expect(changed.statusCode).toBe(204);
+    expect((await app.inject({ method: 'GET', url: '/me', headers: { cookie } })).statusCode).toBe(200);
+    const out = await app.inject({ method: 'POST', url: '/auth/logout', headers: { cookie, ...WEB } });
+    expect(String(out.headers['set-cookie'])).toContain('Max-Age=0');
+    expect((await app.inject({ method: 'GET', url: '/me', headers: { cookie } })).statusCode).toBe(401);
+  });
+});
+
+describe('staying signed in', () => {
+  const { authSessions } = schema;
+  const expiry = async (userId: string) => (await db.select().from(authSessions).where(eq(authSessions.userId, userId)))[0]!.expiresAt.getTime();
+
+  it('renews the 90 days whenever the app is used', async () => {
+    const founder = await register('founder', BOOTSTRAP);
+    await db.update(authSessions).set({ expiresAt: new Date(Date.now() + 10 * 86_400_000) }).where(eq(authSessions.userId, founder.user.id));
+    expect((await call('GET', '/me', founder.token)).status).toBe(200);
+    expect(await expiry(founder.user.id)).toBeGreaterThan(Date.now() + 89 * 86_400_000);
+  });
+
+  it('doesn’t bring back a session that already ran out', async () => {
+    const founder = await register('founder', BOOTSTRAP);
+    await db.update(authSessions).set({ expiresAt: new Date(Date.now() - 1000) }).where(eq(authSessions.userId, founder.user.id));
+    expect((await call('GET', '/me', founder.token)).status).toBe(401);
+    expect(await expiry(founder.user.id)).toBeLessThan(Date.now());
   });
 });
 

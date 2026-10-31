@@ -7,11 +7,13 @@ import { useData } from '@/data/store';
 
 const TOKEN_KEY = 'sandbag.token';
 
-// The Keychain/Keystore on phones; the web has only browser storage.
+// The Keychain/Keystore on phones. On the web the real session is an HttpOnly cookie,
+// so this only remembers that you're signed in, for opening the app offline.
+const COOKIE_SESSION = 'cookie';
 const tokenStore = Platform.OS === 'web'
   ? {
     get: async () => globalThis.localStorage?.getItem(TOKEN_KEY) ?? null,
-    set: async (value: string) => globalThis.localStorage?.setItem(TOKEN_KEY, value),
+    set: async () => globalThis.localStorage?.setItem(TOKEN_KEY, COOKIE_SESSION),
     clear: async () => globalThis.localStorage?.removeItem(TOKEN_KEY),
   }
   : {
@@ -56,7 +58,7 @@ export const useSession = create<SessionState>((set, get) => {
     },
     signIn: async ({ token, user }) => {
       await tokenStore.set(token);
-      configureApi({ token });
+      configureApi({ token: await tokenStore.get() });
       useData.getState().claim(user.id);
       useData.getState().setProfile(user);
       set({ status: 'signedIn', me: user });
