@@ -1,9 +1,9 @@
 import { createHash, randomBytes } from 'node:crypto';
 import { hash, verify } from '@node-rs/argon2';
-import { changePasswordSchema, defaultAvatar, loginSchema, registerSchema, updateProfileSchema, voice, type AuthResponse, type AvatarId, type DataExport, type Me, type PublicUser } from '@sandbag/shared';
+import { changePasswordSchema, defaultAvatar, deleteAccountSchema, loginSchema, registerSchema, updateProfileSchema, voice, type AuthResponse, type AvatarId, type DataExport, type Me, type PublicUser } from '@sandbag/shared';
 import { and, eq, lt, ne, sql } from 'drizzle-orm';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
-import type { Db, DbOrTx } from '../db/client';
+import { lockUser, type Db, type DbOrTx, type Tx } from '../db/client';
 import { apiKeys, authSessions, loggedWorkouts, posts, savedWorkouts, users } from '../db/schema';
 import { conflict, HttpError, unauthorized } from '../errors';
 import { befriend } from './friends';
@@ -44,7 +44,7 @@ function recordFailedLogin(username: string): void {
 }
 
 const hashToken = (token: string) => createHash('sha256').update(token).digest('hex');
-const newInviteCode = () => randomBytes(6).toString('base64url').toUpperCase().replace(/[-_]/g, 'X');
+export const newInviteCode = () => randomBytes(6).toString('base64url').toUpperCase().replace(/[-_]/g, 'X');
 
 export function toPublic(user: { id: string; username: string; displayName: string; avatar: AvatarId | null }): PublicUser {
   return { id: user.id, username: user.username, displayName: user.displayName, avatar: user.avatar ?? defaultAvatar(user.id) };
@@ -110,7 +110,10 @@ export function authRoutes(app: FastifyInstance, db: Db, config: { bootstrapInvi
   app.post('/auth/register', strict, async (request, reply): Promise<AuthResponse> => {
     const input = registerSchema.parse(request.body);
     const passwordHash = await hash(input.password);
-    const result = await db.transaction(async (tx) => {
+    const result = await db.transaction(async (rawTx) => {
+      const tx = rawTx as unknown as Tx;
+      // One at a time, so two people can't both claim the bootstrap code.
+      await lockUser(tx, 'register');
       // Invite-only: this is a public service holding friends' data.
       const [inviter] = await tx.select().from(users).where(eq(users.inviteCode, input.inviteCode.toUpperCase()));
       if (!inviter) {
@@ -139,12 +142,11 @@ export function authRoutes(app: FastifyInstance, db: Db, config: { bootstrapInvi
   app.post('/auth/login', strict, async (request, reply): Promise<AuthResponse> => {
     const input = loginSchema.parse(request.body);
     assertLoginAllowed(input.username);
+    // Counted before checking, so a burst of guesses all at once can't slip past the limit.
+    recordFailedLogin(input.username);
     const [user] = await db.select().from(users).where(eq(users.username, input.username));
     const valid = await verify(user?.passwordHash ?? DUMMY_HASH, input.password);
-    if (!user || !valid) {
-      recordFailedLogin(input.username);
-      throw new HttpError(401, 'Wrong username or password');
-    }
+    if (!user || !valid) throw new HttpError(401, 'Wrong username or password');
     failedLogins.delete(input.username);
     await db.delete(authSessions).where(lt(authSessions.expiresAt, new Date()));
     return issueSession(request, reply, await createSession(db, user.id), toMe(user));
@@ -197,8 +199,11 @@ export function authRoutes(app: FastifyInstance, db: Db, config: { bootstrapInvi
   });
 
   // Foreign keys cascade, so this removes everything the person ever posted.
-  app.delete('/me', async (request, reply) => {
+  // Asks for the password again: a stolen session shouldn't be able to destroy an account.
+  app.delete('/me', strict, async (request, reply) => {
     const user = await requireUser(db, request);
+    const { password } = deleteAccountSchema.parse(request.body);
+    if (!(await verify(user.passwordHash, password))) throw new HttpError(400, 'That isn’t your password');
     await db.delete(users).where(eq(users.id, user.id));
     reply.code(204);
   });

@@ -17,7 +17,7 @@ const MAX_CLOCK_SKEW_MS = 86_400_000;
  * already be past, so it's returned explicitly.
  */
 export function syncRoutes(app: FastifyInstance, db: Db): void {
-  app.post('/sync', { bodyLimit: 8 * 1024 * 1024 }, async (request): Promise<SyncResponse> => {
+  app.post('/sync', { bodyLimit: 8 * 1024 * 1024, config: { rateLimit: { max: 120, timeWindow: '1 minute' } } }, async (request): Promise<SyncResponse> => {
     const user = await requireUser(db, request);
     const input = syncRequestSchema.parse(request.body);
     const latest = Date.now() + MAX_CLOCK_SKEW_MS;

@@ -14,6 +14,8 @@ import { friendIds } from './friends';
 import { notify } from './notifications';
 
 const FEED_PAGE = 30;
+// Each of these notifies someone, so a friend can't turn them into a flood.
+const WRITE_LIMIT = { config: { rateLimit: { max: 30, timeWindow: '1 minute' } } };
 const UUID = /^[0-9a-f-]{36}$/i;
 
 type Post = typeof posts.$inferSelect;
@@ -96,7 +98,7 @@ export function feedRoutes(app: FastifyInstance, db: Db): void {
     return toViews(db, rows, user.id);
   });
 
-  app.post('/posts', async (request, reply): Promise<PostView> => {
+  app.post('/posts', WRITE_LIMIT, async (request, reply): Promise<PostView> => {
     const user = await requireUser(db, request);
     const input = createPostSchema.parse(request.body);
     const friends = await friendIds(db, user.id);
@@ -154,7 +156,7 @@ export function feedRoutes(app: FastifyInstance, db: Db): void {
     reply.code(204);
   });
 
-  app.post<{ Params: { id: string } }>('/posts/:id/replies', async (request, reply) => {
+  app.post<{ Params: { id: string } }>('/posts/:id/replies', WRITE_LIMIT, async (request, reply) => {
     const user = await requireUser(db, request);
     const post = await loadVisiblePost(db, request.params.id, user.id);
     const { text } = createReplySchema.parse(request.body);
@@ -170,7 +172,7 @@ export function feedRoutes(app: FastifyInstance, db: Db): void {
 
   // Saves a friend's shared workout into your own, with no weights: their numbers
   // came from their machines, so yours load from your own history.
-  app.post<{ Params: { id: string } }>('/posts/:id/save', async (request): Promise<SavedWorkout> => {
+  app.post<{ Params: { id: string } }>('/posts/:id/save', WRITE_LIMIT, async (request): Promise<SavedWorkout> => {
     const user = await requireUser(db, request);
     const post = await loadVisiblePost(db, request.params.id, user.id);
     if (post.kind !== 'share') throw badRequest('Only shared workouts can be saved');
@@ -198,7 +200,7 @@ export function feedRoutes(app: FastifyInstance, db: Db): void {
     });
   });
 
-  app.post<{ Params: { id: string } }>('/posts/:id/calls', async (request, reply) => {
+  app.post<{ Params: { id: string } }>('/posts/:id/calls', WRITE_LIMIT, async (request, reply) => {
     const user = await requireUser(db, request);
     const post = await loadVisiblePost(db, request.params.id, user.id);
     if (post.authorId === user.id) throw badRequest('Calling yourself out is just therapy');

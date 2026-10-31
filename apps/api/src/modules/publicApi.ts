@@ -50,12 +50,17 @@ export function apiKeyRoutes(app: FastifyInstance, db: Db): void {
     const user = await requireUser(db, request);
     const input = createApiKeySchema.parse(request.body);
     if (!(await verify(user.passwordHash, input.password))) throw new HttpError(400, 'That isn’t your password');
-    const [{ total } = { total: 0 }] = await db.select({ total: sql<number>`count(*)::int` }).from(apiKeys).where(eq(apiKeys.userId, user.id));
-    if (total >= MAX_KEYS) throw badRequest(`You have ${MAX_KEYS} keys. Delete one first.`);
     const key = `${KEY_PREFIX}${randomBytes(32).toString('base64url')}`;
-    const [row] = await db.insert(apiKeys).values({ userId: user.id, name: input.name, prefix: key.slice(0, 12), tokenHash: hashKey(key) }).returning();
+    // Held across the count and the insert, or requests at the same moment all pass the cap.
+    const row = await db.transaction(async (tx) => {
+      await lockUser(tx, user.id);
+      const [{ total } = { total: 0 }] = await tx.select({ total: sql<number>`count(*)::int` }).from(apiKeys).where(eq(apiKeys.userId, user.id));
+      if (total >= MAX_KEYS) throw badRequest(`You have ${MAX_KEYS} keys. Delete one first.`);
+      const [created] = await tx.insert(apiKeys).values({ userId: user.id, name: input.name, prefix: key.slice(0, 12), tokenHash: hashKey(key) }).returning();
+      return created!;
+    });
     reply.code(201);
-    return { ...toKeyView(row!), key };
+    return { ...toKeyView(row), key };
   });
 
   app.delete<{ Params: { id: string } }>('/me/api-keys/:id', async (request, reply) => {
@@ -72,7 +77,7 @@ function assertNotFuture(date: string): void {
 }
 
 export function publicApiRoutes(app: FastifyInstance, db: Db): void {
-  const large = { bodyLimit: 8 * 1024 * 1024 };
+  const large = { bodyLimit: 8 * 1024 * 1024, config: { rateLimit: { max: 60, timeWindow: '1 minute' } } };
 
   app.get('/v1/me', async (request) => {
     const user = await requireKey(db, request);

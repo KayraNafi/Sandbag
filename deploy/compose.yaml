@@ -1,20 +1,29 @@
-# The database and API sit on a network with no way out and no published ports.
-# Only `web` joins your tunnel's network, and it's the one way in.
-# `push` is optional, and the only service that can reach the internet or read the Firebase key.
+# Nothing here publishes a port. `web` is the one way in, through your tunnel's network.
+# Each service reaches only what it needs: web talks to api, api and push talk to db,
+# and only `push`, which is optional, can reach the internet or read the Firebase key.
 name: sandbag
+
+x-logging: &logging
+  driver: json-file
+  options: { max-size: "10m", max-file: "3" }
 
 services:
   db:
-    image: postgres:17-alpine
+    image: postgres:17-alpine@sha256:266d3c257594e195b309ae9d1805e54c788f1d7b375f56bf6c367aac6c917e7b
     restart: unless-stopped
     environment:
       POSTGRES_DB: sandbag
       POSTGRES_USER: sandbag
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set in .env}
+      APP_DB_PASSWORD: ${APP_DB_PASSWORD:?set in .env}
+      PUSH_DB_PASSWORD: ${PUSH_DB_PASSWORD:?set in .env}
     volumes:
       - ./data/postgres:/var/lib/postgresql/data
-    networks: [internal]
+      - ./db-init.sh:/docker-entrypoint-initdb.d/roles.sh:ro
+    networks: [data]
     mem_limit: 384m
+    security_opt: ["no-new-privileges:true"]
+    logging: *logging
     healthcheck:
       test: ["CMD", "pg_isready", "-U", "sandbag"]
       interval: 10s
@@ -26,15 +35,17 @@ services:
     depends_on:
       db: { condition: service_healthy }
     environment:
-      DATABASE_URL: postgres://sandbag:${POSTGRES_PASSWORD}@db:5432/sandbag
+      # The admin account stays with the database. The app gets one that can't touch the server.
+      DATABASE_URL: postgres://sandbag_app:${APP_DB_PASSWORD}@db:5432/sandbag
       BOOTSTRAP_INVITE_CODE: ${BOOTSTRAP_INVITE_CODE:?set in .env}
       TRUSTED_PROXIES: "1"
       PORT: "8080"
-    networks: [internal]
+    networks: [app, data]
     mem_limit: 384m
     read_only: true
     cap_drop: [ALL]
     security_opt: ["no-new-privileges:true"]
+    logging: *logging
 
   push:
     build: ..
@@ -45,33 +56,41 @@ services:
       db: { condition: service_healthy }
       api: { condition: service_started }
     environment:
-      DATABASE_URL: postgres://sandbag:${POSTGRES_PASSWORD}@db:5432/sandbag
+      DATABASE_URL: postgres://sandbag_push:${PUSH_DB_PASSWORD}@db:5432/sandbag
       FIREBASE_SERVICE_ACCOUNT_FILE: /run/firebase/admin.json
     volumes:
       - ./.firebase/admin.json:/run/firebase/admin.json:ro
-    networks: [internal, egress]
+    networks: [data, egress]
     mem_limit: 256m
     read_only: true
     cap_drop: [ALL]
     security_opt: ["no-new-privileges:true"]
+    logging: *logging
 
   web:
-    image: caddy:2-alpine
+    image: caddy:2-alpine@sha256:e70b164da81ef698b3ad19af799ea6086ce6d9e48ed4079eb9fe26f6fbf14ee5
     restart: unless-stopped
     depends_on: [api]
+    user: "1000:1000"
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - ./web:/srv/web:ro
-    tmpfs: [/data, /config]
-    networks: [internal, edge]
+    tmpfs:
+      - /data:uid=1000,gid=1000
+      - /config:uid=1000,gid=1000
+    networks: [app, edge]
     mem_limit: 128m
     read_only: true
     cap_drop: [ALL]
+    # Caddy's binary carries this capability, and won't start without it even as non-root.
     cap_add: [NET_BIND_SERVICE]
     security_opt: ["no-new-privileges:true"]
+    logging: *logging
 
 networks:
-  internal:
+  app:
+    internal: true
+  data:
     internal: true
   egress: {}
   edge:

@@ -274,7 +274,7 @@ describe('account deletion', () => {
   it('removes the account and everything it posted', async () => {
     const { founder, friend } = await crew();
     await post(friend.token);
-    expect((await call('DELETE', '/me', friend.token)).status).toBe(204);
+    expect((await call('DELETE', '/me', friend.token, { password: 'correct horse battery' })).status).toBe(204);
     expect((await call('GET', '/me', friend.token)).status).toBe(401);
     expect((await call<PostView[]>('GET', '/feed', founder.token)).body).toEqual([]);
   });
@@ -416,7 +416,7 @@ describe('public API', () => {
     const { founder, friend } = await crew();
     const { key } = await makeKey(founder.token);
     expect((await call('GET', '/me', key)).status).toBe(401);
-    expect((await call('DELETE', '/me', key)).status).toBe(401);
+    expect((await call('DELETE', '/me', key, { password: 'correct horse battery' })).status).toBe(401);
     expect((await call('GET', '/v1/me', founder.token)).status).toBe(401);
     await call('POST', '/v1/workouts', key, { workouts: [{ id: 'mine', date: '2026-01-15', entries: [{ name: 'Curl' }] }] });
     const other = await makeKey(friend.token);

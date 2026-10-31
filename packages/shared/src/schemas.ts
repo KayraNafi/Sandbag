@@ -91,6 +91,7 @@ export const updateProfileSchema = z.object({
   avatar: z.enum(AVATARS).optional(),
 });
 export const changePasswordSchema = z.object({ currentPassword: z.string().min(1).max(200), newPassword: password });
+export const deleteAccountSchema = z.object({ password: z.string().min(1).max(200) });
 export const addFriendSchema = z.object({ inviteCode: z.string().trim().min(1).max(32) });
 
 export const createPostSchema = z.object({

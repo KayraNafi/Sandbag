@@ -15,7 +15,7 @@ On your own server, swap in your own domain.
 A key reaches `/v1` only, and only your own data. It can't change your password or account, see your friends, or post
 for you. Deleting a key, or changing your password, stops it immediately. Keep it out of anything you share.
 
-Limit: the server's normal per-client rate limit applies. A `429` means slow down.
+Limits: 300 requests a minute per client, and 60 a minute for `POST /v1/workouts`. A `429` means slow down.
 
 Errors look like `{ "error": "workouts.0.entries.0.rpe: Too big..." }`, naming the field at fault.
 

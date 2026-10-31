@@ -35,6 +35,7 @@ export default function Settings() {
   const [current, setCurrent] = useState('');
   const [next, setNext] = useState('');
   const [passwordError, setPasswordError] = useState<string>();
+  const [deletePassword, setDeletePassword] = useState('');
   const [busy, setBusy] = useState<string | null>(null);
 
   const run = async (name: string, action: () => Promise<void>) => {
@@ -84,10 +85,14 @@ export default function Settings() {
   });
 
   const deleteAccount = async () => {
+    if (!deletePassword) {
+      toast('Enter your password first.');
+      return;
+    }
     const sure = await confirm('Delete your account?', 'Every workout, post and reply goes, for good. Export your data first if you want it.', 'Continue');
     if (!sure || !(await confirm('Really delete it?', 'There’s no undo, and no one can bring it back.', 'Delete everything'))) return;
     await run('delete', async () => {
-      await api.deleteAccount();
+      await api.deleteAccount(deletePassword);
       await forgetSession();
     });
   };
@@ -117,7 +122,11 @@ export default function Settings() {
         <Muted>Add or read your workouts from your own scripts and tools.</Muted>
       </Card>
       <Button title="Sign out" variant="ghost" busy={busy === 'signOut'} onPress={signOut} />
-      <Button title="Delete account" variant="danger" busy={busy === 'delete'} onPress={deleteAccount} />
+      <Card>
+        <Heading>Delete account</Heading>
+        <Field label="Your password" secureTextEntry autoComplete="current-password" value={deletePassword} onChangeText={setDeletePassword} />
+        <Button title="Delete account" variant="danger" busy={busy === 'delete'} onPress={deleteAccount} />
+      </Card>
     </Screen>
   );
 }

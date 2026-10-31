@@ -4,7 +4,9 @@ import * as Clipboard from 'expo-clipboard';
 import { useState } from 'react';
 import { Share, StyleSheet, Text, View } from 'react-native';
 import { api, errorText } from '@/api/client';
+import { confirm } from '@/components/confirm';
 import { toast } from '@/components/Toast';
+import { useSession } from '@/auth/session';
 import { Button, Card, Field, Heading, Label, Loading, Muted, Row, Screen, Segments, Title } from '@/components/ui';
 import { Avatar } from '@/components/Avatar';
 import { colors, fonts, space } from '@/theme';
@@ -22,6 +24,29 @@ export default function Invites() {
     },
     onError: (error) => toast(errorText(error)),
   });
+
+  const refresh = () => Promise.all(['invites', 'friends', 'feed', 'rankings'].map((key) => client.invalidateQueries({ queryKey: [key] })));
+  const myId = useSession((state) => state.me?.id);
+  const rotate = useMutation({
+    mutationFn: api.rotateInviteCode,
+    onSuccess: () => {
+      toast('New code. The old one is dead.');
+      return refresh();
+    },
+    onError: (error) => toast(errorText(error)),
+  });
+  const remove = useMutation({
+    mutationFn: api.removeFriend,
+    onSuccess: refresh,
+    onError: (error) => toast(errorText(error)),
+  });
+  const askToRotate = async () => {
+    if (await confirm('Get a new code?', 'Your old code stops working. Everyone already in your crew stays.', 'New code')) rotate.mutate();
+  };
+  const askToRemove = async (id: string, name: string) => {
+    const sure = await confirm(`Remove ${name}?`, 'You stop seeing each other’s posts. They can come back with your code, so get a new one if you mean it.', 'Remove');
+    if (sure) remove.mutate(id);
+  };
 
   const data = invites.data;
   const copy = async () => {
@@ -46,6 +71,8 @@ export default function Invites() {
               <View style={styles.flex}><Button title="Share" onPress={share} /></View>
               <View style={styles.flex}><Button title="Copy" variant="ghost" onPress={copy} /></View>
             </Row>
+            <Muted>Anyone with this code can join and see your posts. Only give it to people you know.</Muted>
+            <Button title="Get a new code" variant="ghost" busy={rotate.isPending} onPress={() => void askToRotate()} />
           </Card>
           <Card>
             <Text style={styles.count}>{data.joined}</Text>
@@ -70,6 +97,7 @@ export default function Invites() {
               <Avatar user={row.user} size={30} />
               <Text style={[styles.flex, styles.name]}>{row.user.displayName}</Text>
               <Text style={styles.recruited}>{row.joined}</Text>
+              {row.user.id === myId ? null : <Button title={`Remove ${row.user.displayName}`} variant="ghost" style={styles.remove} onPress={() => void askToRemove(row.user.id, row.user.displayName)} />}
             </Row>
           ))}
         </>
@@ -91,4 +119,5 @@ const styles = StyleSheet.create({
   name: { fontFamily: fonts.bodyStrong, fontSize: 15, color: colors.ink },
   recruited: { fontFamily: fonts.display, fontSize: 22, color: colors.ink },
   section: { marginTop: space.md },
+  remove: { minHeight: 36, paddingHorizontal: space.sm },
 });

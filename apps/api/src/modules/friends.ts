@@ -4,8 +4,9 @@ import type { FastifyInstance } from 'fastify';
 import type { Db, DbOrTx } from '../db/client';
 import { friendships, users } from '../db/schema';
 import { badRequest, notFound } from '../errors';
-import { requireUser, toPublic } from './auth';
+import { newInviteCode, requireUser, toPublic } from './auth';
 
+const UUID = /^[0-9a-f-]{36}$/i;
 const ordered = (a: string, b: string) => (a < b ? { userA: a, userB: b } : { userA: b, userB: a });
 
 export async function befriend(db: DbOrTx, a: string, b: string): Promise<void> {
@@ -34,7 +35,8 @@ export function friendRoutes(app: FastifyInstance, db: Db): void {
   });
 
   // Adding an existing user is not a recruit, so it doesn't raise the invite count.
-  app.post('/friends', async (request): Promise<PublicUser> => {
+  // Knowing a code gets you into someone's crew, so guessing them is limited like a password.
+  app.post('/friends', { config: { rateLimit: { max: 10, timeWindow: '1 minute' } } }, async (request): Promise<PublicUser> => {
     const user = await requireUser(db, request);
     const { inviteCode } = addFriendSchema.parse(request.body);
     const [friend] = await db.select().from(users).where(eq(users.inviteCode, inviteCode.toUpperCase()));
@@ -46,9 +48,18 @@ export function friendRoutes(app: FastifyInstance, db: Db): void {
 
   app.delete<{ Params: { id: string } }>('/friends/:id', async (request, reply) => {
     const user = await requireUser(db, request);
+    if (!UUID.test(request.params.id)) throw notFound();
     const pair = ordered(user.id, request.params.id);
     await db.delete(friendships).where(and(eq(friendships.userA, pair.userA), eq(friendships.userB, pair.userB)));
     reply.code(204);
+  });
+
+  // For a code that got out. The old one stops working, and nobody already in your crew is removed.
+  app.post('/invites/rotate', { config: { rateLimit: { max: 10, timeWindow: '1 minute' } } }, async (request) => {
+    const user = await requireUser(db, request);
+    const code = newInviteCode();
+    await db.update(users).set({ inviteCode: code }).where(eq(users.id, user.id));
+    return { code };
   });
 
   app.get('/invites', async (request): Promise<InviteSummary> => {
