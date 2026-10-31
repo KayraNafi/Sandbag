@@ -79,6 +79,7 @@ export const api = {
   invites: () => request<InviteSummary>('GET', '/invites'),
   notifications: () => request<NotificationView[]>('GET', '/notifications'),
   markNotificationsRead: () => request<void>('POST', '/notifications/read'),
+  registerPushToken: (token: string) => request<void>('PUT', '/me/push-token', { token }),
   trophies: () => request<TrophyView[]>('GET', '/trophies'),
   apiKeys: () => request<ApiKeyView[]>('GET', '/me/api-keys'),
   createApiKey: (name: string, password: string) => request<ApiKeyView & { key: string }>('POST', '/me/api-keys', { name, password }),

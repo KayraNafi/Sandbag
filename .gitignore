@@ -11,6 +11,9 @@ ios/
 .expo/
 dist-apk/
 .dev-data/
+google-services.json
+deploy/.firebase/
+deploy/.signing/
 deploy/web/
 deploy/data/
 *.log

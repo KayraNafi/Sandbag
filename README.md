@@ -46,6 +46,15 @@ Anyone with an account can read and add their own workouts with a personal key. 
 There's no email on file, so a forgotten password is reset by the admin:
 `docker compose -f deploy/compose.yaml exec api node dist/reset-password.js <username>`. Back up the Postgres data directory.
 
+## Push notifications
+
+Optional, for Android. Without them, notifications still appear inside the app.
+
+1. Create a Firebase project and add an Android app with your package name.
+2. Put its `google-services.json` in `apps/mobile`. It's ignored by git. Build the app from there.
+3. Generate a service account key in Firebase and save it as `deploy/.firebase/admin.json`, readable by uid 1000 only.
+4. Set `COMPOSE_PROFILES=push` in `deploy/.env` and run `docker compose up -d --build`.
+
 ## Licence
 
 [AGPL-3.0](LICENSE). If you host a modified version, you have to offer your users its source.

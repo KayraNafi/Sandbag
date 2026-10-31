@@ -8,6 +8,7 @@ import { authRoutes } from './modules/auth';
 import { feedRoutes } from './modules/feed';
 import { friendRoutes } from './modules/friends';
 import { notificationRoutes } from './modules/notifications';
+import { pushRoutes } from './modules/push';
 import { rankingRoutes } from './modules/rankings';
 import { apiKeyRoutes, publicApiRoutes } from './modules/publicApi';
 import { trophyRoutes } from './modules/trophies';
@@ -57,6 +58,7 @@ export async function buildApp(db: Db, config: AppConfig = {}): Promise<FastifyI
   rankingRoutes(app, db);
   notificationRoutes(app, db);
   trophyRoutes(app, db);
+  pushRoutes(app, db);
   apiKeyRoutes(app, db);
   publicApiRoutes(app, db);
   return app;

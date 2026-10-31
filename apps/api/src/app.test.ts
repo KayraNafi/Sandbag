@@ -8,6 +8,7 @@ import { randomUUID } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { buildApp } from './app';
+import { deliverPending, type PushMessage } from './modules/push';
 import type { Db } from './db/client';
 import * as schema from './db/schema';
 
@@ -516,6 +517,74 @@ describe('staying signed in', () => {
     await db.update(authSessions).set({ expiresAt: new Date(Date.now() - 1000) }).where(eq(authSessions.userId, founder.user.id));
     expect((await call('GET', '/me', founder.token)).status).toBe(401);
     expect(await expiry(founder.user.id)).toBeLessThan(Date.now());
+  });
+});
+
+describe('push', () => {
+  const TOKEN = 'fcm-token-long-enough-for-the-schema';
+  const fake = (result: { dead?: string[]; retry?: boolean } = {}) => {
+    const sent: { tokens: string[]; message: PushMessage }[] = [];
+    return { sent, sender: { send: async (tokens: string[], message: PushMessage) => { sent.push({ tokens, message }); return { dead: result.dead ?? [], retry: result.retry ?? false }; } } };
+  };
+  const pending = () => deliverPending(db as unknown as Db, sender.sender);
+  let sender = fake();
+  beforeEach(() => { sender = fake(); });
+
+  // Joining sends the inviter a notification, which is the simplest real one to push.
+  const inviterWithToken = async () => {
+    const founder = await register('founder', BOOTSTRAP);
+    expect((await call('PUT', '/me/push-token', founder.token, { token: TOKEN })).status).toBe(204);
+    return founder;
+  };
+
+  it('sends a notification once, to the right phone', async () => {
+    const founder = await inviterWithToken();
+    await register('friend', founder.user.inviteCode);
+    expect(await pending()).toBe(1);
+    expect(sender.sent[0]?.tokens).toEqual([TOKEN]);
+    expect(sender.sent[0]?.message).toMatchObject({ title: 'New recruit', route: 'invites' });
+    expect(await pending()).toBe(0);
+    expect(sender.sent).toHaveLength(1);
+  });
+
+  it('stops when you sign out, or change your password elsewhere', async () => {
+    const founder = await inviterWithToken();
+    await call('POST', '/auth/logout', founder.token);
+    await register('friend', founder.user.inviteCode);
+    await pending();
+    expect(sender.sent).toHaveLength(0);
+    expect(await db.select().from(schema.pushTokens)).toHaveLength(0);
+  });
+
+  it('forgets a phone Firebase says is gone', async () => {
+    const founder = await inviterWithToken();
+    await register('friend', founder.user.inviteCode);
+    await deliverPending(db as unknown as Db, fake({ dead: [TOKEN] }).sender);
+    expect(await db.select().from(schema.pushTokens)).toHaveLength(0);
+  });
+
+  it('tries again after a failure, but not with old news', async () => {
+    const founder = await inviterWithToken();
+    await register('friend', founder.user.inviteCode);
+    expect(await deliverPending(db as unknown as Db, fake({ retry: true }).sender)).toBe(0);
+    await db.update(schema.notifications).set({ createdAt: new Date(Date.now() - 2 * 3_600_000) });
+    expect(await pending()).toBe(0);
+    expect(sender.sent).toHaveLength(0);
+    expect((await db.select().from(schema.notifications))[0]?.pushedAt).not.toBeNull();
+  });
+
+  it('moves a shared phone’s token to whoever signed in last', async () => {
+    const founder = await inviterWithToken();
+    const friend = await register('friend', founder.user.inviteCode);
+    await call('PUT', '/me/push-token', friend.token, { token: TOKEN });
+    const [row] = await db.select().from(schema.pushTokens);
+    expect(row?.userId).toBe(friend.user.id);
+  });
+
+  it('can’t be reached with an API key', async () => {
+    const founder = await register('founder', BOOTSTRAP);
+    const key = await call<{ key: string }>('POST', '/me/api-keys', founder.token, { name: 'x', password: 'correct horse battery' });
+    expect((await call('PUT', '/me/push-token', key.body.key, { token: TOKEN })).status).toBe(401);
   });
 });
 

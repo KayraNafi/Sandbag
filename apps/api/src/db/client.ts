@@ -12,10 +12,10 @@ export type Db = PgDatabase<PgQueryResultHKT, Schema, ExtractTablesWithRelations
 export type Tx = PgTransaction<PgQueryResultHKT, Schema, ExtractTablesWithRelations<Schema>>;
 export type DbOrTx = Db | Tx;
 
-export async function connect(databaseUrl: string, migrationsFolder: string): Promise<{ db: Db; close: () => Promise<void> }> {
+export async function connect(databaseUrl: string, migrationsFolder?: string): Promise<{ db: Db; close: () => Promise<void> }> {
   const client = postgres(databaseUrl, { max: 10 });
   const db = drizzle(client, { schema });
-  await migrate(db, { migrationsFolder });
+  if (migrationsFolder) await migrate(db, { migrationsFolder });
   return { db: db as unknown as Db, close: () => client.end() };
 }
 

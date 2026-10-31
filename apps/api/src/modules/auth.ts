@@ -78,6 +78,13 @@ function issueSession(request: FastifyRequest, reply: FastifyReply, token: strin
   return { token: '', user };
 }
 
+/** The current session's id, for the things that should end when it does. */
+export function sessionHash(request: FastifyRequest): string {
+  const token = presentedToken(request);
+  if (!token) throw unauthorized();
+  return hashToken(token);
+}
+
 export async function requireUser(db: Db, request: FastifyRequest): Promise<typeof users.$inferSelect> {
   const token = presentedToken(request);
   if (!token) throw unauthorized();

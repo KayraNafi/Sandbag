@@ -42,6 +42,14 @@
       "expo-secure-store",
       "expo-font",
       "expo-splash-screen",
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/android-icon-monochrome.png",
+          "color": "#d4ff3a",
+          "defaultChannel": "default"
+        }
+      ],
       "./plugins/with-release-signing"
     ],
     "splash": {

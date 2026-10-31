@@ -235,6 +235,8 @@ export const apiSavedWorkoutSchema = z.object({
 });
 export const createApiKeySchema = z.object({ name: z.string().trim().min(1).max(40), password: z.string().min(1).max(200) });
 
+export const pushTokenSchema = z.object({ token: z.string().min(20).max(4096) });
+
 export interface ApiKeyView {
   id: string;
   name: string;

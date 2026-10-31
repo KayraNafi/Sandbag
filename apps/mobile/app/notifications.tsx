@@ -1,20 +1,12 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { router, type Href } from 'expo-router';
+import { router } from 'expo-router';
 import { useEffect } from 'react';
 import { StyleSheet, Text } from 'react-native';
 import { api } from '@/api/client';
 import { Card, Empty, Loading, Muted, Screen } from '@/components/ui';
 import { agoShort } from '@/domain/format';
+import { hrefFor } from '@/domain/routes';
 import { colors, fonts } from '@/theme';
-
-function hrefFor(route: string | null): Href | null {
-  if (route === 'train') return '/';
-  if (route === 'rankings') return '/rankings';
-  if (route === 'invites') return '/invites';
-  if (route === 'trophies') return '/trophies';
-  const post = route?.match(/^post\/([0-9a-f-]{36})$/i)?.[1];
-  return post ? `/post/${post}` : null;
-}
 
 export default function Notifications() {
   const client = useQueryClient();

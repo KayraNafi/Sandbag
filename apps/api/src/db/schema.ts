@@ -129,8 +129,21 @@ export const notifications = pgTable('notifications', {
   body: text('body').notNull(),
   route: text('route'),
   readAt: timestamp('read_at', { withTimezone: true }),
+  // Null until the push worker has dealt with it. See modules/push.ts.
+  pushedAt: timestamp('pushed_at', { withTimezone: true }),
   createdAt: createdAt(),
-}, (t) => [index('notifications_user_created').on(t.userId, t.createdAt)]);
+}, (t) => [
+  index('notifications_user_created').on(t.userId, t.createdAt),
+  index('notifications_unpushed').on(t.createdAt).where(sql`${t.pushedAt} is null`),
+]);
+
+// Belongs to a session, so signing out or changing your password stops that phone's pushes.
+export const pushTokens = pgTable('push_tokens', {
+  token: text('token').primaryKey(),
+  sessionHash: text('session_hash').notNull().references(() => authSessions.tokenHash, { onDelete: 'cascade' }),
+  userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  createdAt: createdAt(),
+}, (t) => [index('push_tokens_user').on(t.userId)]);
 
 // Long-lived keys for the public API. Like sessions, only the hash is stored.
 export const apiKeys = pgTable('api_keys', {
