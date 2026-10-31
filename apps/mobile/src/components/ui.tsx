@@ -147,7 +147,7 @@ export const Row = ({ children, style }: { children: ReactNode; style?: StylePro
 export function Empty({ title, body }: { title: string; body: string }) {
   return (
     <View style={styles.empty}>
-      <Heading style={styles.center}>{title}</Heading>
+      <Heading style={styles.emptyTitle}>{title}</Heading>
       <Muted style={styles.center}>{body}</Muted>
     </View>
   );
@@ -197,6 +197,8 @@ const styles = StyleSheet.create({
   row: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
   empty: { paddingVertical: space.xl, gap: space.sm, alignItems: 'center' },
   center: { textAlign: 'center' },
+  // Stretched, because Android clips a centered heading's second word when it measures it shrink-wrapped.
+  emptyTitle: { alignSelf: 'stretch', textAlign: 'center' },
   loading: { marginVertical: space.xl },
   segments: { flexDirection: 'row', gap: 3 },
   segment: { flex: 1, height: 10, backgroundColor: colors.surface2, transform: [{ skewX: '-18deg' }] },
