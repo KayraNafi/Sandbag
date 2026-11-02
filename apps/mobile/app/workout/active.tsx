@@ -1,4 +1,4 @@
-import { exerciseKey } from '@sandbag/shared';
+import { exerciseKey, MAX_VARIED_SETS } from '@sandbag/shared';
 import * as Haptics from 'expo-haptics';
 import { router } from 'expo-router';
 import { useMemo, useState } from 'react';
@@ -9,7 +9,7 @@ import { Button, Card, Chip, Field, Heading, Label, MoveButtons, Muted, NumberFi
 import { addExerciseToDraft, finishDraft, reactionTo } from '@/data/actions';
 import { useData } from '@/data/store';
 import { agoText, backfillDates, dayLabel, num, round2, summary } from '@/domain/format';
-import { activeLogged, buildHistory, lastLogged, moveItem, recentWeights, type DraftEntry } from '@/domain/history';
+import { activeLogged, buildHistory, fitSetReps, lastLogged, moveItem, recentWeights, type DraftEntry } from '@/domain/history';
 import { colors, fonts, radius, space } from '@/theme';
 
 const WEIGHT_STEP = 2.5;
@@ -26,14 +26,25 @@ function Editor({ entry, date, onChange, onRemove }: {
   const last = lastLogged(index, entry.name, date);
   const weights = recentWeights(index, entry.name);
   const stepWeight = (delta: number) => onChange({ weight: Math.max(0, round2((entry.weight ?? 0) + delta)) });
+  const sets = entry.sets ?? 0;
+  const canVary = sets >= 2 && sets <= MAX_VARIED_SETS;
+  const varying = canVary && entry.setReps !== undefined;
+  // Typing "12" passes through "1", so values only change once the count is one that can vary.
+  const changeSets = (next: number | null) => {
+    const fits = next !== null && next >= 2 && next <= MAX_VARIED_SETS;
+    onChange({ sets: next, ...(entry.setReps && fits ? { setReps: fitSetReps(entry.setReps, next, entry.reps) } : {}) });
+  };
 
   return (
     <View style={styles.editor}>
       {last ? <Muted>Last time, {agoText(last.date)}: {summary(last)}</Muted> : <Muted>First time logging this one.</Muted>}
-      <Row>
+      <Row style={styles.wrap}>
         <Chip title="Weight" active={entry.kind === 'strength'} onPress={() => onChange({ kind: 'strength' })} />
         <Chip title="Time" active={entry.kind === 'time'} onPress={() => onChange({ kind: 'time' })} />
         {entry.kind === 'strength' ? <Chip title="Each side" active={entry.perSide} onPress={() => onChange({ perSide: !entry.perSide })} /> : null}
+        {entry.kind === 'strength' && canVary ? (
+          <Chip title="Vary reps" active={varying} onPress={() => onChange({ setReps: varying ? undefined : fitSetReps([], sets, entry.reps) })} />
+        ) : null}
       </Row>
       {entry.kind === 'time' ? (
         <NumberField label="Minutes" value={entry.minutes} max={1440} onChange={(minutes) => onChange({ minutes })} />
@@ -55,10 +66,28 @@ function Editor({ entry, date, onChange, onRemove }: {
             <Chip title="Not included" active={entry.includesEquipment === false} onPress={() => onChange({ includesEquipment: entry.includesEquipment === false ? undefined : false })} />
           </Row>
           <Row>
-            <NumberField label="Sets" decimals={false} value={entry.sets} max={1000} onChange={(sets) => onChange({ sets })} />
-            <NumberField label="Reps" decimals={false} value={entry.reps} max={1000} onChange={(reps) => onChange({ reps })} />
+            <NumberField label="Sets" decimals={false} value={entry.sets} max={1000} onChange={changeSets} />
+            {varying ? null : <NumberField label="Reps" decimals={false} value={entry.reps} max={1000} onChange={(reps) => onChange({ reps })} />}
             <NumberField label="RPE" value={entry.rpe} max={10} onChange={(rpe) => onChange({ rpe })} />
           </Row>
+          {varying ? (
+            <Row style={styles.wrap}>
+              {entry.setReps?.map((reps, set) => (
+                <NumberField
+                  key={set}
+                  label={`Set ${set + 1}`}
+                  decimals={false}
+                  value={reps}
+                  max={1000}
+                  style={styles.setBox}
+                  onChange={(value) => onChange({
+                    setReps: entry.setReps?.map((item, position) => (position === set ? value : item)),
+                    reps: entry.reps ?? value,
+                  })}
+                />
+              ))}
+            </Row>
+          ) : null}
         </>
       )}
       <Field label="Note" placeholder="last set 13.6" maxLength={NOTE_MAX} value={entry.note} onChangeText={(note) => onChange({ note })} />
@@ -258,6 +287,7 @@ const styles = StyleSheet.create({
   editor: { gap: space.md, marginTop: space.sm },
   bottom: { alignItems: 'flex-end' },
   wrap: { flexWrap: 'wrap' },
+  setBox: { flex: 0, width: '22%' },
   step: { width: 56, height: 50, borderRadius: radius.md, backgroundColor: colors.surface2, borderWidth: 1, borderColor: colors.line, alignItems: 'center', justifyContent: 'center' },
   stepText: { fontFamily: fonts.display, fontSize: 28, color: colors.volt },
   addInput: { flex: 1, minHeight: 52, backgroundColor: colors.surface2, borderWidth: 1, borderColor: colors.line, borderRadius: radius.md, paddingHorizontal: space.md, color: colors.ink, fontFamily: fonts.body, fontSize: 16 },

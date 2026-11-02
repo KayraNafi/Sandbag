@@ -56,6 +56,7 @@ Only `date` and each entry's `name` are required.
 | `name` | required | Matched without regard to case, so `cable CURLS` and `Cable curls` share a history. |
 | `kind` | `strength` | Or `time`. |
 | `sets`, `reps` | `null` | |
+| `setReps` | not set | Reps for each set when they differ, like `[8, 8, 6]`. Up to 20, one per set. |
 | `weight` | `null` | Kilograms. |
 | `perSide` | `false` | The weight is per side. |
 | `includesEquipment` | not set | `true` if the weight counts the bar or machine, `false` if it doesn't. Leave it out to say neither. |

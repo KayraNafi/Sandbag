@@ -1,6 +1,6 @@
 import type { Entry, LoggedWorkout, SavedWorkout } from '@sandbag/shared';
 import { describe, expect, it } from 'vitest';
-import { activeLogged, bestBefore, buildHistory, draftEntryFor, lastLogged, moveItem, nextWorkout, recentWeights, sameExercises } from './history';
+import { activeLogged, bestBefore, buildHistory, draftEntryFor, fitSetReps, lastLogged, moveItem, nextWorkout, recentWeights, sameExercises } from './history';
 
 const entry = (name: string, weight: number | null, extra: Partial<Entry> = {}): Entry => ({
   id: `${name}-${weight}`, name, kind: 'strength', sets: 3, reps: 8, weight, perSide: false, rpe: 8, minutes: null, note: '', ...extra,
@@ -89,6 +89,24 @@ describe('a backfilled session', () => {
 
   it('doesn’t replace the numbers the next session starts from', () => {
     expect(lastLogged(index, 'Squat')?.weight).toBe(500);
+  });
+});
+
+describe('fitSetReps', () => {
+  it('fills from the usual number, and keeps typed values when the sets change', () => {
+    expect(fitSetReps([], 3, 8)).toEqual([8, 8, 8]);
+    expect(fitSetReps([8, 6], 4, 8)).toEqual([8, 6, 8, 8]);
+    expect(fitSetReps([8, 6, 5], 2, 8)).toEqual([8, 6]);
+    expect(fitSetReps([null, 6], 2, 8)).toEqual([null, 6]);
+  });
+});
+
+describe('per-set reps on the next session', () => {
+  it('starts from the usual number, not last time’s breakdown', () => {
+    const index = buildHistory([logged('w', '2026-01-01', [entry('Squat', 100, { sets: 3, reps: 8, setReps: [8, 8, 6] })])]);
+    const next = draftEntryFor(index, { name: 'Squat', kind: 'strength', sets: null, reps: null }, () => 'id');
+    expect(next.reps).toBe(8);
+    expect(next.setReps).toBeUndefined();
   });
 });
 

@@ -121,6 +121,11 @@ export function sameExercises(a: { name: string }[], b: { name: string }[]): boo
   return key(a) === key(b);
 }
 
+/** Keeps what's typed for the sets that remain, and new sets start at the usual number. */
+export function fitSetReps(current: (number | null)[], sets: number, reps: number | null): (number | null)[] {
+  return Array.from({ length: sets }, (_, set) => (set < current.length ? current[set] ?? null : reps));
+}
+
 export function moveItem<T>(list: T[], index: number, delta: -1 | 1): T[] {
   const target = index + delta;
   const item = list[index];

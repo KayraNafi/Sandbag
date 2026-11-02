@@ -5,12 +5,17 @@ const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 const exerciseName = z.string().trim().min(1).max(100);
 const count = z.number().int().min(0).max(1000).nullable();
 
+export const MAX_VARIED_SETS = 20;
+const setReps = z.array(count).max(MAX_VARIED_SETS).optional();
+
 export const entrySchema = z.object({
   id: clientId,
   name: exerciseName,
   kind: z.enum(['strength', 'time']),
   sets: count,
   reps: count,
+  // One value per set when they differ. `reps` stays the usual number, which the next session starts from.
+  setReps,
   weight: z.number().min(0).max(2000).nullable(),
   perSide: z.boolean(),
   // Whether the weight counts the bar or machine. Absent means it wasn't said, as on every older entry.
@@ -210,6 +215,7 @@ const apiEntrySchema = z.object({
   kind: z.enum(['strength', 'time']).default('strength'),
   sets: optionalCount,
   reps: optionalCount,
+  setReps,
   weight: z.number().min(0).max(2000).nullable().default(null),
   perSide: z.boolean().default(false),
   includesEquipment: z.boolean().optional(),

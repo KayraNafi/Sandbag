@@ -54,7 +54,8 @@ export const num = (value: number) => String(round2(value));
 export const plural = (count: number, word: string) => `${count} ${word}${count === 1 ? '' : 's'}`;
 export const signed = (value: number) => `${value > 0 ? '+' : ''}${value}%`;
 
-export function setsReps(entry: Pick<Entry, 'sets' | 'reps'>): string {
+export function setsReps(entry: Pick<Entry, 'sets' | 'reps' | 'setReps'>): string {
+  if (entry.setReps?.length && entry.setReps.length === entry.sets) return entry.setReps.map((reps) => reps ?? '–').join(', ');
   if (entry.sets && entry.reps) return `${entry.sets} × ${entry.reps}`;
   if (entry.sets) return plural(entry.sets, 'set');
   if (entry.reps) return plural(entry.reps, 'rep');

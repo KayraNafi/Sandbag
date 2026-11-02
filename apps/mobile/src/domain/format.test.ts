@@ -1,5 +1,17 @@
 import { describe, expect, it } from 'vitest';
-import { backfillDates, dayLabel } from './format';
+import { backfillDates, dayLabel, setsReps } from './format';
+
+describe('setsReps', () => {
+  it('lists each set when they differ', () => {
+    expect(setsReps({ sets: 3, reps: 8, setReps: [8, 8, 6] })).toBe('8, 8, 6');
+    expect(setsReps({ sets: 3, reps: 8, setReps: [8, null, 6] })).toBe('8, –, 6');
+  });
+
+  it('falls back to sets × reps without a list, or when the list no longer fits', () => {
+    expect(setsReps({ sets: 3, reps: 8 })).toBe('3 × 8');
+    expect(setsReps({ sets: 4, reps: 8, setReps: [8, 8, 6] })).toBe('4 × 8');
+  });
+});
 
 describe('backfillDates', () => {
   it('offers today and the seven days before it, newest first', () => {

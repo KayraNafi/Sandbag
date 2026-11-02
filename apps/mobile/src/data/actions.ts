@@ -57,7 +57,8 @@ export function reactionTo(entry: DraftEntry, date: string): string | null {
 export function finishDraft(draft: Draft): LoggedWorkout {
   const entries: Entry[] = draft.entries
     .filter((entry) => entry.done)
-    .map(({ done: _done, ...entry }) => entry);
+    // A list left behind when the sets changed no longer describes the session.
+    .map(({ done: _done, setReps, ...entry }) => (setReps?.length === entry.sets ? { ...entry, setReps } : entry));
   const doc = loggedWorkoutSchema.parse({
     id: draft.id, date: draft.date, title: draft.title.trim() || 'Workout', savedWorkoutId: draft.savedWorkoutId,
     entries, updatedAt: Date.now(), deleted: false,
