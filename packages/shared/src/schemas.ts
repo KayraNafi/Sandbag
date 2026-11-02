@@ -6,6 +6,7 @@ const exerciseName = z.string().trim().min(1).max(100);
 const count = z.number().int().min(0).max(1000).nullable();
 
 export const MAX_VARIED_SETS = 20;
+export const MAX_WEIGHT = 2000;
 const setReps = z.array(count).max(MAX_VARIED_SETS).optional();
 
 export const entrySchema = z.object({
@@ -16,7 +17,7 @@ export const entrySchema = z.object({
   reps: count,
   // One value per set when they differ. `reps` stays the usual number, which the next session starts from.
   setReps,
-  weight: z.number().min(0).max(2000).nullable(),
+  weight: z.number().min(0).max(MAX_WEIGHT).nullable(),
   perSide: z.boolean(),
   // Whether the weight counts the bar or machine. Absent means it wasn't said, as on every older entry.
   includesEquipment: z.boolean().optional(),
@@ -216,7 +217,7 @@ const apiEntrySchema = z.object({
   sets: optionalCount,
   reps: optionalCount,
   setReps,
-  weight: z.number().min(0).max(2000).nullable().default(null),
+  weight: z.number().min(0).max(MAX_WEIGHT).nullable().default(null),
   perSide: z.boolean().default(false),
   includesEquipment: z.boolean().optional(),
   rpe: z.number().min(0).max(10).nullable().default(null),

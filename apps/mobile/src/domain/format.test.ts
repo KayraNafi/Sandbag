@@ -1,5 +1,23 @@
 import { describe, expect, it } from 'vitest';
-import { backfillDates, dayLabel, setsReps } from './format';
+import { backfillDates, dayLabel, isOverMax, parseNumber, setsReps } from './format';
+
+describe('typed numbers', () => {
+  it('reads decimals with either separator, and nothing from blanks', () => {
+    expect(parseNumber('12,5', 2000)).toBe(12.5);
+    expect(parseNumber('12.5', 2000)).toBe(12.5);
+    expect(parseNumber('  ', 2000)).toBeNull();
+    expect(parseNumber('abc', 2000)).toBeNull();
+  });
+
+  it('notices anything over the limit, however long, but not the limit itself', () => {
+    expect(isOverMax('2000', 2000)).toBe(false);
+    expect(isOverMax('2000,5', 2000)).toBe(true);
+    expect(isOverMax('9999999', 2000)).toBe(true);
+    expect(isOverMax('9'.repeat(400), 2000)).toBe(true);
+    expect(isOverMax('', 2000)).toBe(false);
+    expect(isOverMax('abc', 2000)).toBe(false);
+  });
+});
 
 describe('setsReps', () => {
   it('lists each set when they differ', () => {

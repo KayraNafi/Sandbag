@@ -4,6 +4,7 @@ export const voice = {
   weightDown: () => 'Deload. That’s what we’re calling it.',
   sameWeight: (weight: string) => `${weight} kg again. Consistency, or fear?`,
   rpeTen: () => 'RPE 10 again. Sure.',
+  overLimit: (limit: string) => `Capped at ${limit}. We still don’t believe you.`,
   finished: () => 'Logged. Screenshots or it didn’t happen, except we have the data.',
   noBest: () => 'No new bests. A very safe day at the office.',
   quiet: (days: number) => `It’s been ${days} days. The machines have stopped asking about you.`,

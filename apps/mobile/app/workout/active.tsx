@@ -1,4 +1,4 @@
-import { exerciseKey, MAX_VARIED_SETS } from '@sandbag/shared';
+import { exerciseKey, MAX_VARIED_SETS, MAX_WEIGHT, voice } from '@sandbag/shared';
 import * as Haptics from 'expo-haptics';
 import { router } from 'expo-router';
 import { useMemo, useState } from 'react';
@@ -25,7 +25,11 @@ function Editor({ entry, date, onChange, onRemove }: {
   const index = useMemo(() => buildHistory(activeLogged(logged)), [logged]);
   const last = lastLogged(index, entry.name, date);
   const weights = recentWeights(index, entry.name);
-  const stepWeight = (delta: number) => onChange({ weight: Math.max(0, round2((entry.weight ?? 0) + delta)) });
+  const stepWeight = (delta: number) => {
+    const next = Math.max(0, round2((entry.weight ?? 0) + delta));
+    if (next > MAX_WEIGHT) toast(voice.overLimit(`${MAX_WEIGHT} kg`));
+    onChange({ weight: Math.min(next, MAX_WEIGHT) });
+  };
   const sets = entry.sets ?? 0;
   const canVary = sets >= 2 && sets <= MAX_VARIED_SETS;
   const varying = canVary && entry.setReps !== undefined;
@@ -47,12 +51,12 @@ function Editor({ entry, date, onChange, onRemove }: {
         ) : null}
       </Row>
       {entry.kind === 'time' ? (
-        <NumberField label="Minutes" value={entry.minutes} max={1440} onChange={(minutes) => onChange({ minutes })} />
+        <NumberField label="Minutes" unit="min" value={entry.minutes} max={1440} onChange={(minutes) => onChange({ minutes })} />
       ) : (
         <>
           <Row style={styles.bottom}>
             <Pressable accessibilityRole="button" accessibilityLabel={`Lower weight by ${WEIGHT_STEP}`} onPress={() => stepWeight(-WEIGHT_STEP)} style={styles.step}><Text style={styles.stepText}>−</Text></Pressable>
-            <NumberField label="Weight, kg" value={entry.weight} max={2000} onChange={(weight) => onChange({ weight })} />
+            <NumberField label="Weight, kg" unit="kg" value={entry.weight} max={MAX_WEIGHT} onChange={(weight) => onChange({ weight })} />
             <Pressable accessibilityRole="button" accessibilityLabel={`Raise weight by ${WEIGHT_STEP}`} onPress={() => stepWeight(WEIGHT_STEP)} style={styles.step}><Text style={styles.stepText}>+</Text></Pressable>
           </Row>
           {weights.length > 1 ? (

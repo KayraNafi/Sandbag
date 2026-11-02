@@ -4,6 +4,9 @@ import {
   type PressableProps, type StyleProp, type TextInputProps, type TextProps, type ViewStyle,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { voice } from '@sandbag/shared';
+import { toast } from '@/components/Toast';
+import { isOverMax, parseNumber } from '@/domain/format';
 import { colors, fonts, radius, space } from '@/theme';
 
 /**
@@ -111,11 +114,12 @@ export function Field({ label, error, style, ...props }: TextInputProps & { labe
 }
 
 /** Keeps "12." while typing, and reports a number or null. */
-export function NumberField({ label, value, onChange, max, decimals = true, style }: {
+export function NumberField({ label, value, onChange, max, unit, decimals = true, style }: {
   label: string;
   value: number | null;
   onChange: (value: number | null) => void;
   max: number;
+  unit?: string;
   decimals?: boolean;
   style?: StyleProp<ViewStyle>;
 }) {
@@ -136,6 +140,12 @@ export function NumberField({ label, value, onChange, max, decimals = true, styl
         selectTextOnFocus
         value={text}
         onChangeText={(next) => {
+          if (isOverMax(next, max)) {
+            setText(String(max));
+            onChange(max);
+            toast(voice.overLimit(unit ? `${max} ${unit}` : String(max)));
+            return;
+          }
           setText(next);
           onChange(parseNumber(next, max));
         }}
@@ -143,12 +153,6 @@ export function NumberField({ label, value, onChange, max, decimals = true, styl
       />
     </View>
   );
-}
-
-export function parseNumber(text: string, max: number): number | null {
-  const value = Number(text.trim().replace(',', '.'));
-  if (!text.trim() || !Number.isFinite(value) || value < 0) return null;
-  return Math.min(value, max);
 }
 
 export function Chip({ title, active, onPress }: { title: string; active?: boolean; onPress: () => void }) {

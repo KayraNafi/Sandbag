@@ -49,6 +49,17 @@ export const agoLong = (isoTime: string) => {
   return short === 'now' ? 'just now' : `${short} ago`;
 };
 
+const typedNumber = (text: string) => Number(text.trim().replace(',', '.'));
+
+/** Blank or unreadable counts as nothing typed. */
+export function parseNumber(text: string, max: number): number | null {
+  const value = typedNumber(text);
+  if (!text.trim() || !Number.isFinite(value) || value < 0) return null;
+  return Math.min(value, max);
+}
+
+export const isOverMax = (text: string, max: number) => typedNumber(text) > max;
+
 export const round2 = (value: number) => Math.round(value * 100) / 100;
 export const num = (value: number) => String(round2(value));
 export const plural = (count: number, word: string) => `${count} ${word}${count === 1 ? '' : 's'}`;
