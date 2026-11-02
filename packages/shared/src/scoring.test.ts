@@ -6,6 +6,21 @@ const lift = (name: string, weight: number | null) => ({ name, kind: 'strength' 
 const TODAY = '2026-10-30';
 
 describe('periodStats', () => {
+  const session = (date: string, weights: [string, number][]) => ({ date, entries: weights.map(([name, weight]) => lift(name, weight)) });
+
+  it('limits how far one lift moves the average, up or down', () => {
+    const before = session('2026-10-10', [['Squat', 60], ['Bench', 100], ['Row', 50], ['Curl', 20]]);
+    const fake = session('2026-10-28', [['Squat', 2000], ['Bench', 100], ['Row', 50], ['Curl', 20]]);
+    expect(periodStats([before, fake], 'week', 3, TODAY).progress).toBe(6.3);
+    const slip = session('2026-10-28', [['Squat', 6], ['Bench', 100], ['Row', 50], ['Curl', 20]]);
+    expect(periodStats([before, slip], 'week', 3, TODAY).progress).toBe(-6.2);
+  });
+
+  it('counts a real jump in full up to the limit', () => {
+    const stats = periodStats([session('2026-10-10', [['Curl', 20]]), session('2026-10-28', [['Curl', 25]])], 'week', 3, TODAY);
+    expect(stats.progress).toBe(25);
+  });
+
   it('measures progress against the last number before the period', () => {
     const stats = periodStats(
       [
@@ -50,7 +65,7 @@ describe('periodStats', () => {
       ],
       'week', 1, TODAY,
     );
-    expect(stats.progress).toBe(-50);
+    expect(stats.progress).toBe(-25);
     expect(stats.consistency).toBe(100);
     expect(stats.score).toBe(50);
   });

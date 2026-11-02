@@ -5,6 +5,8 @@ export const PERIOD_DAYS: Record<Period, number> = { week: 7, month: 30 };
 /** Starting values, to tune with real use: +1% progress earns 10 points. */
 const POINTS_PER_PERCENT = 10;
 const MAX_POINTS = 100;
+/** How far one lift can move the average either way, so one bad number can't decide a score. */
+const MAX_LIFT_CHANGE = 25;
 
 export interface ScoringWorkout {
   date: string;
@@ -55,7 +57,9 @@ export function periodStats(workouts: ScoringWorkout[], period: Period, weeklyTa
     const latest = recent.at(-1);
     if (!latest) continue;
     const base = log.filter((item) => daysBetween(item.date, today) >= days).at(-1) ?? recent[0];
-    if (base && base !== latest) changes.push(((latest.weight - base.weight) / base.weight) * 100);
+    if (!base || base === latest) continue;
+    const change = ((latest.weight - base.weight) / base.weight) * 100;
+    changes.push(Math.max(-MAX_LIFT_CHANGE, Math.min(MAX_LIFT_CHANGE, change)));
   }
 
   const progress = changes.length ? changes.reduce((sum, value) => sum + value, 0) / changes.length : 0;

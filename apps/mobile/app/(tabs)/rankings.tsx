@@ -61,7 +61,7 @@ export default function Rankings() {
         </>
       ) : null}
       <Muted>
-        Your points are the average of two scores out of 100. Progress: every +1% on your own lifts is 10 points.
+        Your points are the average of two scores out of 100. Progress: every +1% on your own lifts is 10 points, and each lift counts for 25% at most, up or down.
         Consistency: workouts done against your weekly target. Heavier friends get no head start.
       </Muted>
       <Button title="What’s sandbagging?" variant="ghost" onPress={() => router.push('/about')} />
