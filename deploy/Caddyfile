@@ -20,6 +20,17 @@
 			header_up X-Forwarded-For {http.request.header.Cf-Connecting-Ip}
 		}
 	}
+	# Falling through to index.html here would let Cloudflare cache a page as a script for a year.
+	@missing {
+		path /_expo/* /assets/*
+		not file {
+			root /srv/web
+		}
+	}
+	handle @missing {
+		header Cache-Control "no-store"
+		respond 404
+	}
 	handle {
 		root * /srv/web
 		@hashed path /_expo/* /assets/*
