@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
-import { KeyboardAvoidingView, Platform, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 import { api, errorText } from '@/api/client';
 import { useSession } from '@/auth/session';
 import { confirm } from '@/components/confirm';
@@ -71,63 +71,61 @@ export default function PostScreen() {
   const callable = data.entries.filter((entry) => entry.kind === 'strength' && (entry.weight !== null || !data.showWeights));
 
   return (
-    <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} keyboardVerticalOffset={90} style={styles.flex}>
-      <Screen padTop={false} onRefresh={() => post.refetch()}>
-        <Row>
-          <Avatar user={data.author} />
+    <Screen padTop={false} onRefresh={() => post.refetch()}>
+      <Row>
+        <Avatar user={data.author} />
+        <View style={styles.flex}>
+          <Text style={styles.author}>{data.author.displayName}</Text>
+          <Muted>{agoLong(data.createdAt)}</Muted>
+        </View>
+      </Row>
+      <Heading>{data.title}</Heading>
+      {data.caption ? <Text style={styles.caption}>{data.caption}</Text> : null}
+      <Card><PostEntries post={data} /></Card>
+      <Row style={styles.wrap}>
+        <PostActions post={data} />
+        <Muted>{data.saveCount} saved · {data.callCount} called</Muted>
+      </Row>
+
+      {data.kind === 'share' && !mine ? (
+        <Button title={data.savedByMe ? 'Already in your workouts' : 'Save to my workouts'} disabled={data.savedByMe} busy={save.isPending} onPress={() => save.mutate()} />
+      ) : null}
+
+      {data.kind === 'workout' && !mine && callable.length ? (
+        calling ? (
+          <Card style={styles.call}>
+            <Heading>Which lift looks too easy?</Heading>
+            <Row style={styles.wrap}>
+              {callable.map((entry) => <Chip key={entry.id} title={entry.name} active={lift === entry.name} onPress={() => setLift(entry.name)} />)}
+            </Row>
+            <Field label="Your accusation" maxLength={LINE_MAX} value={line} onChangeText={setLine} />
+            <Button title="Call sandbag" disabled={!lift || !line.trim()} busy={call.isPending} onPress={() => call.mutate()} />
+            <Button title="Let it slide" variant="ghost" onPress={() => setCalling(false)} />
+          </Card>
+        ) : (
+          <Button title="Call sandbag" variant="ghost" onPress={() => setCalling(true)} />
+        )
+      ) : null}
+
+      <Heading>Replies</Heading>
+      {data.replies.length ? null : <Muted>Nobody’s said anything yet. Be the problem.</Muted>}
+      {data.replies.map((item) => (
+        <Row key={item.id} style={styles.reply}>
+          <Avatar user={item.author} size={30} />
           <View style={styles.flex}>
-            <Text style={styles.author}>{data.author.displayName}</Text>
-            <Muted>{agoLong(data.createdAt)}</Muted>
+            <Text style={styles.author}>{item.author.displayName} <Text style={styles.time}>{agoShort(item.createdAt)}</Text></Text>
+            <Text style={styles.caption}>{item.text}</Text>
           </View>
         </Row>
-        <Heading>{data.title}</Heading>
-        {data.caption ? <Text style={styles.caption}>{data.caption}</Text> : null}
-        <Card><PostEntries post={data} /></Card>
-        <Row style={styles.wrap}>
-          <PostActions post={data} />
-          <Muted>{data.saveCount} saved · {data.callCount} called</Muted>
-        </Row>
-
-        {data.kind === 'share' && !mine ? (
-          <Button title={data.savedByMe ? 'Already in your workouts' : 'Save to my workouts'} disabled={data.savedByMe} busy={save.isPending} onPress={() => save.mutate()} />
-        ) : null}
-
-        {data.kind === 'workout' && !mine && callable.length ? (
-          calling ? (
-            <Card style={styles.call}>
-              <Heading>Which lift looks too easy?</Heading>
-              <Row style={styles.wrap}>
-                {callable.map((entry) => <Chip key={entry.id} title={entry.name} active={lift === entry.name} onPress={() => setLift(entry.name)} />)}
-              </Row>
-              <Field label="Your accusation" maxLength={LINE_MAX} value={line} onChangeText={setLine} />
-              <Button title="Call sandbag" disabled={!lift || !line.trim()} busy={call.isPending} onPress={() => call.mutate()} />
-              <Button title="Let it slide" variant="ghost" onPress={() => setCalling(false)} />
-            </Card>
-          ) : (
-            <Button title="Call sandbag" variant="ghost" onPress={() => setCalling(true)} />
-          )
-        ) : null}
-
-        <Heading>Replies</Heading>
-        {data.replies.length ? null : <Muted>Nobody’s said anything yet. Be the problem.</Muted>}
-        {data.replies.map((item) => (
-          <Row key={item.id} style={styles.reply}>
-            <Avatar user={item.author} size={30} />
-            <View style={styles.flex}>
-              <Text style={styles.author}>{item.author.displayName} <Text style={styles.time}>{agoShort(item.createdAt)}</Text></Text>
-              <Text style={styles.caption}>{item.text}</Text>
-            </View>
-          </Row>
-        ))}
-        <Field label="Reply" maxLength={LINE_MAX} value={reply} onChangeText={setReply} />
-        <Button title="Send" variant="ghost" disabled={!reply.trim()} busy={sendReply.isPending} onPress={() => sendReply.mutate()} />
-        {mine ? (
-          <Button title="Delete post" variant="danger" busy={remove.isPending} onPress={async () => {
-            if (await confirm('Delete this post?', 'Replies and respect go with it. Your logged session stays.', 'Delete')) remove.mutate();
-          }} />
-        ) : null}
-      </Screen>
-    </KeyboardAvoidingView>
+      ))}
+      <Field label="Reply" maxLength={LINE_MAX} value={reply} onChangeText={setReply} />
+      <Button title="Send" variant="ghost" disabled={!reply.trim()} busy={sendReply.isPending} onPress={() => sendReply.mutate()} />
+      {mine ? (
+        <Button title="Delete post" variant="danger" busy={remove.isPending} onPress={async () => {
+          if (await confirm('Delete this post?', 'Replies and respect go with it. Your logged session stays.', 'Delete')) remove.mutate();
+        }} />
+      ) : null}
+    </Screen>
   );
 }
 

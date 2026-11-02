@@ -2,14 +2,14 @@ import { exerciseKey } from '@sandbag/shared';
 import * as Haptics from 'expo-haptics';
 import { router } from 'expo-router';
 import { useMemo, useState } from 'react';
-import { KeyboardAvoidingView, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { toast } from '@/components/Toast';
 import { confirm } from '@/components/confirm';
-import { Button, Card, Chip, Field, Heading, Label, Muted, NumberField, Row, Screen, Segments } from '@/components/ui';
+import { Button, Card, Chip, Field, Heading, Label, MoveButtons, Muted, NumberField, Row, Screen, Segments } from '@/components/ui';
 import { addExerciseToDraft, finishDraft, reactionTo } from '@/data/actions';
 import { useData } from '@/data/store';
-import { agoText, num, round2, summary } from '@/domain/format';
-import { activeLogged, buildHistory, lastLogged, recentWeights, type DraftEntry } from '@/domain/history';
+import { agoText, backfillDates, dayLabel, num, round2, summary } from '@/domain/format';
+import { activeLogged, buildHistory, lastLogged, moveItem, recentWeights, type DraftEntry } from '@/domain/history';
 import { colors, fonts, radius, space } from '@/theme';
 
 const WEIGHT_STEP = 2.5;
@@ -49,6 +49,11 @@ function Editor({ entry, date, onChange, onRemove }: {
               {weights.map((weight) => <Chip key={weight} title={num(weight)} active={entry.weight === weight} onPress={() => onChange({ weight })} />)}
             </Row>
           ) : null}
+          <Label>Bar or machine weight</Label>
+          <Row style={styles.wrap}>
+            <Chip title="Included" active={entry.includesEquipment === true} onPress={() => onChange({ includesEquipment: entry.includesEquipment === true ? undefined : true })} />
+            <Chip title="Not included" active={entry.includesEquipment === false} onPress={() => onChange({ includesEquipment: entry.includesEquipment === false ? undefined : false })} />
+          </Row>
           <Row>
             <NumberField label="Sets" decimals={false} value={entry.sets} max={1000} onChange={(sets) => onChange({ sets })} />
             <NumberField label="Reps" decimals={false} value={entry.reps} max={1000} onChange={(reps) => onChange({ reps })} />
@@ -67,6 +72,8 @@ export default function ActiveWorkout() {
   const setDraft = useData((state) => state.setDraft);
   const logged = useData((state) => state.logged);
   const [openId, setOpenId] = useState<string | null>(null);
+  const [reordering, setReordering] = useState(false);
+  const [pickingDate, setPickingDate] = useState(false);
   const [newName, setNewName] = useState('');
   const known = useMemo(() => [...buildHistory(activeLogged(logged)).values()].map((item) => item.name), [logged]);
 
@@ -125,80 +132,117 @@ export default function ActiveWorkout() {
     .slice(0, 6);
 
   return (
-    <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} keyboardVerticalOffset={90} style={styles.flex}>
-      <Screen
-        padTop={false}
-        footer={<Button title={draft.editing ? 'Save changes' : `Finish · ${done} of ${draft.entries.length}`} onPress={finish} />}
-      >
-        <TextInput
-          accessibilityLabel="Workout name"
-          maxLength={100}
-          value={draft.title}
-          onChangeText={(title) => setDraft({ ...draft, title })}
-          style={styles.title}
-        />
-        {draft.entries.length ? <Segments total={draft.entries.length} done={done} /> : null}
-        {draft.entries.map((entry) => {
-          const open = openId === entry.id;
+    <Screen
+      padTop={false}
+      footer={<Button title={draft.editing ? 'Save changes' : `Finish · ${done} of ${draft.entries.length}`} onPress={finish} />}
+    >
+      <TextInput
+        accessibilityLabel="Workout name"
+        maxLength={100}
+        value={draft.title}
+        onChangeText={(title) => setDraft({ ...draft, title })}
+        style={styles.title}
+      />
+      {draft.entries.length ? <Segments total={draft.entries.length} done={done} /> : null}
+      {!draft.editing || draft.entries.length > 1 ? (
+        <Row style={styles.wrap}>
+          {draft.editing ? null : <Chip title={dayLabel(draft.date)} active={pickingDate} onPress={() => setPickingDate(!pickingDate)} />}
+          {draft.entries.length > 1 ? (
+            <Chip title={reordering ? 'Done reordering' : 'Reorder'} active={reordering} onPress={() => {
+              setOpenId(null);
+              setReordering(!reordering);
+            }} />
+          ) : null}
+        </Row>
+      ) : null}
+      {pickingDate ? (
+        <>
+          <Muted>Forgot to log one? Pick the day you trained.</Muted>
+          <Row style={styles.wrap}>
+            {backfillDates().map((date) => (
+              <Chip key={date} title={dayLabel(date)} active={date === draft.date} onPress={() => {
+                setDraft({ ...draft, date });
+                setPickingDate(false);
+              }} />
+            ))}
+          </Row>
+        </>
+      ) : null}
+      {draft.entries.map((entry, position) => {
+        const open = openId === entry.id;
+        if (reordering) {
           return (
             <Card key={entry.id} style={entry.done ? styles.done : undefined}>
               <Row>
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel={`${entry.name}, ${open ? 'close' : 'edit'}`}
-                  accessibilityState={{ expanded: open }}
-                  onPress={() => setOpenId(open ? null : entry.id)}
-                  style={styles.flex}
-                >
-                  <Text style={styles.name}>{entry.name}</Text>
-                  <Muted>{summary(entry)}</Muted>
-                  {entry.note ? <Muted numberOfLines={1}>{entry.note}</Muted> : null}
-                </Pressable>
-                <Pressable
-                  accessibilityRole="checkbox"
-                  accessibilityLabel={`${entry.name} done`}
-                  accessibilityState={{ checked: entry.done }}
-                  hitSlop={6}
-                  onPress={() => toggle(entry)}
-                  style={[styles.tick, entry.done && styles.tickOn]}
-                >
-                  <Text style={[styles.tickText, entry.done && styles.tickTextOn]}>✓</Text>
-                </Pressable>
-              </Row>
-              {open ? (
-                <Editor
-                  entry={entry}
-                  date={draft.date}
-                  onChange={(changes) => update(entry.id, changes)}
-                  onRemove={() => setDraft({ ...draft, entries: draft.entries.filter((item) => item.id !== entry.id) })}
+                <Text style={[styles.name, styles.flex]}>{entry.name}</Text>
+                <MoveButtons
+                  name={entry.name}
+                  index={position}
+                  total={draft.entries.length}
+                  onMove={(delta) => setDraft({ ...draft, entries: moveItem(draft.entries, position, delta) })}
                 />
-              ) : null}
+              </Row>
             </Card>
           );
-        })}
-        <Label>Add exercise</Label>
-        <Row>
-          <TextInput
-            accessibilityLabel="Exercise name"
-            placeholder="Cable curls"
-            placeholderTextColor={colors.ink3}
-            maxLength={100}
-            value={newName}
-            onChangeText={setNewName}
-            onSubmitEditing={() => add(newName)}
-            returnKeyType="done"
-            style={styles.addInput}
-          />
-          <Button title="Add" variant="ghost" disabled={!newName.trim()} onPress={() => add(newName)} />
+        }
+        return (
+          <Card key={entry.id} style={entry.done ? styles.done : undefined}>
+            <Row>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={`${entry.name}, ${open ? 'close' : 'edit'}`}
+                accessibilityState={{ expanded: open }}
+                onPress={() => setOpenId(open ? null : entry.id)}
+                style={styles.flex}
+              >
+                <Text style={styles.name}>{entry.name}</Text>
+                <Muted>{summary(entry)}</Muted>
+                {entry.note ? <Muted numberOfLines={1}>{entry.note}</Muted> : null}
+              </Pressable>
+              <Pressable
+                accessibilityRole="checkbox"
+                accessibilityLabel={`${entry.name} done`}
+                accessibilityState={{ checked: entry.done }}
+                hitSlop={6}
+                onPress={() => toggle(entry)}
+                style={[styles.tick, entry.done && styles.tickOn]}
+              >
+                <Text style={[styles.tickText, entry.done && styles.tickTextOn]}>✓</Text>
+              </Pressable>
+            </Row>
+            {open ? (
+              <Editor
+                entry={entry}
+                date={draft.date}
+                onChange={(changes) => update(entry.id, changes)}
+                onRemove={() => setDraft({ ...draft, entries: draft.entries.filter((item) => item.id !== entry.id) })}
+              />
+            ) : null}
+          </Card>
+        );
+      })}
+      <Label>Add exercise</Label>
+      <Row>
+        <TextInput
+          accessibilityLabel="Exercise name"
+          placeholder="Cable curls"
+          placeholderTextColor={colors.ink3}
+          maxLength={100}
+          value={newName}
+          onChangeText={setNewName}
+          onSubmitEditing={() => add(newName)}
+          returnKeyType="done"
+          style={styles.addInput}
+        />
+        <Button title="Add" variant="ghost" disabled={!newName.trim()} onPress={() => add(newName)} />
+      </Row>
+      {suggestions.length ? (
+        <Row style={styles.wrap}>
+          {suggestions.map((name) => <Chip key={name} title={name} onPress={() => add(name)} />)}
         </Row>
-        {suggestions.length ? (
-          <Row style={styles.wrap}>
-            {suggestions.map((name) => <Chip key={name} title={name} onPress={() => add(name)} />)}
-          </Row>
-        ) : null}
-        <Button title="Discard" variant="danger" onPress={discard} />
-      </Screen>
-    </KeyboardAvoidingView>
+      ) : null}
+      <Button title="Discard" variant="danger" onPress={discard} />
+    </Screen>
   );
 }
 

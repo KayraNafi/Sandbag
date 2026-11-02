@@ -1,7 +1,7 @@
 import { registerSchema } from '@sandbag/shared';
 import { Link } from 'expo-router';
 import { useState } from 'react';
-import { KeyboardAvoidingView, Platform, StyleSheet } from 'react-native';
+import { StyleSheet } from 'react-native';
 import { api, errorText } from '@/api/client';
 import { useSession } from '@/auth/session';
 import { Button, Field, Muted, Screen, Title } from '@/components/ui';
@@ -32,26 +32,23 @@ export default function SignUp() {
   };
 
   return (
-    <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.flex}>
-      <Screen>
-        <Title>Join the crew</Title>
-        <Muted>
-          Sandbagging: looking weaker than you are, on purpose. Here your friends can call you on it, and your
-          next session settles it. It’s invite-only, so somebody already thinks you’re good for it.
-        </Muted>
-        <Field label="Invite code" autoCapitalize="none" autoCorrect={false} value={form.inviteCode} onChangeText={set('inviteCode')} error={errors.inviteCode} />
-        <Field label="Your name" autoComplete="name" value={form.displayName} onChangeText={set('displayName')} error={errors.displayName} />
-        <Field label="Username" autoCapitalize="none" autoCorrect={false} autoComplete="username-new" textContentType="username" value={form.username} onChangeText={set('username')} error={errors.username} />
-        <Field label="Password" secureTextEntry autoComplete="new-password" textContentType="newPassword" value={form.password} onChangeText={set('password')} error={errors.password ?? failure} />
-        <Button title="Create account" busy={busy} onPress={submit} />
-        <Muted>There’s no email on file, so keep this password somewhere safe. If you lose it, whoever runs your server can reset it.</Muted>
-        <Link href="/" style={styles.link}>Already in? Sign in</Link>
-      </Screen>
-    </KeyboardAvoidingView>
+    <Screen>
+      <Title>Join the crew</Title>
+      <Muted>
+        Sandbagging: looking weaker than you are, on purpose. Here your friends can call you on it, and your
+        next session settles it. It’s invite-only, so somebody already thinks you’re good for it.
+      </Muted>
+      <Field label="Invite code" autoCapitalize="none" autoCorrect={false} value={form.inviteCode} onChangeText={set('inviteCode')} error={errors.inviteCode} />
+      <Field label="Your name" autoComplete="name" value={form.displayName} onChangeText={set('displayName')} error={errors.displayName} />
+      <Field label="Username" autoCapitalize="none" autoCorrect={false} autoComplete="username-new" textContentType="username" value={form.username} onChangeText={set('username')} error={errors.username} />
+      <Field label="Password" secureTextEntry autoComplete="new-password" textContentType="newPassword" value={form.password} onChangeText={set('password')} error={errors.password ?? failure} />
+      <Button title="Create account" busy={busy} onPress={submit} />
+      <Muted>There’s no email on file, so keep this password somewhere safe. If you lose it, whoever runs your server can reset it.</Muted>
+      <Link href="/" style={styles.link}>Already in? Sign in</Link>
+    </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  flex: { flex: 1 },
   link: { fontFamily: fonts.bodyStrong, fontSize: 15, color: colors.volt, paddingVertical: space.sm },
 });

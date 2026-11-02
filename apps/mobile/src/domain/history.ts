@@ -103,6 +103,7 @@ export function draftEntryFor(
     reps: last?.reps ?? exercise.reps,
     weight: last?.weight ?? null,
     perSide: last?.perSide ?? false,
+    includesEquipment: last?.includesEquipment,
     rpe: last?.rpe ?? null,
     minutes: last?.minutes ?? null,
     note: last?.note ?? '',
@@ -114,7 +115,17 @@ export function toSavedExercises(entries: Entry[]): SavedExercise[] {
   return entries.map(({ name, kind, sets, reps }) => ({ name, kind, sets, reps }));
 }
 
+/** Order counts, so a session done in a new order can offer to update the saved workout. */
 export function sameExercises(a: { name: string }[], b: { name: string }[]): boolean {
-  const key = (list: { name: string }[]) => list.map((item) => exerciseKey(item.name)).sort().join('|');
+  const key = (list: { name: string }[]) => list.map((item) => exerciseKey(item.name)).join('|');
   return key(a) === key(b);
+}
+
+export function moveItem<T>(list: T[], index: number, delta: -1 | 1): T[] {
+  const target = index + delta;
+  const item = list[index];
+  if (item === undefined || target < 0 || target >= list.length) return list;
+  const next = list.filter((_, position) => position !== index);
+  next.splice(target, 0, item);
+  return next;
 }

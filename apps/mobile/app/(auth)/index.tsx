@@ -1,7 +1,7 @@
 import { loginSchema } from '@sandbag/shared';
 import { Link } from 'expo-router';
 import { useState } from 'react';
-import { KeyboardAvoidingView, Platform, StyleSheet, Text } from 'react-native';
+import { StyleSheet, Text } from 'react-native';
 import { api, errorText } from '@/api/client';
 import { useSession } from '@/auth/session';
 import { Logo } from '@/components/Logo';
@@ -31,23 +31,20 @@ export default function SignIn() {
   };
 
   return (
-    <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.flex}>
-      <Screen>
-        <Logo size={112} />
-        <Title style={styles.brand}>Sandbag</Title>
-        <Body>Log your lifts. Prove you’re not holding back.</Body>
-        <Field label="Username" autoCapitalize="none" autoCorrect={false} autoComplete="username" textContentType="username" value={username} onChangeText={setUsername} />
-        <Field label="Password" secureTextEntry autoComplete="current-password" textContentType="password" value={password} onChangeText={setPassword} onSubmitEditing={submit} error={error} />
-        <Button title="Sign in" busy={busy} onPress={submit} />
-        <Link href="/sign-up" style={styles.link}>Got an invite? Create your account</Link>
-        <Link href="/about" style={styles.link}>What’s sandbagging?</Link>
-      </Screen>
-    </KeyboardAvoidingView>
+    <Screen>
+      <Logo size={112} />
+      <Title style={styles.brand}>Sandbag</Title>
+      <Body>Log your lifts. Prove you’re not holding back.</Body>
+      <Field label="Username" autoCapitalize="none" autoCorrect={false} autoComplete="username" textContentType="username" value={username} onChangeText={setUsername} />
+      <Field label="Password" secureTextEntry autoComplete="current-password" textContentType="password" value={password} onChangeText={setPassword} onSubmitEditing={submit} error={error} />
+      <Button title="Sign in" busy={busy} onPress={submit} />
+      <Link href="/sign-up" style={styles.link}>Got an invite? Create your account</Link>
+      <Link href="/about" style={styles.link}>What’s sandbagging?</Link>
+    </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  flex: { flex: 1 },
   brand: { fontSize: 64, lineHeight: 66, color: colors.volt },
   link: { fontFamily: fonts.bodyStrong, fontSize: 15, color: colors.volt, paddingVertical: space.sm },
 });

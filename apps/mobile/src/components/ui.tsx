@@ -1,10 +1,31 @@
 import { Children, useEffect, useState, type ReactNode } from 'react';
 import {
-  ActivityIndicator, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, View,
+  ActivityIndicator, Keyboard, Platform, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, View,
   type PressableProps, type StyleProp, type TextInputProps, type TextProps, type ViewStyle,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, fonts, radius, space } from '@/theme';
+
+/**
+ * How far the keyboard reaches up the screen. Android draws edge-to-edge, so the
+ * window doesn't shrink for the keyboard, and its reported height leaves out the
+ * navigation bar that the keyboard also covers.
+ */
+function useKeyboardHeight(bottomInset: number): number {
+  const [height, setHeight] = useState(0);
+  useEffect(() => {
+    const ios = Platform.OS === 'ios';
+    const show = Keyboard.addListener(ios ? 'keyboardWillShow' : 'keyboardDidShow', (event) => {
+      setHeight(event.endCoordinates.height + (Platform.OS === 'android' ? bottomInset : 0));
+    });
+    const hide = Keyboard.addListener(ios ? 'keyboardWillHide' : 'keyboardDidHide', () => setHeight(0));
+    return () => {
+      show.remove();
+      hide.remove();
+    };
+  }, [bottomInset]);
+  return height;
+}
 
 export function Screen({ children, onRefresh, footer, padTop = true }: {
   children: ReactNode;
@@ -13,6 +34,7 @@ export function Screen({ children, onRefresh, footer, padTop = true }: {
   padTop?: boolean;
 }) {
   const insets = useSafeAreaInsets();
+  const keyboard = useKeyboardHeight(insets.bottom);
   const [refreshing, setRefreshing] = useState(false);
   const refresh = onRefresh && (async () => {
     setRefreshing(true);
@@ -20,7 +42,7 @@ export function Screen({ children, onRefresh, footer, padTop = true }: {
     setRefreshing(false);
   });
   return (
-    <View style={styles.screen}>
+    <View style={[styles.screen, { paddingBottom: keyboard }]}>
       <ScrollView
         keyboardShouldPersistTaps="handled"
         contentContainerStyle={[styles.scroll, { paddingTop: padTop ? insets.top + space.md : space.md }]}
@@ -28,7 +50,7 @@ export function Screen({ children, onRefresh, footer, padTop = true }: {
       >
         {children}
       </ScrollView>
-      {footer ? <View style={[styles.footer, { paddingBottom: insets.bottom + space.md }]}>{footer}</View> : null}
+      {footer ? <View style={[styles.footer, { paddingBottom: keyboard ? space.md : insets.bottom + space.md }]}>{footer}</View> : null}
     </View>
   );
 }
@@ -144,6 +166,17 @@ export function Chip({ title, active, onPress }: { title: string; active?: boole
 
 export const Row = ({ children, style }: { children: ReactNode; style?: StyleProp<ViewStyle> }) => <View style={[styles.row, style]}>{children}</View>;
 
+export function MoveButtons({ name, index, total, onMove }: { name: string; index: number; total: number; onMove: (delta: -1 | 1) => void }) {
+  const first = index === 0;
+  const last = index === total - 1;
+  return (
+    <>
+      <Pressable accessibilityRole="button" accessibilityLabel={`Move ${name} up`} disabled={first} onPress={() => onMove(-1)} style={[styles.move, first && styles.moveOff]}><Text style={styles.moveText}>↑</Text></Pressable>
+      <Pressable accessibilityRole="button" accessibilityLabel={`Move ${name} down`} disabled={last} onPress={() => onMove(1)} style={[styles.move, last && styles.moveOff]}><Text style={styles.moveText}>↓</Text></Pressable>
+    </>
+  );
+}
+
 export function Empty({ title, body }: { title: string; body: string }) {
   return (
     <View style={styles.empty}>
@@ -195,6 +228,9 @@ const styles = StyleSheet.create({
   chipText: { fontFamily: fonts.label, fontSize: 15, color: colors.ink2 },
   chipTextActive: { color: colors.voltInk },
   row: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
+  move: { width: 44, height: 44, borderRadius: 10, backgroundColor: colors.surface2, alignItems: 'center', justifyContent: 'center' },
+  moveOff: { opacity: 0.3 },
+  moveText: { color: colors.ink, fontSize: 18 },
   empty: { paddingVertical: space.xl, gap: space.sm, alignItems: 'center' },
   center: { textAlign: 'center' },
   // Stretched, because Android clips a centered heading's second word when it measures it shrink-wrapped.

@@ -14,6 +14,22 @@ export const formatDate = (iso: string) => parseIso(iso).toLocaleDateString('en-
 export const formatLongDate = (iso: string) =>
   parseIso(iso).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' });
 
+const BACKFILL_DAYS = 7;
+
+/** The days a workout can be logged for, newest first: today and the week before it. */
+export function backfillDates(from: string = today()): string[] {
+  const start = parseIso(from);
+  return Array.from({ length: BACKFILL_DAYS + 1 }, (_, back) =>
+    toIsoDate(new Date(start.getFullYear(), start.getMonth(), start.getDate() - back)));
+}
+
+export function dayLabel(iso: string, from: string = today()): string {
+  const [current, yesterday] = backfillDates(from);
+  if (iso === current) return 'Today';
+  if (iso === yesterday) return 'Yesterday';
+  return parseIso(iso).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
+}
+
 export function agoText(iso: string): string {
   const days = Math.round((parseIso(today()).getTime() - parseIso(iso).getTime()) / 86_400_000);
   if (days <= 0) return 'today';
@@ -45,10 +61,15 @@ export function setsReps(entry: Pick<Entry, 'sets' | 'reps'>): string {
   return '';
 }
 
+function equipmentText({ includesEquipment }: Pick<Entry, 'includesEquipment'>): string {
+  if (includesEquipment === undefined) return '';
+  return includesEquipment ? ' incl. bar/machine' : ' excl. bar/machine';
+}
+
 export function summary(entry: Entry): string {
   if (entry.kind === 'time') return entry.minutes ? `${num(entry.minutes)} min` : 'No time logged';
   const parts: string[] = [];
-  if (entry.weight !== null) parts.push(`${num(entry.weight)} kg${entry.perSide ? ' each side' : ''}`);
+  if (entry.weight !== null) parts.push(`${num(entry.weight)} kg${entry.perSide ? ' each side' : ''}${equipmentText(entry)}`);
   const sr = setsReps(entry);
   if (sr) parts.push(sr);
   if (entry.rpe) parts.push(`RPE ${num(entry.rpe)}`);

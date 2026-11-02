@@ -23,7 +23,7 @@ type Post = typeof posts.$inferSelect;
 /** Weights are removed here, on the server, so "hide my weights" can't leak. */
 function visibleEntries(post: Post, viewerId: string): Entry[] {
   if (post.showWeights || post.authorId === viewerId) return post.entries;
-  return post.entries.map((entry) => ({ ...entry, weight: null, note: '' }));
+  return post.entries.map(({ includesEquipment: _hidden, ...entry }) => ({ ...entry, weight: null, note: '' }));
 }
 
 function canSee(post: Post, viewerId: string, friends: string[]): boolean {

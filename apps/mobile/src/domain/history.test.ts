@@ -1,6 +1,6 @@
 import type { Entry, LoggedWorkout, SavedWorkout } from '@sandbag/shared';
 import { describe, expect, it } from 'vitest';
-import { activeLogged, bestBefore, buildHistory, draftEntryFor, lastLogged, nextWorkout, recentWeights, sameExercises } from './history';
+import { activeLogged, bestBefore, buildHistory, draftEntryFor, lastLogged, moveItem, nextWorkout, recentWeights, sameExercises } from './history';
 
 const entry = (name: string, weight: number | null, extra: Partial<Entry> = {}): Entry => ({
   id: `${name}-${weight}`, name, kind: 'strength', sets: 3, reps: 8, weight, perSide: false, rpe: 8, minutes: null, note: '', ...extra,
@@ -70,8 +70,47 @@ describe('draftEntryFor', () => {
 });
 
 describe('sameExercises', () => {
-  it('ignores order and case', () => {
-    expect(sameExercises([{ name: 'A' }, { name: 'b' }], [{ name: 'B' }, { name: 'a' }])).toBe(true);
+  it('ignores case but not order', () => {
+    expect(sameExercises([{ name: 'A' }, { name: 'b' }], [{ name: 'a' }, { name: 'B' }])).toBe(true);
+    expect(sameExercises([{ name: 'A' }, { name: 'b' }], [{ name: 'B' }, { name: 'a' }])).toBe(false);
     expect(sameExercises([{ name: 'A' }], [{ name: 'B' }])).toBe(false);
+  });
+});
+
+describe('a backfilled session', () => {
+  const older = logged('older', '2026-10-28', [entry('Squat', 100)]);
+  const latest = logged('latest', '2026-11-02', [entry('Squat', 500)]);
+  const backfilled = { ...logged('backfilled', '2026-10-30', [entry('Squat', 600)]), updatedAt: 2 };
+  const index = buildHistory(activeLogged({ older, latest, backfilled }));
+
+  it('sits in date order, however late it was logged', () => {
+    expect(index.get('squat')?.log.map((item) => item.date)).toEqual(['2026-10-28', '2026-10-30', '2026-11-02']);
+  });
+
+  it('doesn’t replace the numbers the next session starts from', () => {
+    expect(lastLogged(index, 'Squat')?.weight).toBe(500);
+  });
+});
+
+describe('moveItem', () => {
+  it('moves one place either way and leaves the original alone', () => {
+    const list = ['a', 'b', 'c'];
+    expect(moveItem(list, 0, 1)).toEqual(['b', 'a', 'c']);
+    expect(moveItem(list, 2, -1)).toEqual(['a', 'c', 'b']);
+    expect(list).toEqual(['a', 'b', 'c']);
+  });
+
+  it('stays put at the ends', () => {
+    expect(moveItem(['a', 'b'], 0, -1)).toEqual(['a', 'b']);
+    expect(moveItem(['a', 'b'], 1, 1)).toEqual(['a', 'b']);
+  });
+});
+
+describe('draftEntryFor', () => {
+  it('carries the bar or machine choice over from the last session', () => {
+    const index = buildHistory([logged('w', '2026-01-01', [entry('Squat', 100, { includesEquipment: false })])]);
+    const exercise = { name: 'Squat', kind: 'strength' as const, sets: null, reps: null };
+    expect(draftEntryFor(index, exercise, () => 'id').includesEquipment).toBe(false);
+    expect(draftEntryFor(buildHistory([]), exercise, () => 'id').includesEquipment).toBeUndefined();
   });
 });

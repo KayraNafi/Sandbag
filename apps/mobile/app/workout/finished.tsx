@@ -79,7 +79,7 @@ export default function Finished() {
       {!handled && changed && source ? (
         <Card>
           <Heading>Update {source.name}?</Heading>
-          <Muted>Today’s exercises were different from the saved ones.</Muted>
+          <Muted>Today’s exercises or their order were different from the saved ones.</Muted>
           <Button title="Update saved workout" variant="ghost" onPress={() => {
             updateSaved(source, { exercises: toSavedExercises(workout.entries) });
             setHandled(true);

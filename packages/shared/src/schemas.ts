@@ -13,6 +13,8 @@ export const entrySchema = z.object({
   reps: count,
   weight: z.number().min(0).max(2000).nullable(),
   perSide: z.boolean(),
+  // Whether the weight counts the bar or machine. Absent means it wasn't said, as on every older entry.
+  includesEquipment: z.boolean().optional(),
   rpe: z.number().min(0).max(10).nullable(),
   minutes: z.number().min(0).max(1440).nullable(),
   note: z.string().max(200),
@@ -210,6 +212,7 @@ const apiEntrySchema = z.object({
   reps: optionalCount,
   weight: z.number().min(0).max(2000).nullable().default(null),
   perSide: z.boolean().default(false),
+  includesEquipment: z.boolean().optional(),
   rpe: z.number().min(0).max(10).nullable().default(null),
   minutes: z.number().min(0).max(1440).nullable().default(null),
   note: z.string().max(200).default(''),

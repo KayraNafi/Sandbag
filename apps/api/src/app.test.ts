@@ -154,12 +154,14 @@ describe('feed privacy', () => {
 
   it('strips hidden weights and notes on the server', async () => {
     const { founder, friend } = await crew();
-    await post(founder.token, { showWeights: false, entries: [entry('Lat pulldown', 86, { note: 'secret' })] });
+    await post(founder.token, { showWeights: false, entries: [entry('Lat pulldown', 86, { note: 'secret', includesEquipment: true })] });
     const [seen] = (await call<PostView[]>('GET', '/feed', friend.token)).body;
     expect(seen?.entries[0]?.weight).toBeNull();
     expect(seen?.entries[0]?.note).toBe('');
+    expect(seen?.entries[0]?.includesEquipment).toBeUndefined();
     const [own] = (await call<PostView[]>('GET', '/feed', founder.token)).body;
     expect(own?.entries[0]?.weight).toBe(86);
+    expect(own?.entries[0]?.includesEquipment).toBe(true);
   });
 
   it('respects a specific recipient list', async () => {
@@ -442,6 +444,17 @@ describe('public API', () => {
     await call('POST', '/v1/workouts', key, { workouts: [{ date: '2026-01-15', entries: [{ name: 'Lat pulldown', weight: 500 }] }] });
     const calls = await call<CallView[]>('GET', '/calls', founder.token);
     expect(calls.body[0]?.status).toBe('open');
+  });
+
+  it('leaves a sandbag call open for a backfilled session, then settles it on the next real one', async () => {
+    const { founder, friend } = await crew();
+    const created = await post(founder.token);
+    await call('POST', `/posts/${created.body.id}/calls`, friend.token, { exercise: 'Lat pulldown', line: 'Hm.' });
+    const threeDaysAgo = new Date(Date.now() - 3 * 86_400_000).toISOString().slice(0, 10);
+    await sync(founder.token, 0, [logged('forgotten', [entry('Lat pulldown', 500)], { date: threeDaysAgo })]);
+    expect((await call<CallView[]>('GET', '/calls', founder.token)).body[0]?.status).toBe('open');
+    await sync(founder.token, 0, [logged('today', [entry('Lat pulldown', 500)])]);
+    expect((await call<CallView[]>('GET', '/calls', founder.token)).body[0]?.status).toBe('cleared');
   });
 
   it('saves workouts through the API', async () => {
