@@ -1,7 +1,7 @@
 import Svg, { Path } from 'react-native-svg';
 import { colors } from '@/theme';
 
-/** Line icons on a 24-unit grid, all drawn with the same stroke. */
+/** Line icons on a 24-unit grid, all drawn with the same stroke. Decorative: whatever holds one carries the label. */
 const PATHS = {
   bag: 'M8 4h8l1 3c2 2 3 5 3 8 0 4-3 6-8 6s-8-2-8-6c0-3 1-6 3-8zM7 7h10',
   shield: 'M12 3l8 3v6c0 5-3.4 8-8 9-4.6-1-8-4-8-9V6z',
@@ -16,7 +16,7 @@ export type IconName = keyof typeof PATHS;
 
 export function Icon({ name, size = 24, color = colors.ink }: { name: IconName; size?: number; color?: string }) {
   return (
-    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
       <Path d={PATHS[name]} />
     </Svg>
   );
