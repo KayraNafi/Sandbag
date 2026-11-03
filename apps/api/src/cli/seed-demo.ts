@@ -1,7 +1,7 @@
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { PGlite } from '@electric-sql/pglite';
 import type { AuthResponse, Entry, LoggedWorkout, PostView, RankingRow, SavedExercise, SavedWorkout } from '@sandbag/shared';
-import { and, eq, inArray, like } from 'drizzle-orm';
+import { and, eq, inArray, like, sql } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/pglite';
 import { migrate } from 'drizzle-orm/pglite/migrator';
 import { fileURLToPath } from 'node:url';
@@ -94,10 +94,10 @@ async function person(entry: (typeof CREW)[number]): Promise<AuthResponse> {
 const [rocco, dex, tony, bruno, chad] = await Promise.all(CREW.map(person)) as [AuthResponse, AuthResponse, AuthResponse, AuthResponse, AuthResponse];
 
 // They all know each other, and you. Adding by code doesn't count as an invite.
-const crew = [rocco, dex, tony, bruno, chad];
-for (const [index, one] of crew.entries()) {
+const crewPeople = [rocco, dex, tony, bruno, chad];
+for (const [index, one] of crewPeople.entries()) {
   await app.inject({ method: 'POST', url: '/friends', headers: { authorization: `Bearer ${one.token}` }, payload: { inviteCode: myInviteCode } });
-  for (const other of crew.slice(index + 1)) {
+  for (const other of crewPeople.slice(index + 1)) {
     await app.inject({ method: 'POST', url: '/friends', headers: { authorization: `Bearer ${one.token}` }, payload: { inviteCode: other.user.inviteCode } });
   }
 }
@@ -140,7 +140,7 @@ if (firstRun) {
 }
 
 // The week's table, worst to best, using the same before-the-period number each time:
-// +1% is 10 progress points, and consistency is workouts against a target of 3.
+// Progress is against each person's recent best, and consistency is days trained.
 // Finished weeks count towards a streak, so these hit the target of 3 from Monday.
 const mondayOffset = (new Date().getUTCDay() + 6) % 7;
 const fullWeeks = (weeks: number) => Array.from({ length: weeks }, (_, index) => {
@@ -172,10 +172,26 @@ await post(chad.token, 'workout', 'Starting Monday', 'This time I mean it.', [li
 // Your call on Bruno, which he fails: the sandbag badge, and a notification for you.
 const brunoPost = await post(bruno.token, 'workout', 'Deadlifts', 'Easy day.', [lift('Deadlift', 100, { rpe: 6 })]);
 await callSandbag(myToken, brunoPost.id, 'Deadlift', 'RPE 6, sure.');
-await sync(bruno.token, [{ ...session('Deadlifts', 0, [lift('Deadlift', 100, { rpe: 10, note: 'tweaked something, allegedly' })]), updatedAt: Date.now() + 1000 }]);
+await sync(bruno.token, [{ ...session('Deadlifts', 0, [lift('Deadlift', 100, { rpe: 7, note: 'tweaked something, allegedly' })]), updatedAt: Date.now() + 1000 }]);
 
 // One open call for you to watch, and Rocco's other lifts are there for you to call.
 await callSandbag(dex.token, roccoPost.id, 'Cable curls', 'With that note? Do it clean.');
+
+// The story above was typed in today but happened over weeks, so date it the way a real log would be.
+await db.update(schema.loggedWorkouts).set({ recordedAt: sql`(${schema.loggedWorkouts.date}::timestamp + interval '20 hours') at time zone 'utc'` });
+
+// A real crew with a season underway, so the league has something to show.
+if (firstRun) {
+  const lastMonday = new Date(Date.now() - (mondayOffset + 21) * 86_400_000).toISOString().slice(0, 10);
+  const [crew] = await db.insert(schema.crews).values({ name: 'Basement Lifters', adminId: me.id, seasonStart: lastMonday, season: 2, lastChampionId: rocco.user.id }).returning();
+  const long = new Date(Date.now() - 60 * 86_400_000);
+  const ratings = [1062, 1041, 1029, 1012, 978, 935];
+  const members = [me.id, ...crewPeople.map((person) => person.user.id)];
+  await db.insert(schema.crewMembers).values(members.map((userId, index) => ({ crewId: crew!.id, userId, rating: ratings[index]!, trend: [18, -14, 14, 16, -18, -15][index]!, joinedAt: long })));
+  await db.insert(schema.crewWeeks).values({ crewId: crew!.id, week: lastMonday, season: 2, results: [] });
+  await db.insert(schema.crewWeeks).values({ crewId: crew!.id, week: new Date(Date.parse(lastMonday) + 7 * 86_400_000).toISOString().slice(0, 10), season: 2, results: [] });
+  await db.insert(schema.crewWeeks).values({ crewId: crew!.id, week: new Date(Date.parse(lastMonday) + 14 * 86_400_000).toISOString().slice(0, 10), season: 2, results: [] });
+}
 
 const table = await call<RankingRow[]>('GET', '/rankings?period=week', myToken);
 for (const row of table) console.log(row.rank, row.user.displayName, `${row.score} pts`, `progress ${row.progress}%`, `${row.workouts}/${row.target}`, `streak ${row.streak}`, row.wearingSandbag ? 'SANDBAG' : '');

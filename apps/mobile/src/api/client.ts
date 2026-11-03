@@ -1,8 +1,7 @@
 import { Platform } from 'react-native';
 import type {
-  ApiKeyView, TrophyView, AuthResponse, AvatarId, CallView, InviteSummary, Me, NotificationView, Period, PostView, PublicUser, RankingRow,
-  DataExport, ReplyView, SavedWorkout, SyncRequest, SyncResponse, Entry,
-} from '@sandbag/shared';
+  ApiKeyView, TrophyView, AuthResponse, AvatarId, CallView, CrewView, InviteSummary, Me, NotificationView, Period, PostView, PublicUser, RankingRow,
+  DataExport, ReplyView, SavedWorkout, SyncRequest, SyncResponse, Entry, SignUpCheck } from '@sandbag/shared';
 
 // The web app is served beside the API, so it needs no address and no CORS.
 const BASE_URL = process.env.EXPO_PUBLIC_API_URL ?? '/api';
@@ -59,7 +58,8 @@ export const api = {
   login: (input: { username: string; password: string }) => request<AuthResponse>('POST', '/auth/login', input),
   logout: () => request<void>('POST', '/auth/logout'),
   me: () => request<Me>('GET', '/me'),
-  updateMe: (input: { displayName?: string; weeklyTarget?: number; avatar?: AvatarId }) => request<Me>('PATCH', '/me', input),
+  checkSignUp: (input: { inviteCode?: string; username?: string }) => request<SignUpCheck>('POST', '/auth/check', input),
+  updateMe: (input: { displayName?: string; weeklyTarget?: number; avatar?: AvatarId; timeZone?: string }) => request<Me>('PATCH', '/me', input),
   changePassword: (currentPassword: string, newPassword: string) => request<void>('POST', '/me/password', { currentPassword, newPassword }),
   exportData: () => request<DataExport>('GET', '/me/export'),
   deleteAccount: (password: string) => request<void>('DELETE', '/me', { password }),
@@ -74,9 +74,18 @@ export const api = {
   callSandbag: (id: string, exercise: string, line: string) => request<unknown>('POST', `/posts/${id}/calls`, { exercise, line }),
   calls: () => request<CallView[]>('GET', '/calls'),
   rankings: (period: Period) => request<RankingRow[]>('GET', `/rankings?period=${period}`),
+  crew: () => request<CrewView | null>('GET', '/crew'),
+  createCrew: (name: string) => request<CrewView>('POST', '/crew', { name }),
+  joinCrew: (inviteCode: string) => request<CrewView>('POST', '/crew/join', { inviteCode }),
+  renameCrew: (name: string) => request<CrewView>('PATCH', '/crew', { name }),
+  leaveCrew: () => request<void>('POST', '/crew/leave'),
+  removeFromCrew: (id: string) => request<void>('DELETE', `/crew/members/${id}`),
+  askForPause: (weeks: number) => request<unknown>('POST', '/crew/pause', { weeks }),
+  decidePause: (id: string, approve: boolean) => request<void>('POST', `/crew/pauses/${id}/${approve ? 'approve' : 'decline'}`),
   friends: () => request<PublicUser[]>('GET', '/friends'),
   addFriend: (inviteCode: string) => request<PublicUser>('POST', '/friends', { inviteCode }),
   removeFriend: (id: string) => request<void>('DELETE', `/friends/${id}`),
+  nudge: (id: string) => request<void>('POST', `/friends/${id}/nudge`),
   rotateInviteCode: () => request<{ code: string }>('POST', '/invites/rotate'),
   invites: () => request<InviteSummary>('GET', '/invites'),
   notifications: () => request<NotificationView[]>('GET', '/notifications'),

@@ -48,6 +48,15 @@
         }
       ],
       "expo-secure-store",
+      "expo-sharing",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Pick a photo to put your session on. It stays on your phone until you post it.",
+          "cameraPermission": false,
+          "microphonePermission": false
+        }
+      ],
       "expo-font",
       "expo-splash-screen",
       [

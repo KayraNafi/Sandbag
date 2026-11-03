@@ -1,10 +1,12 @@
-import { Children, useEffect, useState, type ReactNode } from 'react';
+import { Children, Fragment, isValidElement, useEffect, useRef, useState, type ReactElement, type ReactNode } from 'react';
 import {
-  ActivityIndicator, Keyboard, Platform, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, View,
+  ActivityIndicator, Animated, Keyboard, Platform, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, View,
   type PressableProps, type StyleProp, type TextInputProps, type TextProps, type ViewStyle,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { voice } from '@sandbag/shared';
+import { Icon, type IconName } from '@/components/icons';
+import { EASE_OUT, FadeIn, feel, NATIVE, Pop, prefersLessMotion, usePressScale, usePulse } from '@/components/motion';
 import { toast } from '@/components/Toast';
 import { isOverMax, parseNumber } from '@/domain/format';
 import { colors, fonts, radius, space } from '@/theme';
@@ -14,7 +16,7 @@ import { colors, fonts, radius, space } from '@/theme';
  * window doesn't shrink for the keyboard, and its reported height leaves out the
  * navigation bar that the keyboard also covers.
  */
-function useKeyboardHeight(bottomInset: number): number {
+export function useKeyboardHeight(bottomInset: number): number {
   const [height, setHeight] = useState(0);
   useEffect(() => {
     const ios = Platform.OS === 'ios';
@@ -29,6 +31,17 @@ function useKeyboardHeight(bottomInset: number): number {
   }, [bottomInset]);
   return height;
 }
+
+const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
+const ARRIVE_STEP_MS = 45;
+const ARRIVE_LAST = 8;
+
+/** Fragments count as what's in them, so each piece of a screen arrives on its own. */
+function pieces(children: ReactNode): ReactNode[] {
+  return Children.toArray(children).flatMap((child) => (isValidElement(child) && child.type === Fragment ? pieces((child as ReactElement<{ children: ReactNode }>).props.children) : [child]));
+}
+
+const isOverlay = (child: ReactNode) => isValidElement(child) && Boolean((child.type as { overlay?: boolean }).overlay);
 
 export function Screen({ children, onRefresh, footer, padTop = true }: {
   children: ReactNode;
@@ -48,10 +61,14 @@ export function Screen({ children, onRefresh, footer, padTop = true }: {
     <View style={[styles.screen, { paddingBottom: keyboard }]}>
       <ScrollView
         keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
         contentContainerStyle={[styles.scroll, { paddingTop: padTop ? insets.top + space.md : space.md }]}
         {...(refresh ? { refreshControl: <RefreshControl refreshing={refreshing} onRefresh={refresh} tintColor={colors.volt} /> } : {})}
       >
-        {children}
+        {pieces(children).map((child, index) => (isOverlay(child) || !isValidElement(child) ? child : (
+          // Top to bottom, in quick order. Anything added later just arrives by itself.
+          <FadeIn key={child.key} delay={Math.min(index, ARRIVE_LAST) * ARRIVE_STEP_MS} style={styles.piece}>{child}</FadeIn>
+        )))}
       </ScrollView>
       {footer ? <View style={[styles.footer, { paddingBottom: keyboard ? space.md : insets.bottom + space.md }]}>{footer}</View> : null}
     </View>
@@ -61,11 +78,22 @@ export function Screen({ children, onRefresh, footer, padTop = true }: {
 /** Not textTransform: Android measures before transforming, then clips what no longer fits. */
 const upper = (children: ReactNode) => Children.map(children, (child) => (typeof child === 'string' ? child.toUpperCase() : child));
 
-export const Title = ({ style, children, ...props }: TextProps) => <Text accessibilityRole="header" style={[styles.title, style]} {...props}>{upper(children)}</Text>;
-export const Heading = ({ style, children, ...props }: TextProps) => <Text accessibilityRole="header" style={[styles.heading, style]} {...props}>{upper(children)}</Text>;
+export const Title = ({ style, children, ...props }: TextProps) => <Text numberOfLines={2} accessibilityRole="header" style={[styles.title, style]} {...props}>{upper(children)}</Text>;
+export const Heading = ({ style, children, section = false, ...props }: TextProps & { section?: boolean }) => <Text accessibilityRole="header" style={[styles.heading, section && styles.sectionHeading, style]} {...props}>{upper(children)}</Text>;
 export const Label = ({ style, children, ...props }: TextProps) => <Text style={[styles.label, style]} {...props}>{upper(children)}</Text>;
 export const Body = ({ style, ...props }: TextProps) => <Text style={[styles.body, style]} {...props} />;
 export const Muted = ({ style, ...props }: TextProps) => <Text style={[styles.muted, style]} {...props} />;
+
+/** Long lists arrive a page at a time, because a phone can't draw a year of sessions at once. */
+export function useShowMore(total: number, page = 30) {
+  const [shown, setShown] = useState(page);
+  return { shown, left: Math.max(0, total - shown), more: () => setShown((current) => current + page), page };
+}
+
+export function ShowMore({ left, page, onPress }: { left: number; page: number; onPress: () => void }) {
+  if (left <= 0) return null;
+  return <Button title={`Show ${Math.min(left, page)} more`} variant="ghost" onPress={onPress} />;
+}
 
 export function Button({ title, variant = 'primary', busy, style, disabled, ...props }: PressableProps & {
   title: string;
@@ -74,27 +102,31 @@ export function Button({ title, variant = 'primary', busy, style, disabled, ...p
   style?: StyleProp<ViewStyle>;
 }) {
   const off = Boolean(disabled || busy);
+  const { scale, onPressIn, onPressOut } = usePressScale();
   return (
-    <Pressable
+    <AnimatedPressable
       accessibilityRole="button"
       accessibilityLabel={title}
       disabled={off}
-      style={({ pressed }) => [styles.button, styles[variant], pressed && styles.pressed, off && styles.off, style]}
+      onPressIn={onPressIn}
+      onPressOut={onPressOut}
+      style={[styles.button, styles[variant], off && styles.off, style, { transform: [{ scale }] }]}
       {...props}
     >
       {busy
         ? <ActivityIndicator color={variant === 'primary' ? colors.voltInk : colors.ink} />
         : <Text style={[styles.buttonText, variant === 'primary' ? styles.primaryText : variant === 'danger' ? styles.dangerText : null]}>{title.toUpperCase()}</Text>}
-    </Pressable>
+    </AnimatedPressable>
   );
 }
 
 export function Card({ children, style, onPress, label }: { children: ReactNode; style?: StyleProp<ViewStyle>; onPress?: () => void; label?: string }) {
+  const { scale, onPressIn, onPressOut } = usePressScale(0.98);
   if (!onPress) return <View style={[styles.card, style]}>{children}</View>;
   return (
-    <Pressable accessibilityRole="button" accessibilityLabel={label} onPress={onPress} style={({ pressed }) => [styles.card, pressed && styles.pressed, style]}>
+    <AnimatedPressable accessibilityRole="button" accessibilityLabel={label} onPress={onPress} onPressIn={onPressIn} onPressOut={onPressOut} style={[styles.card, style, { transform: [{ scale }] }]}>
       {children}
-    </Pressable>
+    </AnimatedPressable>
   );
 }
 
@@ -156,17 +188,73 @@ export function NumberField({ label, value, onChange, max, unit, decimals = true
 }
 
 export function Chip({ title, active, onPress }: { title: string; active?: boolean; onPress: () => void }) {
+  const scale = usePulse(active, 1.08);
   return (
-    <Pressable
+    <AnimatedPressable
       accessibilityRole="button"
       accessibilityState={{ selected: Boolean(active) }}
       onPress={onPress}
-      style={[styles.chip, active && styles.chipActive]}
+      style={[styles.chip, active && styles.chipActive, { transform: [{ scale }] }]}
     >
       <Text style={[styles.chipText, active && styles.chipTextActive]}>{title}</Text>
+    </AnimatedPressable>
+  );
+}
+
+/** One section at a time, and a thumb that slides to it. */
+export function Segmented<T extends string>({ options, value, onChange }: { options: { key: T; label: string }[]; value: T; onChange: (key: T) => void }) {
+  const [width, setWidth] = useState(0);
+  const at = Math.max(0, options.findIndex((option) => option.key === value));
+  const cell = width / options.length;
+  const x = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    if (prefersLessMotion()) x.setValue(at * cell);
+    else Animated.timing(x, { toValue: at * cell, duration: 240, easing: EASE_OUT, useNativeDriver: NATIVE }).start();
+  }, [at, cell, x]);
+  return (
+    <View accessibilityRole="tablist" onLayout={(event) => setWidth(event.nativeEvent.layout.width)} style={styles.segmented}>
+      {width ? <Animated.View style={[styles.thumb, { width: cell, transform: [{ translateX: x }] }]} /> : null}
+      {options.map((option) => (
+        <Pressable
+          key={option.key}
+          accessibilityRole="tab"
+          accessibilityState={{ selected: option.key === value }}
+          onPress={() => {
+            feel.tap();
+            onChange(option.key);
+          }}
+          style={styles.segmentedItem}
+        >
+          <Text numberOfLines={1} style={[styles.segmentedText, option.key === value && styles.segmentedTextOn]}>{option.label}</Text>
+        </Pressable>
+      ))}
+    </View>
+  );
+}
+
+/** A row in a native-feeling list: a title, a line under it, and what's on the right. */
+export function ListRow({ icon, title, body, right, onPress, label, danger }: { icon?: IconName; title: string; body?: string; right?: ReactNode; onPress?: () => void; label?: string; danger?: boolean }) {
+  return (
+    <Pressable
+      accessibilityRole={onPress ? 'button' : undefined}
+      accessibilityLabel={label ?? title}
+      disabled={!onPress}
+      onPress={onPress}
+      style={({ pressed }) => [styles.listRow, pressed && styles.listPressed]}
+    >
+      {icon ? <Icon name={icon} size={22} color={danger ? colors.danger : colors.volt} /> : null}
+      <View style={styles.listText}>
+        <Text style={[styles.listTitle, danger && styles.dangerText]}>{title}</Text>
+        {body ? <Text style={styles.muted}>{body}</Text> : null}
+      </View>
+      {right}
+      {onPress ? <Icon name="chevron" size={18} color={colors.ink3} /> : null}
     </Pressable>
   );
 }
+
+/** Rows grouped on one surface, the way settings look on a phone. */
+export const ListGroup = ({ children }: { children: ReactNode }) => <View style={styles.listGroup}>{children}</View>;
 
 export const Row = ({ children, style }: { children: ReactNode; style?: StyleProp<ViewStyle> }) => <View style={[styles.row, style]}>{children}</View>;
 
@@ -184,6 +272,7 @@ export function MoveButtons({ name, index, total, onMove }: { name: string; inde
 export function Empty({ title, body }: { title: string; body: string }) {
   return (
     <View style={styles.empty}>
+      <Pop><Icon name="bag" size={48} color={colors.volt} /></Pop>
       <Heading style={styles.emptyTitle}>{title}</Heading>
       <Muted style={styles.center}>{body}</Muted>
     </View>
@@ -192,49 +281,75 @@ export function Empty({ title, body }: { title: string; body: string }) {
 
 export const Loading = () => <ActivityIndicator color={colors.volt} style={styles.loading} />;
 
+/** Fills when it's earned. One that's already earned is simply full. */
+function Segment({ lit }: { lit: boolean }) {
+  const fill = useRef(new Animated.Value(lit ? 1 : 0)).current;
+  useEffect(() => {
+    const toValue = lit ? 1 : 0;
+    if (prefersLessMotion()) fill.setValue(toValue);
+    else Animated.timing(fill, { toValue, duration: 280, easing: EASE_OUT, useNativeDriver: NATIVE }).start();
+  }, [lit, fill]);
+  return (
+    <View style={styles.segment}>
+      <Animated.View style={[StyleSheet.absoluteFill, styles.segmentDone, { opacity: fill, transform: [{ scaleX: fill }] }]} />
+    </View>
+  );
+}
+
 /** One skewed segment per exercise, like plates on a bar. */
 export function Segments({ total, done }: { total: number; done: number }) {
   return (
     <View style={styles.segments} accessibilityLabel={`${done} of ${total} done`}>
-      {Array.from({ length: total }, (_, index) => (
-        <View key={index} style={[styles.segment, index < done && styles.segmentDone]} />
-      ))}
+      {Array.from({ length: total }, (_, index) => <Segment key={index} lit={index < done} />)}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
+  segmented: { flexDirection: 'row', height: 48, borderRadius: 24, backgroundColor: colors.surface2, overflow: 'hidden' },
+  thumb: { position: 'absolute', top: 0, bottom: 0, left: 0, borderRadius: 24, backgroundColor: colors.volt },
+  segmentedItem: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  segmentedText: { fontFamily: fonts.label, fontSize: 15, color: colors.ink2 },
+  segmentedTextOn: { color: colors.voltInk },
+  piece: { gap: space.md },
   screen: { flex: 1, backgroundColor: colors.bg },
   scroll: { padding: space.lg, paddingBottom: 48, gap: space.md, width: '100%', maxWidth: 640, alignSelf: 'center' },
   footer: { paddingHorizontal: space.lg, paddingTop: space.md, backgroundColor: colors.bg, borderTopWidth: 1, borderTopColor: colors.line, gap: space.sm },
   title: { fontFamily: fonts.display, fontSize: 40, lineHeight: 42, color: colors.ink },
+  // Groups sit close together and sections further apart, so the page reads in chunks.
+  sectionHeading: { marginTop: space.md },
   heading: { fontFamily: fonts.display, fontSize: 24, lineHeight: 28, color: colors.ink },
   label: { fontFamily: fonts.label, fontSize: 13, letterSpacing: 1, color: colors.ink3 },
-  body: { fontFamily: fonts.body, fontSize: 16, lineHeight: 22, color: colors.ink },
-  muted: { fontFamily: fonts.body, fontSize: 14, lineHeight: 20, color: colors.ink2 },
+  body: { fontFamily: fonts.body, fontSize: 17, lineHeight: 22, color: colors.ink },
+  muted: { fontFamily: fonts.body, fontSize: 15, lineHeight: 20, color: colors.ink2 },
   button: { minHeight: 52, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center', paddingHorizontal: space.lg },
   primary: { backgroundColor: colors.volt },
   ghost: { backgroundColor: colors.surface2, borderWidth: 1, borderColor: colors.line },
   danger: { backgroundColor: 'transparent', borderWidth: 1, borderColor: colors.danger },
-  pressed: { opacity: 0.75 },
+  pressed: { opacity: 0.8, transform: [{ scale: 0.98 }] },
   off: { opacity: 0.45 },
   buttonText: { alignSelf: 'stretch', textAlign: 'center', fontFamily: fonts.display, fontSize: 20, color: colors.ink },
   primaryText: { color: colors.voltInk },
   dangerText: { color: colors.danger },
   card: { backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.line, borderRadius: radius.lg, padding: space.lg, gap: space.sm },
   field: { gap: space.xs },
-  input: { minHeight: 50, backgroundColor: colors.surface2, borderWidth: 1, borderColor: colors.line, borderRadius: radius.md, paddingHorizontal: space.md, color: colors.ink, fontFamily: fonts.body, fontSize: 16 },
+  input: { minHeight: 50, backgroundColor: colors.surface2, borderWidth: 1, borderColor: colors.line, borderRadius: radius.md, paddingHorizontal: space.md, color: colors.ink, fontFamily: fonts.body, fontSize: 17 },
   error: { fontFamily: fonts.body, fontSize: 13, color: colors.danger },
   numberField: { flex: 1, gap: space.xs },
   numberInput: { minHeight: 50, backgroundColor: colors.surface2, borderWidth: 1, borderColor: colors.line, borderRadius: radius.md, color: colors.ink, fontFamily: fonts.display, fontSize: 24, textAlign: 'center' },
-  chip: { minHeight: 40, paddingHorizontal: space.md, borderRadius: 20, justifyContent: 'center', backgroundColor: colors.surface2, borderWidth: 1, borderColor: colors.line },
+  chip: { minHeight: 44, paddingHorizontal: space.md, borderRadius: 22, justifyContent: 'center', backgroundColor: colors.surface2, borderWidth: 1, borderColor: colors.line },
   chipActive: { backgroundColor: colors.volt, borderColor: colors.volt },
   chipText: { fontFamily: fonts.label, fontSize: 15, color: colors.ink2 },
   chipTextActive: { color: colors.voltInk },
   row: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
+  listGroup: { backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.line, borderRadius: radius.lg, overflow: 'hidden' },
+  listRow: { flexDirection: 'row', alignItems: 'center', gap: space.md, minHeight: 56, paddingVertical: space.md, paddingHorizontal: space.lg, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.line },
+  listPressed: { backgroundColor: colors.surface2 },
+  listText: { flex: 1, gap: 2 },
+  listTitle: { fontFamily: fonts.bodyStrong, fontSize: 17, color: colors.ink },
   move: { width: 44, height: 44, borderRadius: 10, backgroundColor: colors.surface2, alignItems: 'center', justifyContent: 'center' },
   moveOff: { opacity: 0.3 },
-  moveText: { color: colors.ink, fontSize: 18 },
+  moveText: { color: colors.ink, fontSize: 17 },
   empty: { paddingVertical: space.xl, gap: space.sm, alignItems: 'center' },
   center: { textAlign: 'center' },
   // Stretched, because Android clips a centered heading's second word when it measures it shrink-wrapped.

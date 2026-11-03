@@ -1,13 +1,29 @@
 import { z } from 'zod';
+import type { CallStatus, GoalChange, WeekBonuses } from './scoring';
 
 const clientId = z.string().regex(/^[A-Za-z0-9_-]{1,64}$/);
 const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
-const exerciseName = z.string().trim().min(1).max(100);
+
+/** Control characters and direction overrides, but not the joiners that emoji and Persian need. */
+const INVISIBLE = /(?![\u200c\u200d])[\p{Cc}\p{Cf}]/gu;
+const TOO_MANY_MARKS = /(\p{M}{3})\p{M}+/gu;
+const VISIBLE = /[^\s\p{M}\u200c\u200d]/u;
+
+/** Names and messages on one line, with nothing hidden in them. Text with nothing to see comes back empty. */
+export function cleanText(text: string): string {
+  const clean = text.replace(/\s+/g, ' ').replace(INVISIBLE, '').replace(TOO_MANY_MARKS, '$1').trim();
+  return VISIBLE.test(clean) ? clean : '';
+}
+
+const cleaned = (max: number, min = 1) => z.string().transform(cleanText).pipe(z.string().min(min).max(max));
+
+const exerciseName = cleaned(100);
 const count = z.number().int().min(0).max(1000).nullable();
 
 export const MAX_VARIED_SETS = 20;
 export const MAX_WEIGHT = 2000;
 const setReps = z.array(count).max(MAX_VARIED_SETS).optional();
+const setWeights = z.array(z.number().min(0).max(MAX_WEIGHT).nullable()).max(MAX_VARIED_SETS).optional();
 
 export const entrySchema = z.object({
   id: clientId,
@@ -17,24 +33,28 @@ export const entrySchema = z.object({
   reps: count,
   // One value per set when they differ. `reps` stays the usual number, which the next session starts from.
   setReps,
+  // One value per set when they differ. `weight` stays the heaviest, which is what older apps show.
+  setWeights,
   weight: z.number().min(0).max(MAX_WEIGHT).nullable(),
   perSide: z.boolean(),
   // Whether the weight counts the bar or machine. Absent means it wasn't said, as on every older entry.
   includesEquipment: z.boolean().optional(),
   rpe: z.number().min(0).max(10).nullable(),
   minutes: z.number().min(0).max(1440).nullable(),
-  note: z.string().max(200),
+  note: cleaned(200, 0),
 });
 export type Entry = z.infer<typeof entrySchema>;
 
 export const loggedWorkoutSchema = z.object({
   id: clientId,
   date: isoDate,
-  title: z.string().trim().min(1).max(100),
+  title: cleaned(100),
   savedWorkoutId: clientId.nullable(),
   entries: z.array(entrySchema).max(100),
   updatedAt: z.number().int().nonnegative(),
   deleted: z.boolean(),
+  /** How long it took, when the app was timing it. Scoring ignores it, so it's worth nothing to fake. */
+  durationSeconds: z.number().int().min(0).max(86_400).nullable().optional(),
 });
 export type LoggedWorkout = z.infer<typeof loggedWorkoutSchema>;
 
@@ -48,7 +68,7 @@ export type SavedExercise = z.infer<typeof savedExerciseSchema>;
 
 export const savedWorkoutSchema = z.object({
   id: clientId,
-  name: z.string().trim().min(1).max(40),
+  name: cleaned(40),
   position: z.number().int().min(0).max(10000),
   exercises: z.array(savedExerciseSchema).max(100),
   savedFrom: z.string().max(40).nullable(),
@@ -88,14 +108,31 @@ const password = z.string().min(10, 'Use at least 10 characters').max(200);
 
 export const registerSchema = z.object({
   username,
-  displayName: z.string().trim().min(1).max(40),
+  displayName: cleaned(40),
   password,
   inviteCode: z.string().trim().min(1).max(32),
 });
 export const loginSchema = z.object({ username, password: z.string().min(1).max(200) });
+/** Asked before the last step, so a taken username or a bad code shows up where it was typed. */
+export const checkSignUpSchema = z.object({ inviteCode: z.string().trim().min(1).max(32).optional(), username: username.optional() });
+export interface SignUpCheck {
+  inviteCode?: boolean;
+  username?: boolean;
+}
+
+const timeZone = z.string().min(1).max(64).refine((zone) => {
+  try {
+    new Intl.DateTimeFormat('en-US', { timeZone: zone });
+    return true;
+  } catch {
+    return false;
+  }
+}, 'Not a time zone');
+
 export const updateProfileSchema = z.object({
-  displayName: z.string().trim().min(1).max(40).optional(),
-  weeklyTarget: z.number().int().min(1).max(14).optional(),
+  timeZone: timeZone.optional(),
+  displayName: cleaned(40).optional(),
+  weeklyTarget: z.number().int().min(2).max(7).optional(),
   avatar: z.enum(AVATARS).optional(),
 });
 export const changePasswordSchema = z.object({ currentPassword: z.string().min(1).max(200), newPassword: password });
@@ -106,15 +143,15 @@ export const createPostSchema = z.object({
   // Chosen by the client, so resending after a lost response can't post twice.
   id: z.string().uuid(),
   kind: z.enum(['workout', 'share']),
-  title: z.string().trim().min(1).max(100),
-  caption: z.string().trim().max(140),
+  title: cleaned(100),
+  caption: cleaned(140, 0),
   showWeights: z.boolean(),
   entries: z.array(entrySchema).min(1).max(100),
   // Empty means the whole crew.
   recipientIds: z.array(z.string().uuid()).max(100),
 });
-export const createReplySchema = z.object({ text: z.string().trim().min(1).max(140) });
-export const createCallSchema = z.object({ exercise: exerciseName, line: z.string().trim().min(1).max(140) });
+export const createReplySchema = z.object({ text: cleaned(140) });
+export const createCallSchema = z.object({ exercise: exerciseName, line: cleaned(140) });
 export const periodSchema = z.enum(['week', 'month']);
 export type Period = z.infer<typeof periodSchema>;
 
@@ -126,7 +163,11 @@ export interface PublicUser {
 }
 
 export interface Me extends PublicUser {
+  /** The goal being asked for. A change starts the Monday after, as goalHistory says. */
   weeklyTarget: number;
+  goalHistory: GoalChange[];
+  pausedWeeks: string[];
+  timeZone: string | null;
   inviteCode: string;
 }
 
@@ -166,9 +207,15 @@ export interface CallView {
   exercise: string;
   /** Null when the post hid its weights and you aren't the one called out. */
   targetWeight: number | null;
+  targetReps: number | null;
   line: string;
-  status: 'open' | 'cleared' | 'failed';
+  status: CallStatus;
   createdAt: string;
+  /** When an open call fails by itself, or a watched miss is finally believed. */
+  deadlineAt: string;
+  points: number;
+  /** The session that answered it. Only ever sent to the person called out. */
+  settledBy: string | null;
 }
 
 export interface RankingRow {
@@ -181,6 +228,10 @@ export interface RankingRow {
   consistency: number;
   score: number;
   wearingSandbag: boolean;
+  /** What the score was before bonuses, with what was added. Weeks only. */
+  base: number;
+  bonuses: WeekBonuses | null;
+  shields: number;
 }
 
 export interface NotificationView {
@@ -217,26 +268,27 @@ const apiEntrySchema = z.object({
   sets: optionalCount,
   reps: optionalCount,
   setReps,
+  setWeights,
   weight: z.number().min(0).max(MAX_WEIGHT).nullable().default(null),
   perSide: z.boolean().default(false),
   includesEquipment: z.boolean().optional(),
   rpe: z.number().min(0).max(10).nullable().default(null),
   minutes: z.number().min(0).max(1440).nullable().default(null),
-  note: z.string().max(200).default(''),
+  note: cleaned(200, 0).default(''),
 });
 
 /** The public API's shape: only name and date are required, everything else has a default. */
 export const apiWorkoutSchema = z.object({
   id: clientId.optional(),
   date: isoDate,
-  title: z.string().trim().min(1).max(100).default('Workout'),
+  title: cleaned(100).default('Workout'),
   savedWorkoutId: clientId.nullable().default(null),
   entries: z.array(apiEntrySchema).min(1).max(100),
 });
 export const apiWorkoutsSchema = z.object({ workouts: z.array(apiWorkoutSchema).min(1).max(500) });
 export const apiSavedWorkoutSchema = z.object({
   id: clientId.optional(),
-  name: z.string().trim().min(1).max(40),
+  name: cleaned(40),
   exercises: z.array(z.object({
     name: exerciseName,
     kind: z.enum(['strength', 'time']).default('strength'),
@@ -244,7 +296,7 @@ export const apiSavedWorkoutSchema = z.object({
     reps: optionalCount,
   })).max(100),
 });
-export const createApiKeySchema = z.object({ name: z.string().trim().min(1).max(40), password: z.string().min(1).max(200) });
+export const createApiKeySchema = z.object({ name: cleaned(40), password: z.string().min(1).max(200) });
 
 export const pushTokenSchema = z.object({ token: z.string().min(20).max(4096) });
 
@@ -263,4 +315,56 @@ export interface DataExport {
   loggedWorkouts: LoggedWorkout[];
   savedWorkouts: SavedWorkout[];
   posts: { id: string; kind: 'workout' | 'share'; title: string; caption: string; entries: Entry[]; createdAt: string }[];
+}
+
+export const createCrewSchema = z.object({ name: cleaned(40) });
+export const renameCrewSchema = createCrewSchema;
+export const joinCrewSchema = addFriendSchema;
+export const requestPauseSchema = z.object({ weeks: z.number().int().min(1).max(4) });
+
+export interface CrewMemberView {
+  user: PublicUser;
+  rank: number;
+  rating: number;
+  /** Rating change last week. */
+  trend: number;
+  admin: boolean;
+  paused: boolean;
+  /** Joined this week, so their first match is next Monday. */
+  waiting: boolean;
+}
+
+export interface CrewMatchView {
+  week: string;
+  opponent: PublicUser | null;
+  myScore: number;
+  theirScore: number;
+  /** Null until the week has settled. */
+  ratingChange: number | null;
+  note: 'match' | 'bye' | 'paused' | 'idle' | 'forfeit';
+}
+
+export interface PauseView {
+  id: string;
+  user: PublicUser;
+  weeks: number;
+  fromWeek: string;
+  status: 'pending' | 'approved' | 'declined';
+  /** You can answer this one. */
+  canDecide: boolean;
+}
+
+export interface CrewView {
+  id: string;
+  name: string;
+  season: number;
+  /** 1 to SEASON_WEEKS, or 0 before the first Monday. */
+  week: number;
+  startsOn: string;
+  isAdmin: boolean;
+  members: CrewMemberView[];
+  match: CrewMatchView | null;
+  lastMatch: CrewMatchView | null;
+  lastChampion: PublicUser | null;
+  pauses: PauseView[];
 }

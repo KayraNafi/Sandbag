@@ -29,9 +29,24 @@ interface SessionState {
   signIn: (auth: AuthResponse) => Promise<void>;
   signOut: () => Promise<void>;
   setMe: (me: Me) => void;
+  refreshMe: () => Promise<void>;
+}
+
+function deviceZone(): string | null {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone || null;
+  } catch {
+    return null;
+  }
 }
 
 export const useSession = create<SessionState>((set, get) => {
+  // Your week ends at your midnight, so the server needs to know where that is.
+  const shareZone = (me: Me) => {
+    const timeZone = deviceZone();
+    if (timeZone && timeZone !== me.timeZone) void api.updateMe({ timeZone }).then((updated) => get().setMe(updated)).catch(() => {});
+  };
+
   const endSession = async () => {
     await tokenStore.clear();
     configureApi({ token: null });
@@ -54,6 +69,7 @@ export const useSession = create<SessionState>((set, get) => {
         useData.getState().claim(me.id);
         useData.getState().setProfile(me);
         set({ me });
+        shareZone(me);
       }).catch(() => {});
     },
     signIn: async ({ token, user }) => {
@@ -62,6 +78,7 @@ export const useSession = create<SessionState>((set, get) => {
       useData.getState().claim(user.id);
       useData.getState().setProfile(user);
       set({ status: 'signedIn', me: user });
+      shareZone(user);
     },
     signOut: async () => {
       await api.logout().catch(() => {});
@@ -72,6 +89,13 @@ export const useSession = create<SessionState>((set, get) => {
       if (get().status !== 'signedIn') return;
       useData.getState().setProfile(me);
       set({ me });
+    },
+    // Some of what the streak depends on, like a pause your crew approved, only lives on the
+    // server. And this catches a phone that opened offline, or has since crossed a time zone.
+    refreshMe: async () => {
+      const me = await api.me();
+      if (JSON.stringify(me) !== JSON.stringify(get().me)) get().setMe(me);
+      shareZone(me);
     },
   };
 });

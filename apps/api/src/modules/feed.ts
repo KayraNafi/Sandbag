@@ -1,7 +1,6 @@
 import {
-  createCallSchema, createPostSchema, createReplySchema, exerciseKey, voice,
-  type CallView, type Entry, type PostView, type ReplyView, type SavedWorkout,
-} from '@sandbag/shared';
+  CALL_DAYS, callPoints, createCallSchema, createPostSchema, createReplySchema, topEntry, entrySetup, exerciseKey, voice,
+  type CallView, type Entry, type PostView, type ReplyView, type SavedWorkout, MAX_OPEN_CALLS } from '@sandbag/shared';
 import { randomUUID } from 'node:crypto';
 import { and, desc, eq, inArray, lt, or, sql } from 'drizzle-orm';
 import { alias } from 'drizzle-orm/pg-core';
@@ -10,6 +9,7 @@ import type { Db, DbOrTx } from '../db/client';
 import { postReplies, postRespects, posts, postSaves, sandbagCalls, savedWorkouts, syncSeq, users } from '../db/schema';
 import { badRequest, conflict, forbidden, notFound } from '../errors';
 import { requireUser, toPublic } from './auth';
+import { expireCalls } from './calls';
 import { friendIds } from './friends';
 import { notify } from './notifications';
 
@@ -17,13 +17,17 @@ const FEED_PAGE = 30;
 // Each of these notifies someone, so a friend can't turn them into a flood.
 const WRITE_LIMIT = { config: { rateLimit: { max: 30, timeWindow: '1 minute' } } };
 const UUID = /^[0-9a-f-]{36}$/i;
+const DAY_MS = 86_400_000;
+/** A number from months ago says nothing about what someone can lift now. */
+const CALLABLE_DAYS = 14;
+/** Enough to make a point. Any more and it's harassment with a scoreboard. */
 
 type Post = typeof posts.$inferSelect;
 
 /** Weights are removed here, on the server, so "hide my weights" can't leak. */
 function visibleEntries(post: Post, viewerId: string): Entry[] {
   if (post.showWeights || post.authorId === viewerId) return post.entries;
-  return post.entries.map(({ includesEquipment: _hidden, ...entry }) => ({ ...entry, weight: null, note: '' }));
+  return post.entries.map(({ includesEquipment: _hidden, setWeights: _weights, ...entry }) => ({ ...entry, weight: null, note: '' }));
 }
 
 function canSee(post: Post, viewerId: string, friends: string[]): boolean {
@@ -204,19 +208,31 @@ export function feedRoutes(app: FastifyInstance, db: Db): void {
     const user = await requireUser(db, request);
     const post = await loadVisiblePost(db, request.params.id, user.id);
     if (post.authorId === user.id) throw badRequest('Calling yourself out is just therapy');
+    if (post.createdAt.getTime() < Date.now() - CALLABLE_DAYS * DAY_MS) throw badRequest('That post is too old to call');
     const input = createCallSchema.parse(request.body);
     const key = exerciseKey(input.exercise);
-    const entry = post.entries.find((item) => exerciseKey(item.name) === key && item.weight !== null);
-    if (!entry || entry.weight === null) throw badRequest('That lift isn’t in this workout');
+    const lifts = post.entries.filter((item) => exerciseKey(item.name) === key);
+    const top = topEntry(lifts);
+    if (!top && lifts.some((item) => item.weight)) throw badRequest('Nobody believes that number anyway. Nothing to call.');
+    if (!top || top.entry.weight === null) throw badRequest('That lift isn’t in this workout');
+    const { entry, max } = top;
+    const earlier = await db.select({ id: sandbagCalls.id, status: sandbagCalls.status, callerId: sandbagCalls.callerId, exerciseKey: sandbagCalls.exerciseKey, postId: sandbagCalls.postId }).from(sandbagCalls)
+      .where(or(eq(sandbagCalls.postId, post.id), eq(sandbagCalls.callerId, user.id)));
+    if (earlier.some((call) => call.postId === post.id && call.exerciseKey === key)) throw conflict('Someone already called this lift. Wait for the verdict.');
+    if (earlier.filter((call) => call.callerId === user.id && call.status === 'open').length >= MAX_OPEN_CALLS) throw conflict(`You have ${MAX_OPEN_CALLS} calls open. Wait for a verdict.`);
     const [call] = await db.insert(sandbagCalls).values({
       callerId: user.id,
       targetId: post.authorId,
       postId: post.id,
       exercise: entry.name,
       exerciseKey: key,
-      targetWeight: entry.weight,
+      targetWeight: top.entry.weight,
+      targetReps: entry.reps,
+      targetMax: max,
+      targetSetup: entrySetup(entry),
       weightsHidden: !post.showWeights,
       line: input.line,
+      deadlineAt: new Date(Date.now() + CALL_DAYS * DAY_MS),
     }).onConflictDoNothing().returning();
     if (!call) throw conflict('Someone already called this lift. Wait for the verdict.');
     await notify(db, post.authorId, { title: `${user.displayName} called sandbag`, body: `On your ${entry.name}. “${input.line}”`, route: 'train' });
@@ -226,6 +242,7 @@ export function feedRoutes(app: FastifyInstance, db: Db): void {
 
   app.get('/calls', async (request): Promise<CallView[]> => {
     const user = await requireUser(db, request);
+    await expireCalls(db, [user.id]);
     const caller = alias(users, 'caller');
     const target = alias(users, 'target');
     const rows = await db.select({ call: sandbagCalls, caller, target }).from(sandbagCalls)
@@ -240,9 +257,13 @@ export function feedRoutes(app: FastifyInstance, db: Db): void {
       target: toPublic(row.target),
       exercise: row.call.exercise,
       targetWeight: row.call.weightsHidden && row.call.targetId !== user.id ? null : row.call.targetWeight,
+      targetReps: row.call.weightsHidden && row.call.targetId !== user.id ? null : row.call.targetReps,
+      settledBy: row.call.targetId === user.id ? row.call.settledBy : null,
       line: row.call.line,
       status: row.call.status,
       createdAt: row.call.createdAt.toISOString(),
+      deadlineAt: row.call.deadlineAt.toISOString(),
+      points: callPoints(row.call.status, row.call.targetId === user.id ? 'target' : 'caller'),
     }));
   });
 }

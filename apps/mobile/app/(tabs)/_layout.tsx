@@ -1,7 +1,9 @@
-import { Tabs } from 'expo-router';
-import type { ColorValue } from 'react-native';
+import { Redirect, Tabs } from 'expo-router';
+import { Animated, type ColorValue } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Path } from 'react-native-svg';
+import { useData } from '@/data/store';
+import { feel, usePulse } from '@/components/motion';
 import { colors, fonts } from '@/theme';
 
 const BAR_HEIGHT = 62;
@@ -13,20 +15,27 @@ const ICONS = {
   you: 'M20 21v-1.5a4.5 4.5 0 0 0-4.5-4.5h-7A4.5 4.5 0 0 0 4 19.5V21M12 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8',
 };
 
-const icon = (name: keyof typeof ICONS) => function TabIcon({ color }: { color: ColorValue }) {
+const icon = (name: keyof typeof ICONS) => function TabIcon({ color, focused }: { color: ColorValue; focused: boolean }) {
+  const scale = usePulse(focused, 1.22);
   return (
-    <Svg width={24} height={24} viewBox="0 0 24 24" fill="none" stroke={String(color)} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-      <Path d={ICONS[name]} />
-    </Svg>
+    <Animated.View style={{ transform: [{ scale }] }}>
+      <Svg width={24} height={24} viewBox="0 0 24 24" fill="none" stroke={String(color)} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+        <Path d={ICONS[name]} />
+      </Svg>
+    </Animated.View>
   );
 };
 
 export default function TabsLayout() {
   const insets = useSafeAreaInsets();
+  const seenWelcome = useData((state) => state.seenWelcome);
+  if (!seenWelcome) return <Redirect href="/welcome" />;
   return (
     <Tabs
+      screenListeners={{ tabPress: () => feel.tap() }}
       screenOptions={{
         headerShown: false,
+        animation: 'fade',
         tabBarActiveTintColor: colors.volt,
         tabBarInactiveTintColor: colors.ink3,
         tabBarStyle: { backgroundColor: colors.bg, borderTopColor: colors.line, height: BAR_HEIGHT + insets.bottom, paddingTop: 6 },

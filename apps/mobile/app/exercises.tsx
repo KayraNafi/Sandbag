@@ -1,11 +1,10 @@
 import { router } from 'expo-router';
 import { useMemo } from 'react';
-import { StyleSheet, Text } from 'react-native';
-import { Card, Empty, Muted, Screen } from '@/components/ui';
+import { LiftRow } from '@/components/LiftRow';
+import { Button, Card, Empty, Screen, ShowMore, Title, useShowMore } from '@/components/ui';
 import { useData } from '@/data/store';
-import { agoText, summary } from '@/domain/format';
+import { agoText, num, setsReps, summary } from '@/domain/format';
 import { activeLogged, buildHistory } from '@/domain/history';
-import { colors, fonts } from '@/theme';
 
 export default function Exercises() {
   const logged = useData((state) => state.logged);
@@ -13,20 +12,34 @@ export default function Exercises() {
     () => [...buildHistory(activeLogged(logged)).values()].sort((a, b) => (b.log.at(-1)?.date ?? '').localeCompare(a.log.at(-1)?.date ?? '')),
     [logged],
   );
+  const list = useShowMore(lifts.length);
   return (
     <Screen padTop={false}>
-      {lifts.length ? null : <Empty title="Nothing yet" body="Log a workout and your lifts show up here." />}
-      {lifts.map((lift) => {
-        const last = lift.log.at(-1);
-        return (
-          <Card key={lift.key} label={`${lift.name} progress`} onPress={() => router.push(`/exercise/${encodeURIComponent(lift.key)}`)}>
-            <Text style={styles.name}>{lift.name}</Text>
-            {last ? <Muted>{summary(last)} · {agoText(last.date)}</Muted> : null}
-          </Card>
-        );
-      })}
+      <Title>Every lift</Title>
+      {lifts.length ? null : (
+        <>
+          <Empty title="Nothing yet" body="Log a workout and your lifts show up here." />
+          <Button title="Go lift something" onPress={() => router.navigate('/')} />
+        </>
+      )}
+      {lifts.length ? (
+        <Card>
+          {lifts.slice(0, list.shown).map((lift, index) => {
+            const last = lift.log.at(-1);
+            return (
+              <LiftRow
+                key={lift.key}
+                name={lift.name}
+                delay={Math.min(index, 8) * 40}
+                detail={last ? `${setsReps(last) || summary(last)} · ${agoText(last.date)}` : undefined}
+                value={last?.weight ? num(last.weight) : null}
+                onPress={() => router.push(`/exercise/${encodeURIComponent(lift.key)}`)}
+              />
+            );
+          })}
+        </Card>
+      ) : null}
+      <ShowMore left={list.left} page={list.page} onPress={list.more} />
     </Screen>
   );
 }
-
-const styles = StyleSheet.create({ name: { fontFamily: fonts.bodyStrong, fontSize: 17, color: colors.ink } });

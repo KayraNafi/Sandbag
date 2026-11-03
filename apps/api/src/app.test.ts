@@ -1,5 +1,6 @@
 import { PGlite } from '@electric-sql/pglite';
-import type { ApiKeyView, AuthResponse, CallView, NotificationView, TrophyView, Entry, InviteSummary, LoggedWorkout, PostView, RankingRow, SyncResponse } from '@sandbag/shared';
+import type { ApiKeyView, AuthResponse, CallView, CrewView, NotificationView, TrophyView, Entry, InviteSummary, LoggedWorkout, PostView, RankingRow, SyncResponse, Me, SignUpCheck } from '@sandbag/shared';
+import { dateIn, mondayOf } from '@sandbag/shared';
 import { eq } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/pglite';
 import { migrate } from 'drizzle-orm/pglite/migrator';
@@ -98,6 +99,31 @@ describe('auth', () => {
 });
 
 describe('invites', () => {
+  it('will not let a joke number answer a call, or be called', async () => {
+    const { founder, friend } = await crew();
+    const post = await call<{ id: string }>('POST', '/posts', founder.token, { id: randomUUID(), kind: 'workout', title: 'Legs', caption: '', showWeights: true, entries: [entry('Squat', 100)], recipientIds: [] });
+    expect((await call('POST', `/posts/${post.body.id}/calls`, friend.token, { exercise: 'Squat', line: 'Sus.' })).status).toBe(201);
+    const session = { id: 'joke', date: new Date().toISOString().slice(0, 10), title: 'Legs', savedWorkoutId: null, updatedAt: Date.now() + 1000, deleted: false, entries: [entry('Squat', 2000)] };
+    await call('POST', '/sync', founder.token, { cursor: 0, loggedWorkouts: [session], savedWorkouts: [] });
+    const calls = await call<CallView[]>('GET', '/calls', friend.token);
+    expect(calls.body[0]?.status).toBe('open');
+    const joke = await call<{ id: string }>('POST', '/posts', founder.token, { id: randomUUID(), kind: 'workout', title: 'Sure', caption: '', showWeights: true, entries: [entry('Bench press', 2000)], recipientIds: [] });
+    expect((await call('POST', `/posts/${joke.body.id}/calls`, friend.token, { exercise: 'Bench press', line: 'No.' })).status).toBe(400);
+  });
+
+  it('lets friends nudge once a day, and nobody else at all', async () => {
+    const { founder, friend } = await crew();
+    const outsider = await register('outsider', friend.user.inviteCode);
+    await call('DELETE', `/friends/${outsider.user.id}`, friend.token);
+    expect((await call('POST', `/friends/${friend.user.id}/nudge`, founder.token)).status).toBe(204);
+    expect((await call('POST', `/friends/${friend.user.id}/nudge`, founder.token)).status).toBe(409);
+    expect((await call('POST', `/friends/${founder.user.id}/nudge`, friend.token)).status).toBe(204);
+    expect((await call('POST', `/friends/${founder.user.id}/nudge`, outsider.token)).status).toBe(404);
+    expect((await call('POST', '/friends/not-a-uuid/nudge', founder.token)).status).toBe(404);
+    const news = await call<NotificationView[]>('GET', '/notifications', friend.token);
+    expect(news.body.filter((item) => item.title === 'founder nudged you')).toHaveLength(1);
+  });
+
   it('counts real joins, befriends both sides, and ignores adding existing users', async () => {
     const { founder, friend } = await crew();
     await register('third', founder.user.inviteCode);
@@ -255,6 +281,455 @@ describe('sandbag calls', () => {
   });
 });
 
+describe('sandbag calls can’t be dodged', () => {
+  async function called(overrides: Record<string, unknown> = {}) {
+    const { founder, friend } = await crew();
+    const created = await post(friend.token, overrides);
+    const result = await call('POST', `/posts/${created.body.id}/calls`, founder.token, { exercise: 'Lat pulldown', line: 'Hm.' });
+    expect(result.status).toBe(201);
+    return { founder, friend, postId: created.body.id };
+  }
+  const later = () => ({ updatedAt: Date.now() + 1000 });
+  const statusOf = async (token: string) => (await call<CallView[]>('GET', '/calls', token)).body[0]?.status;
+  const called2 = async (founder: AuthResponse, friend: AuthResponse) => {
+    const fresh = await post(friend.token, { entries: [entry('Row', 90)] });
+    expect((await call('POST', `/posts/${fresh.body.id}/calls`, founder.token, { exercise: 'Row', line: 'Again.' })).status).toBe(201);
+    return 'Row';
+  };
+  const badge = async (founder: AuthResponse, friend: AuthResponse) =>
+    (await call<RankingRow[]>('GET', '/rankings', founder.token)).body.find((row) => row.user.id === friend.user.id)?.wearingSandbag;
+
+  it('isn’t fooled by a typo or another name for the lift', async () => {
+    const { friend } = await called();
+    await sync(friend.token, 0, [logged('w', [entry('Lat pulldwn', 50)], later())]);
+    expect(await statusOf(friend.token)).toBe('failed');
+  });
+
+  it('can’t be answered with a blank weight or a different setup, and the deadline still comes', async () => {
+    const { founder, friend } = await called();
+    await sync(friend.token, 0, [logged('w1', [entry('Lat pulldown', null)], later()), logged('w2', [entry('Lat pulldown', 200, { perSide: true })], later())]);
+    expect(await statusOf(friend.token)).toBe('open');
+    await db.update(schema.sandbagCalls).set({ deadlineAt: new Date(Date.now() - 1000) });
+    expect(await statusOf(friend.token)).toBe('failed');
+    expect(await badge(founder, friend)).toBe(true);
+    const notes = await call<NotificationView[]>('GET', '/notifications', friend.token);
+    expect(notes.body.map((note) => note.title)).toContain('Sandbag');
+  });
+
+  it('tells only the person called out which session settled it', async () => {
+    const { founder, friend } = await called();
+    await sync(friend.token, 0, [logged('answer', [entry('Lat pulldown', 200)], later())]);
+    const [mine] = (await call<CallView[]>('GET', '/calls', friend.token)).body;
+    const [theirs] = (await call<CallView[]>('GET', '/calls', founder.token)).body;
+    expect(mine?.settledBy).toBe('answer');
+    expect(theirs?.settledBy).toBeNull();
+  });
+
+  it('looks at the heavy entry when a session holds the lift twice', async () => {
+    const { friend } = await called();
+    await sync(friend.token, 0, [logged('w', [entry('Lat pulldown', 20), entry('Lat pulldown', 200)], later())]);
+    expect(await statusOf(friend.token)).toBe('cleared');
+  });
+
+  it('calls the heavy entry when a post holds the lift twice', async () => {
+    const { founder, friend } = await crew();
+    const created = await post(friend.token, { entries: [entry('Lat pulldown', 20), entry('Lat pulldown', 90)] });
+    expect((await call('POST', `/posts/${created.body.id}/calls`, founder.token, { exercise: 'Lat pulldown', line: 'Hm.' })).status).toBe(201);
+    const [theCall] = await db.select().from(schema.sandbagCalls);
+    expect(theCall?.targetWeight).toBe(90);
+  });
+
+  it('reopens when the session that cleared it is deleted or edited down', async () => {
+    const { friend } = await called();
+    const doc = logged('fake', [entry('Lat pulldown', 200)], later());
+    await sync(friend.token, 0, [doc]);
+    expect(await statusOf(friend.token)).toBe('cleared');
+    await sync(friend.token, 0, [{ ...doc, deleted: true, updatedAt: Date.now() + 5000 }]);
+    expect(await statusOf(friend.token)).toBe('open');
+    const again = logged('fake2', [entry('Lat pulldown', 200)], later());
+    await sync(friend.token, 0, [again]);
+    expect(await statusOf(friend.token)).toBe('cleared');
+    await sync(friend.token, 0, [{ ...again, entries: [entry('Lat pulldown', 50)], updatedAt: Date.now() + 9000 }]);
+    expect(await statusOf(friend.token)).toBe('failed');
+  });
+
+  it('gives a failed session one correction, and the caller hears about it', async () => {
+    const { founder, friend } = await called();
+    const doc = logged('weak', [entry('Lat pulldown', 50)], later());
+    await sync(friend.token, 0, [doc]);
+    expect(await statusOf(friend.token)).toBe('failed');
+    expect(await badge(founder, friend)).toBe(true);
+    await sync(friend.token, 0, [{ ...doc, entries: [entry('Lat pulldown', 200)], updatedAt: Date.now() + 5000 }]);
+    expect(await statusOf(friend.token)).toBe('cleared');
+    expect(await badge(founder, friend)).toBe(false);
+    const notes = (await call<NotificationView[]>('GET', '/notifications', founder.token)).body;
+    expect(notes.some((note) => note.title === 'Session edited')).toBe(true);
+    // Back down and up again doesn't get a second one.
+    await sync(friend.token, 0, [{ ...doc, entries: [entry('Lat pulldown', 50)], updatedAt: Date.now() + 9000 }]);
+    expect(await statusOf(friend.token)).toBe('failed');
+    await sync(friend.token, 0, [{ ...doc, entries: [entry('Lat pulldown', 200)], updatedAt: Date.now() + 13_000 }]);
+    expect(await statusOf(friend.token)).toBe('failed');
+  });
+
+  it('won’t let a failed session be fixed a day later, or deleted away', async () => {
+    const { founder, friend } = await called();
+    const doc = logged('weak', [entry('Lat pulldown', 50)], later());
+    await sync(friend.token, 0, [doc]);
+    await sync(friend.token, 0, [{ ...doc, deleted: true, updatedAt: Date.now() + 5000 }]);
+    expect(await statusOf(friend.token)).toBe('failed');
+    expect(await badge(founder, friend)).toBe(true);
+    const other = await called2(founder, friend);
+    const second = logged('weak2', [entry(other, 50)], later());
+    await sync(friend.token, 0, [second]);
+    await db.update(schema.sandbagCalls).set({ resolvedAt: new Date(Date.now() - 25 * 3_600_000) }).where(eq(schema.sandbagCalls.exercise, other));
+    await sync(friend.token, 0, [{ ...second, entries: [entry(other, 200)], updatedAt: Date.now() + 9000 }]);
+    const rows = (await call<CallView[]>('GET', '/calls', friend.token)).body;
+    expect(rows.find((row) => row.exercise === other)?.status).toBe('failed');
+  });
+
+  it('looks through the other sessions when the one that settled a call goes', async () => {
+    const { friend } = await called();
+    const first = logged('first', [entry('Lat pulldown', 200)], later());
+    const second = logged('second', [entry('Lat pulldown', 50)], later());
+    await sync(friend.token, 0, [first]);
+    await sync(friend.token, 0, [second]);
+    expect(await statusOf(friend.token)).toBe('cleared');
+    await sync(friend.token, 0, [{ ...first, deleted: true, updatedAt: Date.now() + 5000 }]);
+    expect(await statusOf(friend.token)).toBe('failed');
+  });
+
+  it('looks at an honest miss again when its session changes', async () => {
+    const { friend } = await called();
+    const doc = logged('close', [entry('Lat pulldown', 84, { rpe: 10 })], later());
+    await sync(friend.token, 0, [doc]);
+    expect(await statusOf(friend.token)).toBe('watching');
+    await sync(friend.token, 0, [{ ...doc, entries: [entry('Lat pulldown', 30, { rpe: 7 })], updatedAt: Date.now() + 5000 }]);
+    expect(await statusOf(friend.token)).toBe('failed');
+  });
+
+  it('won’t let the same post be called twice, even after a verdict', async () => {
+    const { founder, friend, postId } = await called();
+    await sync(friend.token, 0, [logged('w', [entry('Lat pulldown', 200)], later())]);
+    expect((await call('POST', `/posts/${postId}/calls`, founder.token, { exercise: 'Lat pulldown', line: 'Again.' })).status).toBe(409);
+  });
+
+  it('refuses to call an old post, and limits how many you can have open', async () => {
+    const { founder, friend, postId } = await called();
+    await db.update(schema.posts).set({ createdAt: new Date(Date.now() - 15 * 86_400_000) }).where(eq(schema.posts.id, postId));
+    const third = await register('third', friend.user.inviteCode);
+    expect((await call('POST', `/posts/${postId}/calls`, third.token, { exercise: 'Lat pulldown', line: 'Late.' })).status).toBe(400);
+    for (const name of ['Row', 'Curl']) {
+      const fresh = await post(friend.token, { entries: [entry(name, 50)] });
+      expect((await call('POST', `/posts/${fresh.body.id}/calls`, founder.token, { exercise: name, line: 'x' })).status).toBe(201);
+    }
+    const fourth = await post(friend.token, { entries: [entry('Press', 50)] });
+    expect((await call('POST', `/posts/${fourth.body.id}/calls`, founder.token, { exercise: 'Press', line: 'x' })).status).toBe(409);
+  });
+
+  it('forgives a close miss at full effort, until you lift well past it', async () => {
+    const { founder, friend } = await called();
+    await sync(friend.token, 0, [logged('close', [entry('Lat pulldown', 84, { rpe: 10 })], later())]);
+    expect(await statusOf(friend.token)).toBe('watching');
+    expect(await badge(founder, friend)).toBe(false);
+    await sync(friend.token, 0, [logged('past', [entry('Lat pulldown', 95, { rpe: 7 })], { updatedAt: Date.now() + 3000 })]);
+    expect(await statusOf(friend.token)).toBe('confirmed');
+    expect(await badge(founder, friend)).toBe(true);
+    const [row] = (await call<CallView[]>('GET', '/calls', friend.token)).body;
+    expect(row?.points).toBe(-10);
+    expect((await call<CallView[]>('GET', '/calls', founder.token)).body[0]?.points).toBe(10);
+  });
+
+  it('believes a watched miss once the two weeks are up', async () => {
+    const { friend } = await called();
+    await sync(friend.token, 0, [logged('close', [entry('Lat pulldown', 84, { rpe: 10 })], later())]);
+    await db.update(schema.sandbagCalls).set({ deadlineAt: new Date(Date.now() - 1000) });
+    expect(await statusOf(friend.token)).toBe('honest');
+  });
+
+  it('tells the person called what happened, not only the caller', async () => {
+    const { friend } = await called();
+    await sync(friend.token, 0, [logged('w', [entry('Lat pulldown', 50)], later())]);
+    const notes = await call<NotificationView[]>('GET', '/notifications', friend.token);
+    expect(notes.body.map((note) => note.title)).toContain('Sandbag');
+  });
+
+  it('puts a settled call in both scores, and only so far', async () => {
+    const { founder, friend } = await called();
+    await sync(friend.token, 0, [logged('w', [entry('Lat pulldown', 50)], later())]);
+    const rows = (await call<RankingRow[]>('GET', '/rankings', founder.token)).body;
+    expect(rows.find((row) => row.user.id === founder.user.id)?.bonuses?.calls).toBe(5);
+    expect(rows.find((row) => row.user.id === friend.user.id)?.bonuses?.calls).toBe(-5);
+  });
+});
+
+describe('dates can’t be gamed', () => {
+  it('refuses a session dated in the future over sync', async () => {
+    const founder = await register('founder', BOOTSTRAP);
+    expect((await sync(founder.token, 0, [logged('w', [entry('Curl', 10)], { date: '2099-01-01' })])).status).toBe(400);
+  });
+
+  it('gives nothing for a low number backdated through the public API', async () => {
+    const founder = await register('founder', BOOTSTRAP);
+    const { key } = (await call<{ key: string }>('POST', '/me/api-keys', founder.token, { name: 'k', password: 'correct horse battery' })).body as { key: string };
+    await sync(founder.token, 0, [logged('now', [entry('Squat', 100)])]);
+    const old = new Date(Date.now() - 40 * 86_400_000).toISOString().slice(0, 10);
+    await call('POST', '/v1/workouts', key, { workouts: [{ date: old, entries: [{ name: 'Squat', weight: 1, sets: 3, reps: 8 }] }] });
+    const [row] = (await call<RankingRow[]>('GET', '/rankings', founder.token)).body;
+    expect(row?.progress).toBe(0);
+  });
+
+  it('treats moving a session to another day as a new number', async () => {
+    const founder = await register('founder', BOOTSTRAP);
+    const doc = logged('w', [entry('Squat', 100)]);
+    await sync(founder.token, 0, [doc]);
+    const stamp = new Date(Date.now() - 30 * 86_400_000);
+    await db.update(schema.loggedWorkouts).set({ recordedAt: stamp });
+    await sync(founder.token, 0, [{ ...doc, date: '2020-01-01', updatedAt: Date.now() + 5000 }]);
+    const [moved] = await db.select().from(schema.loggedWorkouts);
+    expect(moved?.recordedAt.getTime()).toBeGreaterThan(stamp.getTime());
+  });
+
+  it('keeps how long a session took', async () => {
+    const founder = await register('founder', BOOTSTRAP);
+    await sync(founder.token, 0, [logged('timed', [entry('Squat', 100)], { durationSeconds: 3180 })]);
+    const back = await sync(founder.token, 0);
+    expect(back.body.loggedWorkouts.find((doc) => doc.id === 'timed')?.durationSeconds).toBe(3180);
+    expect((await sync(founder.token, 0, [logged('forever', [entry('Squat', 100)], { durationSeconds: 90_000 })])).status).toBe(400);
+  });
+
+  it('keeps a session’s standing when only its title is edited', async () => {
+    const founder = await register('founder', BOOTSTRAP);
+    const doc = logged('w', [entry('Squat', 100)]);
+    await sync(founder.token, 0, [doc]);
+    const stamp = new Date(Date.now() - 86_400_000);
+    await db.update(schema.loggedWorkouts).set({ recordedAt: stamp });
+    await sync(founder.token, 0, [{ ...doc, title: 'Renamed', updatedAt: Date.now() + 5000 }]);
+    const [row] = await db.select().from(schema.loggedWorkouts);
+    expect(row?.recordedAt.getTime()).toBe(stamp.getTime());
+    await sync(founder.token, 0, [{ ...doc, entries: [entry('Squat', 90)], updatedAt: Date.now() + 9000 }]);
+    const [edited] = await db.select().from(schema.loggedWorkouts);
+    expect(edited?.recordedAt.getTime()).toBeGreaterThan(stamp.getTime());
+  });
+});
+
+describe('crews and seasons', () => {
+  const DAY = 86_400_000;
+  const iso = (time: number) => new Date(time).toISOString().slice(0, 10);
+  const dayOfWeek = (date: string) => (new Date(`${date}T00:00:00Z`).getUTCDay() + 6) % 7;
+  const mondayOf = (date: string) => iso(Date.parse(`${date}T00:00:00Z`) - dayOfWeek(date) * DAY);
+  const thisMonday = mondayOf(iso(Date.now()));
+  const weeksAgo = (weeks: number) => iso(Date.parse(`${thisMonday}T00:00:00Z`) - weeks * 7 * DAY);
+
+  const startCrew = async () => {
+    const { founder, friend } = await crew();
+    const created = await call<CrewView>('POST', '/crew', founder.token, { name: 'Basement' });
+    expect(created.status).toBe(201);
+    expect((await call('POST', '/crew/join', friend.token, { inviteCode: founder.user.inviteCode })).status).toBe(200);
+    return { founder, friend, crewId: created.body.id };
+  };
+  /** Moves the crew back in time, so a week has really finished. */
+  const backdate = async (crewId: string, weeks: number) => {
+    await db.update(schema.crews).set({ seasonStart: weeksAgo(weeks) }).where(eq(schema.crews.id, crewId));
+    await db.update(schema.crewMembers).set({ joinedAt: new Date(`${weeksAgo(weeks + 1)}T00:00:00Z`) });
+  };
+  const trained = async (who: AuthResponse, id: string, week: string, weight = 100) => {
+    await sync(who.token, 0, [logged(id, [entry('Curl', weight)], { date: week })]);
+    await db.update(schema.loggedWorkouts).set({ recordedAt: new Date(`${week}T20:00:00Z`) }).where(eq(schema.loggedWorkouts.id, id));
+  };
+
+  it('starts next Monday, shows everyone a table, and makes the crew friends', async () => {
+    const { founder, friend } = await startCrew();
+    const third = await register('third', friend.user.inviteCode);
+    await call('POST', '/crew/join', third.token, { inviteCode: founder.user.inviteCode });
+    const view = (await call<CrewView>('GET', '/crew', third.token)).body;
+    expect(view.week).toBe(0);
+    expect(view.startsOn > iso(Date.now())).toBe(true);
+    expect(view.members).toHaveLength(3);
+    expect(view.match).toBeNull();
+    expect((await call<unknown[]>('GET', '/friends', third.token)).body).toHaveLength(2);
+    await call('POST', '/crew/leave', third.token);
+    expect((await call('GET', '/crew', third.token)).body).toBeNull();
+  });
+
+  it('allows one crew at a time, and only a real code gets you in', async () => {
+    const { founder, friend } = await startCrew();
+    expect((await call('POST', '/crew', friend.token, { name: 'Other' })).status).toBe(409);
+    expect((await call('POST', '/crew/join', friend.token, { inviteCode: founder.user.inviteCode })).status).toBe(409);
+    const stranger = await register('stranger', founder.user.inviteCode);
+    await call('POST', '/crew/leave', stranger.token);
+    expect((await call('POST', '/crew/join', stranger.token, { inviteCode: 'NOPENOPE' })).status).toBe(404);
+  });
+
+  it('brings a recruit into the inviter’s crew', async () => {
+    const { founder } = await startCrew();
+    const recruit = await register('recruit', founder.user.inviteCode);
+    expect((await call<CrewView>('GET', '/crew', recruit.token)).body.members).toHaveLength(3);
+  });
+
+  it('settles a finished week once, however many people look', async () => {
+    const { founder, friend, crewId } = await startCrew();
+    await backdate(crewId, 1);
+    await trained(founder, 'a1', weeksAgo(1));
+    await trained(founder, 'a2', iso(Date.parse(weeksAgo(1)) + DAY));
+    await trained(friend, 'b1', weeksAgo(1));
+    await Promise.all([call('GET', '/crew', founder.token), call('GET', '/crew', friend.token)]);
+    await call('GET', '/crew', founder.token);
+    const view = (await call<CrewView>('GET', '/crew', founder.token)).body;
+    const me = view.members.find((member) => member.user.id === founder.user.id);
+    const them = view.members.find((member) => member.user.id === friend.user.id);
+    expect(me?.rating).toBe(1016);
+    expect(them?.rating).toBe(984);
+    expect(view.lastMatch).toMatchObject({ ratingChange: 16, note: 'match' });
+    expect(await db.select().from(schema.crewWeeks)).toHaveLength(1);
+    const notes = await call<NotificationView[]>('GET', '/notifications', friend.token);
+    expect(notes.body.filter((note) => note.title === 'Week settled')).toHaveLength(1);
+  });
+
+  it('ignores a session added after the week closed', async () => {
+    const { founder, friend, crewId } = await startCrew();
+    await backdate(crewId, 1);
+    await trained(founder, 'a1', weeksAgo(1));
+    await sync(friend.token, 0, [logged('late', [entry('Curl', 100)], { date: weeksAgo(1) })]);
+    const view = (await call<CrewView>('GET', '/crew', founder.token)).body;
+    expect(view.lastMatch).toMatchObject({ theirScore: expect.any(Number) });
+    expect(view.members.find((member) => member.user.id === founder.user.id)?.rating).toBe(1016);
+  });
+
+  it('costs rating for a week of nothing, whatever your goal', async () => {
+    const { founder, friend, crewId } = await startCrew();
+    await backdate(crewId, 1);
+    await trained(founder, 'a1', weeksAgo(1));
+    const view = (await call<CrewView>('GET', '/crew', founder.token)).body;
+    expect(view.members.find((member) => member.user.id === friend.user.id)?.rating).toBe(1000 - 16 - 15);
+  });
+
+  it('makes leaving during the week a forfeit, so Sunday isn’t a way out', async () => {
+    const { founder, friend, crewId } = await startCrew();
+    await backdate(crewId, 1);
+    await trained(founder, 'a1', weeksAgo(1), 50);
+    await trained(friend, 'b1', weeksAgo(1));
+    await trained(friend, 'b2', iso(Date.parse(weeksAgo(1)) + DAY));
+    await db.update(schema.crewMembers).set({ leftAt: new Date(`${iso(Date.parse(weeksAgo(1)) + 6 * DAY)}T22:00:00Z`) }).where(eq(schema.crewMembers.userId, friend.user.id));
+    const view = (await call<CrewView>('GET', '/crew', founder.token)).body;
+    expect(view.lastMatch).toMatchObject({ ratingChange: 16, note: 'forfeit' });
+    expect(view.lastMatch?.opponent?.id).toBe(friend.user.id);
+    const [left] = await db.select().from(schema.crewMembers).where(eq(schema.crewMembers.userId, friend.user.id));
+    expect(left?.rating).toBe(984);
+    const notes = (await call<NotificationView[]>('GET', '/notifications', friend.token)).body;
+    expect(notes.some((note) => note.body.includes('You walked out'))).toBe(true);
+  });
+
+  it('plays the match if you only left after the week ended', async () => {
+    const { founder, friend, crewId } = await startCrew();
+    await backdate(crewId, 1);
+    await trained(founder, 'a1', weeksAgo(1));
+    await trained(founder, 'a2', iso(Date.parse(weeksAgo(1)) + DAY));
+    await trained(friend, 'b1', weeksAgo(1));
+    await db.update(schema.crewMembers).set({ leftAt: new Date(`${thisMonday}T00:30:00Z`) }).where(eq(schema.crewMembers.userId, friend.user.id));
+    const view = (await call<CrewView>('GET', '/crew', founder.token)).body;
+    expect(view.lastMatch).toMatchObject({ ratingChange: 16, note: 'match' });
+  });
+
+  it('doesn’t blame someone the admin removed', async () => {
+    const { founder, friend, crewId } = await startCrew();
+    await backdate(crewId, 1);
+    await trained(founder, 'a1', weeksAgo(1));
+    const at = new Date(`${weeksAgo(1)}T22:00:00Z`);
+    await db.update(schema.crewMembers).set({ leftAt: at, removedAt: at }).where(eq(schema.crewMembers.userId, friend.user.id));
+    const view = (await call<CrewView>('GET', '/crew', founder.token)).body;
+    expect(view.lastMatch?.note).toBe('bye');
+    const [left] = await db.select().from(schema.crewMembers).where(eq(schema.crewMembers.userId, friend.user.id));
+    expect(left?.rating).toBe(1000);
+  });
+
+  it('keeps your place in the week if you leave and come straight back', async () => {
+    const { founder, friend, crewId } = await startCrew();
+    await backdate(crewId, 0);
+    const [before] = await db.select().from(schema.crewMembers).where(eq(schema.crewMembers.userId, friend.user.id));
+    await call('POST', '/crew/leave', friend.token);
+    await call('POST', '/crew/join', friend.token, { inviteCode: founder.user.inviteCode });
+    const [after] = await db.select().from(schema.crewMembers).where(eq(schema.crewMembers.userId, friend.user.id));
+    expect(after?.joinedAt.getTime()).toBe(before?.joinedAt.getTime());
+    expect((await call<CrewView>('GET', '/crew', founder.token)).body.match?.opponent?.id).toBe(friend.user.id);
+  });
+
+  it('stops you seeing the crew’s posts once you leave, but not your inviter’s', async () => {
+    const { founder, friend } = await startCrew();
+    const third = await register('third', friend.user.inviteCode);
+    const seenBy = async (who: AuthResponse) => (await call<{ id: string }[]>('GET', '/friends', who.token)).body.map((row) => row.id);
+    expect(await seenBy(third)).toContain(founder.user.id);
+    const mine = await post(founder.token);
+    expect((await call('GET', `/posts/${mine.body.id}`, third.token)).status).toBe(200);
+    await call('POST', '/crew/leave', third.token);
+    expect(await seenBy(third)).not.toContain(founder.user.id);
+    expect(await seenBy(third)).toContain(friend.user.id);
+    expect((await call('GET', `/posts/${mine.body.id}`, third.token)).status).toBe(404);
+  });
+
+  it('keeps your rating if you walk out and come back', async () => {
+    const { founder, friend, crewId } = await startCrew();
+    await db.update(schema.crewMembers).set({ rating: 700 }).where(eq(schema.crewMembers.userId, friend.user.id));
+    await call('POST', '/crew/leave', friend.token);
+    expect((await call('GET', '/crew', friend.token)).body).toBeNull();
+    await call('POST', '/crew/join', friend.token, { inviteCode: founder.user.inviteCode });
+    const view = (await call<CrewView>('GET', '/crew', friend.token)).body;
+    expect(view.members.find((member) => member.user.id === friend.user.id)?.rating).toBe(700);
+    expect(view.id).toBe(crewId);
+  });
+
+  it('ends the season after 8 weeks, names a champion and levels everyone', async () => {
+    const { founder, friend, crewId } = await startCrew();
+    await backdate(crewId, 8);
+    await db.update(schema.crewMembers).set({ rating: 1200 }).where(eq(schema.crewMembers.userId, founder.user.id));
+    const view = (await call<CrewView>('GET', '/crew', friend.token)).body;
+    expect(view.season).toBe(2);
+    expect(view.lastChampion?.id).toBe(founder.user.id);
+    expect(view.members.every((member) => member.rating === 1000)).toBe(true);
+    expect(view.week).toBe(1);
+  });
+
+  it('lets only the admin rename or remove, and hands over when the admin leaves', async () => {
+    const { founder, friend } = await startCrew();
+    const third = await register('third', founder.user.inviteCode);
+    expect((await call('PATCH', '/crew', friend.token, { name: 'Mine' })).status).toBe(403);
+    expect((await call('DELETE', `/crew/members/${third.user.id}`, friend.token)).status).toBe(403);
+    expect((await call('PATCH', '/crew', founder.token, { name: 'New name' })).status).toBe(200);
+    expect((await call('DELETE', `/crew/members/${third.user.id}`, founder.token)).status).toBe(204);
+    expect((await call('GET', '/crew', third.token)).body).toBeNull();
+    await call('POST', '/crew/leave', founder.token);
+    expect((await call<CrewView>('GET', '/crew', friend.token)).body.isAdmin).toBe(true);
+  });
+
+  it('needs someone else to approve a pause, which holds the streak and delays calls', async () => {
+    const { founder, friend, crewId } = await startCrew();
+    const created = await post(friend.token);
+    await call('POST', `/posts/${created.body.id}/calls`, founder.token, { exercise: 'Lat pulldown', line: 'Hm.' });
+    const before = (await db.select().from(schema.sandbagCalls))[0]!.deadlineAt.getTime();
+    const asked = await call<{ id: string }>('POST', '/crew/pause', friend.token, { weeks: 2 });
+    expect(asked.status).toBe(201);
+    expect((await call('POST', '/crew/pause', friend.token, { weeks: 1 })).status).toBe(409);
+    expect((await call('POST', `/crew/pauses/${asked.body.id}/approve`, friend.token)).status).toBe(403);
+    const pending = (await call<CrewView>('GET', '/crew', founder.token)).body.pauses[0];
+    expect(pending).toMatchObject({ status: 'pending', canDecide: true });
+    expect((await call('POST', `/crew/pauses/${asked.body.id}/approve`, founder.token)).status).toBe(204);
+    expect((await call('POST', `/crew/pauses/${asked.body.id}/approve`, founder.token)).status).toBe(409);
+    const after = (await db.select().from(schema.sandbagCalls))[0]!.deadlineAt.getTime();
+    expect(after - before).toBe(14 * DAY);
+    await backdate(crewId, 0);
+    expect((await call<CrewView>('GET', '/crew', founder.token)).body.members.find((member) => member.user.id === friend.user.id)?.paused).toBe(true);
+  });
+
+  it('won’t approve a pause for someone in another crew, or for yourself alone', async () => {
+    const { founder, friend } = await startCrew();
+    const asked = await call<{ id: string }>('POST', '/crew/pause', friend.token, { weeks: 1 });
+    const outsider = await register('outsider', founder.user.inviteCode);
+    await call('POST', '/crew/leave', outsider.token);
+    await call('POST', '/crew', outsider.token, { name: 'Other' });
+    expect((await call('POST', `/crew/pauses/${asked.body.id}/approve`, outsider.token)).status).toBe(404);
+    expect((await call('POST', '/crew/pause', outsider.token, { weeks: 1 })).status).toBe(400);
+  });
+});
+
 describe('rankings', () => {
   it('ranks the crew only, by score', async () => {
     const { founder, friend } = await crew();
@@ -291,6 +766,13 @@ describe('rankings', () => {
     await sync(friend.token, 0, [logged('b', [entry('Curl', 10)])]);
     const rows = await call<RankingRow[]>('GET', '/rankings?period=week', founder.token);
     expect(rows.body.map((row) => row.rank)).toEqual([1, 1, 3]);
+  });
+
+  it('accepts an empty workout over sync but does not rank it', async () => {
+    const founder = await register('founder', BOOTSTRAP);
+    expect((await sync(founder.token, 0, [logged('empty', [])])).status).toBe(200);
+    const rows = await call<RankingRow[]>('GET', '/rankings?period=week', founder.token);
+    expect(rows.body[0]?.workouts).toBe(0);
   });
 });
 
@@ -336,7 +818,12 @@ describe('overtaking', () => {
   it('tells a friend you passed them, once a day', async () => {
     const { founder, friend } = await crew();
     await sync(friend.token, 0, [logged('f1', [entry('Curl', 10)])]);
-    await sync(founder.token, 0, [logged('m1', [entry('Curl', 10)]), logged('m2', [entry('Row', 10)])]);
+    // Only one workout a day counts, so passing someone today takes progress on an older number.
+    const twoWeeksAgo = new Date(Date.now() - 14 * 86_400_000).toISOString().slice(0, 10);
+    await sync(founder.token, 0, [logged('m1', [entry('Curl', 10)], { date: twoWeeksAgo })]);
+    // Written at the time, not backdated from today, or it couldn't be a baseline.
+    await db.update(schema.loggedWorkouts).set({ recordedAt: new Date(`${twoWeeksAgo}T12:00:00Z`) }).where(eq(schema.loggedWorkouts.id, 'm1'));
+    await sync(founder.token, 0, [logged('m2', [entry('Curl', 11)])]);
     await sync(founder.token, 0, [logged('m3', [entry('Press', 10)])]);
     const notes = await call<NotificationView[]>('GET', '/notifications', friend.token);
     expect(notes.body.filter((note) => note.title === 'Overtaken')).toHaveLength(1);
@@ -364,9 +851,68 @@ describe('streaks and trophies', () => {
     expect(notes.body.filter((note) => note.title === 'Trophy unlocked')).toHaveLength(1);
   });
 
+  it('starts a new goal next Monday once you’ve logged something', async () => {
+    const founder = await register('founder', BOOTSTRAP);
+    const first = await call<Me>('PATCH', '/me', founder.token, { weeklyTarget: 2 });
+    expect(first.body).toMatchObject({ weeklyTarget: 2, goalHistory: [] });
+    await sync(founder.token, 0, [logged('a', [entry('Curl', 10)])]);
+    const second = await call<Me>('PATCH', '/me', founder.token, { weeklyTarget: 5 });
+    expect(second.body.weeklyTarget).toBe(5);
+    expect(second.body.goalHistory).toHaveLength(2);
+    expect(second.body.goalHistory[0]?.goal).toBe(2);
+    const from = second.body.goalHistory[1]!;
+    expect(from.goal).toBe(5);
+    expect(new Date(`${from.from}T00:00:00Z`).getUTCDay()).toBe(1);
+    expect(from.from > new Date().toISOString().slice(0, 10)).toBe(true);
+    // Changing your mind before Monday replaces it rather than stacking up.
+    const third = await call<Me>('PATCH', '/me', founder.token, { weeklyTarget: 4 });
+    expect(third.body.goalHistory).toEqual([second.body.goalHistory[0], { from: from.from, goal: 4 }]);
+  });
+
+  it('remembers your time zone, and refuses a made-up one', async () => {
+    const founder = await register('founder', BOOTSTRAP);
+    expect((await call<Me>('PATCH', '/me', founder.token, { timeZone: 'Asia/Riyadh' })).body.timeZone).toBe('Asia/Riyadh');
+    expect((await call('PATCH', '/me', founder.token, { timeZone: 'Mars/Olympus' })).status).toBe(400);
+  });
+
+  it('counts a call on the week it landed in where you live', async () => {
+    const { founder, friend } = await crew();
+    const zone = 'Pacific/Kiritimati';
+    await call('PATCH', '/me', friend.token, { timeZone: zone });
+    const created = await post(friend.token, { entries: [entry('Row', 90)] });
+    await call('POST', `/posts/${created.body.id}/calls`, founder.token, { exercise: 'Row', line: 'Hm.' });
+    await sync(friend.token, 0, [logged('w', [entry('Row', 200)], { updatedAt: Date.now() + 1000 })]);
+    // Kiritimati is 14 hours ahead, so its Monday starts on Sunday morning in UTC.
+    const monday = Date.parse(`${mondayOf(dateIn(zone))}T00:00:00Z`) - 14 * 3_600_000;
+    const scoreIf = async (resolvedAt: number) => {
+      await db.update(schema.sandbagCalls).set({ resolvedAt: new Date(resolvedAt) });
+      const rows = (await call<RankingRow[]>('GET', '/rankings?period=week', friend.token)).body;
+      return rows.find((row) => row.user.id === friend.user.id)!.score;
+    };
+    expect(await scoreIf(monday + 1800_000)).toBeGreaterThan(await scoreIf(monday - 1800_000));
+  });
+
+  it('tells you at sign-up what’s wrong before the last step', async () => {
+    const founder = await register('founder', BOOTSTRAP);
+    const check = async (body: object) => (await call<SignUpCheck>('POST', '/auth/check', undefined, body)).body;
+    expect(await check({ inviteCode: founder.user.inviteCode.toLowerCase() })).toEqual({ inviteCode: true });
+    expect(await check({ inviteCode: 'NOPENOPE' })).toEqual({ inviteCode: false });
+    expect(await check({ inviteCode: BOOTSTRAP })).toEqual({ inviteCode: false });
+    expect(await check({ username: 'founder' })).toEqual({ username: false });
+    expect(await check({ username: 'someone_new' })).toEqual({ username: true });
+  });
+
+  it('accepts the first invite code before anyone has signed up', async () => {
+    expect((await call<SignUpCheck>('POST', '/auth/check', undefined, { inviteCode: BOOTSTRAP })).body).toEqual({ inviteCode: true });
+  });
+
   it('puts the streak in the rankings', async () => {
     const founder = await register('founder', BOOTSTRAP);
-    await sync(founder.token, 0, [logged('a', [entry('Curl', 10)]), logged('b', [entry('Curl', 10)]), logged('c', [entry('Curl', 10)])]);
+    await call('PATCH', '/me', founder.token, { weeklyTarget: 2 });
+    const today = new Date().toISOString().slice(0, 10);
+    const tomorrow = new Date(Date.now() + 86_400_000).toISOString().slice(0, 10);
+    const sameWeek = new Date(`${today}T00:00:00Z`).getUTCDay() === 0 ? new Date(Date.now() - 86_400_000).toISOString().slice(0, 10) : tomorrow;
+    await sync(founder.token, 0, [logged('a', [entry('Curl', 10)]), logged('b', [entry('Curl', 10)], { date: sameWeek })]);
     const rows = await call<RankingRow[]>('GET', '/rankings?period=week', founder.token);
     expect(rows.body[0]?.streak).toBe(1);
   });
@@ -451,9 +997,9 @@ describe('public API', () => {
     const created = await post(founder.token);
     await call('POST', `/posts/${created.body.id}/calls`, friend.token, { exercise: 'Lat pulldown', line: 'Hm.' });
     const threeDaysAgo = new Date(Date.now() - 3 * 86_400_000).toISOString().slice(0, 10);
-    await sync(founder.token, 0, [logged('forgotten', [entry('Lat pulldown', 500)], { date: threeDaysAgo })]);
+    await sync(founder.token, 0, [logged('forgotten', [entry('Lat pulldown', 200)], { date: threeDaysAgo })]);
     expect((await call<CallView[]>('GET', '/calls', founder.token)).body[0]?.status).toBe('open');
-    await sync(founder.token, 0, [logged('today', [entry('Lat pulldown', 500)])]);
+    await sync(founder.token, 0, [logged('today', [entry('Lat pulldown', 200)])]);
     expect((await call<CallView[]>('GET', '/calls', founder.token)).body[0]?.status).toBe('cleared');
   });
 

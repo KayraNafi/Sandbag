@@ -17,7 +17,7 @@ import * as schema from './db/schema';
 const BOOTSTRAP = 'founder-invite-code-long-enough';
 const PASSWORD = 'correct horse battery';
 // A weight nothing else in these tests uses, so finding it anywhere means a leak.
-const SECRET_WEIGHT = 777.5;
+const SECRET_WEIGHT = 543.5;
 
 let app: FastifyInstance;
 let db: ReturnType<typeof drizzle<typeof schema>>;
@@ -116,6 +116,7 @@ describe('getting in without an invite', () => {
       ['PUT', `/posts/${id}/respect`], ['DELETE', `/posts/${id}/respect`], ['POST', `/posts/${id}/replies`], ['POST', `/posts/${id}/save`], ['POST', `/posts/${id}/calls`],
       ['GET', '/calls'], ['GET', '/rankings'], ['GET', '/friends'], ['POST', '/friends'], ['DELETE', `/friends/${id}`], ['GET', '/invites'],
       ['GET', '/notifications'], ['POST', '/notifications/read'], ['GET', '/trophies'],
+      ['GET', '/crew'], ['POST', '/crew'], ['PATCH', '/crew'], ['POST', '/crew/join'], ['POST', '/crew/leave'], ['POST', '/crew/pause'], ['DELETE', `/crew/members/${id}`], ['POST', `/crew/pauses/${id}/approve`],
       ['GET', '/v1/me'], ['GET', '/v1/workouts'], ['POST', '/v1/workouts'], ['DELETE', `/v1/workouts/${id}`], ['GET', '/v1/saved-workouts'], ['POST', '/v1/saved-workouts'], ['DELETE', `/v1/saved-workouts/${id}`],
     ];
     const founder = await signUp('founder', BOOTSTRAP);
@@ -262,6 +263,77 @@ describe('seeing or changing someone else’s data', () => {
       expect(raw, url).not.toMatch(/passwordHash|password_hash|\$argon2|tokenHash|sandbag_session/);
     }
     expect((await call('GET', '/me/export', { token: alice.token })).raw).not.toMatch(/passwordHash|\$argon2/);
+  });
+});
+
+describe('per-set weights', () => {
+  it('hides them with the rest of a hidden post', async () => {
+    const { alice, bob } = await world();
+    const hidden = await call<PostView>('POST', '/posts', {
+      token: alice.token,
+      body: { id: randomUUID(), kind: 'workout', title: 'Session', caption: '', showWeights: false, entries: [{ ...entry(), setWeights: [SECRET_WEIGHT, 700], setReps: [8, 8], sets: 2 }], recipientIds: [] },
+    });
+    expect(hidden.status).toBe(201);
+    for (const url of ['/feed', `/posts/${hidden.body.id}`]) {
+      const { raw } = await call('GET', url, { token: bob.token });
+      expect(raw, url).not.toContain(String(SECRET_WEIGHT));
+      expect(raw, url).not.toContain('700');
+    }
+    expect((await call('GET', `/posts/${hidden.body.id}`, { token: alice.token })).raw).toContain('700');
+  });
+});
+
+describe('crews', () => {
+  it('limits guessing a code through joining', async () => {
+    const { mallory } = await world();
+    const statuses = [];
+    for (let i = 0; i < 12; i += 1) statuses.push((await call('POST', '/crew/join', { token: mallory.token, ip: '203.0.113.32', body: { inviteCode: `GUESS${i}` } })).status);
+    expect(statuses.at(-1)).toBe(429);
+  });
+
+  it('shows a stranger nothing of a crew, and never a weight or a code', async () => {
+    const { alice, bob, mallory } = await world();
+    await call('POST', '/crew', { token: alice.token, body: { name: 'Secret club' } });
+    await call('POST', '/crew/join', { token: bob.token, body: { inviteCode: alice.user.inviteCode } });
+    expect((await call('GET', '/crew', { token: mallory.token })).raw).not.toContain('Secret club');
+    await sync(alice.token, [{ ...logged('heavy'), date: new Date().toISOString().slice(0, 10) }]);
+    const { raw } = await call('GET', '/crew', { token: bob.token });
+    expect(raw).toContain('Secret club');
+    expect(raw).not.toContain(String(SECRET_WEIGHT));
+    expect(raw).not.toContain(alice.user.inviteCode);
+    expect(raw).not.toMatch(/passwordHash|password_hash|\$argon2|tokenHash/);
+  });
+
+  it('won’t let a key stand in for a session', async () => {
+    const { alice } = await world();
+    const key = await makeKey(alice.token);
+    expect((await call('POST', '/crew', { token: key, body: { name: 'x' } })).status).toBe(401);
+  });
+
+  it('cuts a removed member off from everyone’s posts', async () => {
+    const { alice, bob, carol } = await world();
+    await call('POST', '/crew', { token: alice.token, body: { name: 'Crew' } });
+    await call('POST', '/crew/join', { token: bob.token, body: { inviteCode: alice.user.inviteCode } });
+    await call('POST', '/crew/join', { token: carol.token, body: { inviteCode: alice.user.inviteCode } });
+    const secret = await post(carol.token);
+    expect((await call('GET', '/feed', { token: bob.token })).raw).toContain(secret.id);
+    expect((await call('DELETE', `/crew/members/${bob.user.id}`, { token: alice.token })).status).toBe(204);
+    expect((await call('GET', '/feed', { token: bob.token })).raw).not.toContain(secret.id);
+    expect((await call('GET', `/posts/${secret.id}`, { token: bob.token })).status).toBe(404);
+    // The ones who stayed still see each other.
+    expect((await call('GET', '/feed', { token: alice.token })).raw).toContain(secret.id);
+  });
+
+  it('removes a deleted account from its crew and leaves the rest standing', async () => {
+    const { alice, bob } = await world();
+    await call('POST', '/crew', { token: alice.token, body: { name: 'Crew' } });
+    await call('POST', '/crew/join', { token: bob.token, body: { inviteCode: alice.user.inviteCode } });
+    expect((await call('DELETE', '/me', { token: alice.token, body: { password: PASSWORD } })).status).toBe(204);
+    const view = await call<{ members: unknown[]; isAdmin: boolean }>('GET', '/crew', { token: bob.token });
+    expect(view.status).toBe(200);
+    expect(view.body.members).toHaveLength(1);
+    expect(view.body.isAdmin).toBe(true);
+    expect(await db.select().from(schema.crewMembers).where(eq(schema.crewMembers.userId, alice.user.id))).toHaveLength(0);
   });
 });
 

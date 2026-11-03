@@ -7,4 +7,5 @@ export const stackOptions = {
   headerTitleStyle: { fontFamily: fonts.label, fontSize: 18 },
   contentStyle: { backgroundColor: colors.bg },
   headerBackButtonDisplayMode: 'minimal',
+  headerBackTitle: 'Back',
 } as const;

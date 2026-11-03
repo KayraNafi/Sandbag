@@ -12,7 +12,7 @@ import { badRequest, HttpError, notFound, unauthorized } from '../errors';
 import { requireUser } from './auth';
 import { notifyOvertaken, weekScores } from './rankings';
 import { awardTrophies } from './trophies';
-import { saveLogged, saveSaved, toLogged, toSaved } from './workouts';
+import { assertNotFuture, saveLogged, saveSaved, toLogged, toSaved } from './workouts';
 
 const KEY_PREFIX = 'sbk_';
 const MAX_KEYS = 10;
@@ -69,11 +69,6 @@ export function apiKeyRoutes(app: FastifyInstance, db: Db): void {
     await db.delete(apiKeys).where(and(eq(apiKeys.id, request.params.id), eq(apiKeys.userId, user.id)));
     reply.code(204);
   });
-}
-
-function assertNotFuture(date: string): void {
-  // A day ahead is someone in a later time zone. More than that is a typo or a cheat.
-  if (Date.parse(`${date}T00:00:00Z`) > Date.now() + 2 * 86_400_000) throw badRequest(`${date} is in the future`);
 }
 
 export function publicApiRoutes(app: FastifyInstance, db: Db): void {

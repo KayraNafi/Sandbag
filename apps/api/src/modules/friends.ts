@@ -1,16 +1,22 @@
-import { addFriendSchema, nextInviteGoal, type InviteSummary, type PublicUser } from '@sandbag/shared';
-import { and, eq, inArray, or, sql } from 'drizzle-orm';
+import { addFriendSchema, nextInviteGoal, voice, type InviteSummary, type PublicUser } from '@sandbag/shared';
+import { and, eq, gte, inArray, or, sql } from 'drizzle-orm';
 import type { FastifyInstance } from 'fastify';
 import type { Db, DbOrTx } from '../db/client';
-import { friendships, users } from '../db/schema';
-import { badRequest, notFound } from '../errors';
+import { friendships, notifications, users } from '../db/schema';
+import { badRequest, conflict, notFound } from '../errors';
 import { newInviteCode, requireUser, toPublic } from './auth';
+import { notify } from './notifications';
 
 const UUID = /^[0-9a-f-]{36}$/i;
 const ordered = (a: string, b: string) => (a < b ? { userA: a, userB: b } : { userA: b, userB: a });
 
 export async function befriend(db: DbOrTx, a: string, b: string): Promise<void> {
   await db.insert(friendships).values(ordered(a, b)).onConflictDoNothing();
+}
+
+export async function unfriend(db: DbOrTx, a: string, b: string): Promise<void> {
+  const pair = ordered(a, b);
+  await db.delete(friendships).where(and(eq(friendships.userA, pair.userA), eq(friendships.userB, pair.userB)));
 }
 
 export async function friendIds(db: DbOrTx, userId: string): Promise<string[]> {
@@ -49,8 +55,21 @@ export function friendRoutes(app: FastifyInstance, db: Db): void {
   app.delete<{ Params: { id: string } }>('/friends/:id', async (request, reply) => {
     const user = await requireUser(db, request);
     if (!UUID.test(request.params.id)) throw notFound();
-    const pair = ordered(user.id, request.params.id);
-    await db.delete(friendships).where(and(eq(friendships.userA, pair.userA), eq(friendships.userB, pair.userB)));
+    await unfriend(db, user.id, request.params.id);
+    reply.code(204);
+  });
+
+  // One a day per pair: a nudge is a joke, and it stops being one the second time.
+  app.post<{ Params: { id: string } }>('/friends/:id/nudge', { config: { rateLimit: { max: 20, timeWindow: '1 minute' } } }, async (request, reply) => {
+    const user = await requireUser(db, request);
+    const friendId = request.params.id;
+    if (!UUID.test(friendId) || !(await areFriends(db, user.id, friendId))) throw notFound();
+    const title = voice.nudgeTitle(user.displayName);
+    const dayAgo = new Date(Date.now() - 86_400_000);
+    const [already] = await db.select({ id: notifications.id }).from(notifications)
+      .where(and(eq(notifications.userId, friendId), eq(notifications.title, title), gte(notifications.createdAt, dayAgo)));
+    if (already) throw conflict('You already nudged them today. Let them live.');
+    await notify(db, friendId, { title, body: voice.nudge(Date.now()), route: 'train' });
     reply.code(204);
   });
 
