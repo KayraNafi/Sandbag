@@ -5,7 +5,7 @@ import { useMemo } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { api } from '@/api/client';
 import { useSession } from '@/auth/session';
-import { Button, Card, Heading, Label, Muted, Row, Screen, Title } from '@/components/ui';
+import { Button, Card, Heading, Label, MoveButtons, Muted, Row, Screen, Title } from '@/components/ui';
 import { moveSaved, startBlank, startFromSaved } from '@/data/actions';
 import { useData } from '@/data/store';
 import { syncNow } from '@/data/sync';
@@ -106,18 +106,14 @@ export default function Train() {
       </Row>
       {rotation.length ? <Muted>They run in this order and loop. Use the arrows to reorder.</Muted> : null}
       {rotation.map((workout, index) => (
-        <Card key={workout.id} label={`Open ${workout.name}`} onPress={() => router.push(`/workout/saved/${workout.id}`)}>
+        <Card key={workout.id}>
+          {/* The arrows sit beside the link, not inside it: a button can't hold other buttons. */}
           <Row>
-            <View style={styles.flex}>
+            <Pressable accessibilityRole="button" accessibilityLabel={`Open ${workout.name}`} onPress={() => router.push(`/workout/saved/${workout.id}`)} style={({ pressed }) => [styles.flex, pressed && styles.pressed]}>
               <Text style={styles.name}>{workout.name}</Text>
               <Muted>{plural(workout.exercises.length, 'exercise')}{workout.savedFrom ? ` · from ${workout.savedFrom}` : ''}</Muted>
-            </View>
-            <Pressable accessibilityRole="button" accessibilityLabel={`Move ${workout.name} up`} disabled={index === 0} onPress={() => moveSaved(rotation, index, -1)} style={[styles.arrow, index === 0 && styles.arrowOff]}>
-              <Text style={styles.arrowText}>↑</Text>
             </Pressable>
-            <Pressable accessibilityRole="button" accessibilityLabel={`Move ${workout.name} down`} disabled={index === rotation.length - 1} onPress={() => moveSaved(rotation, index, 1)} style={[styles.arrow, index === rotation.length - 1 && styles.arrowOff]}>
-              <Text style={styles.arrowText}>↓</Text>
-            </Pressable>
+            <MoveButtons name={workout.name} index={index} total={rotation.length} onMove={(delta) => moveSaved(rotation, index, delta)} />
           </Row>
         </Card>
       ))}
@@ -168,7 +164,5 @@ const styles = StyleSheet.create({
   verdictLost: { color: colors.ink3 },
   link: { fontFamily: fonts.bodyStrong, fontSize: 15, color: colors.volt },
   name: { fontFamily: fonts.bodyStrong, fontSize: 17, color: colors.ink },
-  arrow: { width: 44, height: 44, borderRadius: 10, backgroundColor: colors.surface2, alignItems: 'center', justifyContent: 'center' },
-  arrowOff: { opacity: 0.3 },
-  arrowText: { color: colors.ink, fontSize: 18 },
+  pressed: { opacity: 0.75 },
 });

@@ -50,17 +50,20 @@ export function PostEntries({ post, limit }: { post: PostView; limit?: number })
 
 export function PostCard({ post }: { post: PostView }) {
   return (
-    <Card label={`${post.author.displayName}: ${post.title}`} onPress={() => router.push(`/post/${post.id}`)}>
-      <Row>
-        <Avatar user={post.author} />
-        <View style={styles.flex}>
-          <Text style={styles.author}>{post.author.displayName}</Text>
-          <Muted>{post.kind === 'share' ? 'shared a workout' : 'logged a workout'} · {agoShort(post.createdAt)}</Muted>
-        </View>
-      </Row>
-      <Text style={styles.title}>{post.title.toUpperCase()}</Text>
-      {post.caption ? <Text style={styles.caption}>{post.caption}</Text> : null}
-      <PostEntries post={post} limit={PREVIEW} />
+    <Card>
+      {/* Respect sits below the link, not inside it: a button can't hold other buttons. */}
+      <Pressable accessibilityRole="button" accessibilityLabel={`${post.author.displayName}: ${post.title}`} onPress={() => router.push(`/post/${post.id}`)} style={({ pressed }) => [styles.link, pressed && styles.pressed]}>
+        <Row>
+          <Avatar user={post.author} />
+          <View style={styles.flex}>
+            <Text style={styles.author}>{post.author.displayName}</Text>
+            <Muted>{post.kind === 'share' ? 'shared a workout' : 'logged a workout'} · {agoShort(post.createdAt)}</Muted>
+          </View>
+        </Row>
+        <Text style={styles.title}>{post.title.toUpperCase()}</Text>
+        {post.caption ? <Text style={styles.caption}>{post.caption}</Text> : null}
+        <PostEntries post={post} limit={PREVIEW} />
+      </Pressable>
       <Row style={styles.footer}>
         <PostActions post={post} />
         <Muted>{post.replyCount} {post.replyCount === 1 ? 'reply' : 'replies'}</Muted>
@@ -72,6 +75,8 @@ export function PostCard({ post }: { post: PostView }) {
 
 const styles = StyleSheet.create({
   flex: { flex: 1 },
+  link: { gap: space.sm },
+  pressed: { opacity: 0.75 },
   author: { fontFamily: fonts.bodyStrong, fontSize: 15, color: colors.ink },
   title: { fontFamily: fonts.display, fontSize: 28, lineHeight: 30, color: colors.ink },
   caption: { fontFamily: fonts.body, fontSize: 15, color: colors.ink },
