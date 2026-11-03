@@ -39,7 +39,8 @@ export function PushBridge() {
     // Failing here only costs pushes. The in-app list still works, and the next launch retries.
     void register().catch(() => {});
     const refreshed = Notifications.addPushTokenListener(({ data }) => void api.registerPushToken(String(data)).catch(() => {}));
-    const received = Notifications.addNotificationReceivedListener(() => void queryClient.invalidateQueries({ queryKey: ['notifications'] }));
+    // A push can mean a new call on you, not just a new inbox row.
+    const received = Notifications.addNotificationReceivedListener(() => void queryClient.invalidateQueries({ predicate: ({ queryKey }) => ['notifications', 'calls'].includes(String(queryKey[0])) }));
     return () => {
       refreshed.remove();
       received.remove();
