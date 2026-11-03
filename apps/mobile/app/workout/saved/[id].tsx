@@ -1,7 +1,7 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import { useMemo } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
-import { confirm } from '@/components/confirm';
+import { toast } from '@/components/Toast';
 import { Button, Card, Heading, Muted, Row, Screen, Title } from '@/components/ui';
 import { deleteSaved, startFromSaved } from '@/data/actions';
 import { useData } from '@/data/store';
@@ -45,11 +45,10 @@ export default function SavedWorkoutScreen() {
           <Muted>{agoText(session.date)} · {session.entries.length} exercises</Muted>
         </Card>
       ))}
-      <Button title="Delete workout" variant="danger" onPress={async () => {
-        if (await confirm(`Delete ${workout.name}?`, 'Sessions you’ve already logged stay in your history.', 'Delete')) {
-          deleteSaved(workout);
-          router.back();
-        }
+      <Button title="Delete workout" variant="danger" onPress={() => {
+        const undo = deleteSaved(workout);
+        router.back();
+        toast(`${workout.name} deleted. Your sessions stay.`, undo);
       }} />
     </Screen>
   );

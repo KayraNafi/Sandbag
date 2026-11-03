@@ -69,8 +69,10 @@ export function finishDraft(draft: Draft): LoggedWorkout {
   return doc;
 }
 
-export function deleteLogged(workout: LoggedWorkout): void {
+/** Returns how to take it back. */
+export function deleteLogged(workout: LoggedWorkout): () => void {
   useData.getState().putLogged({ ...workout, deleted: true });
+  return () => useData.getState().putLogged({ ...workout, deleted: false });
 }
 
 export function createSaved(name: string, exercises: SavedExercise[]): SavedWorkout {
@@ -87,8 +89,10 @@ export function updateSaved(workout: SavedWorkout, changes: Partial<Pick<SavedWo
   useData.getState().putSaved(doc);
 }
 
-export function deleteSaved(workout: SavedWorkout): void {
+/** Returns how to take it back. */
+export function deleteSaved(workout: SavedWorkout): () => void {
   useData.getState().putSaved({ ...workout, deleted: true });
+  return () => useData.getState().putSaved({ ...workout, deleted: false });
 }
 
 /** List order is the rotation, so moving one is a swap of two positions. */

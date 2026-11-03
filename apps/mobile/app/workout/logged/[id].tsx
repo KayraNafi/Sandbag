@@ -1,7 +1,7 @@
 import { exerciseKey } from '@sandbag/shared';
 import { router, useLocalSearchParams } from 'expo-router';
 import { StyleSheet, Text, View } from 'react-native';
-import { confirm } from '@/components/confirm';
+import { toast } from '@/components/Toast';
 import { Button, Card, Muted, Row, Screen, Title } from '@/components/ui';
 import { deleteLogged, startEdit, startRepeat } from '@/data/actions';
 import { useData } from '@/data/store';
@@ -34,11 +34,10 @@ export default function LoggedWorkoutScreen() {
         }} /></View>
         <View style={styles.flex}><Button title="Share" variant="ghost" onPress={() => router.push(`/share?loggedId=${workout.id}`)} /></View>
       </Row>
-      <Button title="Delete session" variant="danger" onPress={async () => {
-        if (await confirm('Delete this session?', 'It disappears from your history, charts and rankings.', 'Delete')) {
-          deleteLogged(workout);
-          router.back();
-        }
+      <Button title="Delete session" variant="danger" onPress={() => {
+        const undo = deleteLogged(workout);
+        router.back();
+        toast('Session deleted.', undo);
       }} />
     </Screen>
   );
