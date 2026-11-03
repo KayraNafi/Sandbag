@@ -14,7 +14,7 @@ export function Sparkline({ values }: { values: number[] }) {
   const path = values.map((value, index) => `${index ? 'L' : 'M'}${x(index)} ${y(value)}`).join(' ');
   const last = values.at(-1) ?? low;
   return (
-    <Svg width={WIDTH} height={HEIGHT} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
+    <Svg width={WIDTH} height={HEIGHT}>
       <Path d={path} stroke={colors.chart} strokeWidth={2} fill="none" strokeLinecap="round" strokeLinejoin="round" />
       <Circle cx={x(values.length - 1)} cy={y(last)} r={3.5} fill={colors.chart} />
     </Svg>
