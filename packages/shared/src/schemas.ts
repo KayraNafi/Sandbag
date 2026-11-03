@@ -1,8 +1,12 @@
 import { z } from 'zod';
+import { cleanText } from './text';
 
 const clientId = z.string().regex(/^[A-Za-z0-9_-]{1,64}$/);
 const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
-const exerciseName = z.string().trim().min(1).max(100);
+/** User-written text, cleaned before it's measured, so invisible characters can't pad it out or pass for a name. */
+const cleaned = (max: number, min = 1) => z.string().transform(cleanText).pipe(z.string().min(min).max(max));
+
+const exerciseName = cleaned(100);
 const count = z.number().int().min(0).max(1000).nullable();
 
 export const MAX_VARIED_SETS = 20;
@@ -23,14 +27,14 @@ export const entrySchema = z.object({
   includesEquipment: z.boolean().optional(),
   rpe: z.number().min(0).max(10).nullable(),
   minutes: z.number().min(0).max(1440).nullable(),
-  note: z.string().max(200),
+  note: cleaned(200, 0),
 });
 export type Entry = z.infer<typeof entrySchema>;
 
 export const loggedWorkoutSchema = z.object({
   id: clientId,
   date: isoDate,
-  title: z.string().trim().min(1).max(100),
+  title: cleaned(100),
   savedWorkoutId: clientId.nullable(),
   entries: z.array(entrySchema).max(100),
   updatedAt: z.number().int().nonnegative(),
@@ -48,7 +52,7 @@ export type SavedExercise = z.infer<typeof savedExerciseSchema>;
 
 export const savedWorkoutSchema = z.object({
   id: clientId,
-  name: z.string().trim().min(1).max(40),
+  name: cleaned(40),
   position: z.number().int().min(0).max(10000),
   exercises: z.array(savedExerciseSchema).max(100),
   savedFrom: z.string().max(40).nullable(),
@@ -88,13 +92,13 @@ const password = z.string().min(10, 'Use at least 10 characters').max(200);
 
 export const registerSchema = z.object({
   username,
-  displayName: z.string().trim().min(1).max(40),
+  displayName: cleaned(40),
   password,
   inviteCode: z.string().trim().min(1).max(32),
 });
 export const loginSchema = z.object({ username, password: z.string().min(1).max(200) });
 export const updateProfileSchema = z.object({
-  displayName: z.string().trim().min(1).max(40).optional(),
+  displayName: cleaned(40).optional(),
   weeklyTarget: z.number().int().min(1).max(14).optional(),
   avatar: z.enum(AVATARS).optional(),
 });
@@ -106,15 +110,15 @@ export const createPostSchema = z.object({
   // Chosen by the client, so resending after a lost response can't post twice.
   id: z.string().uuid(),
   kind: z.enum(['workout', 'share']),
-  title: z.string().trim().min(1).max(100),
-  caption: z.string().trim().max(140),
+  title: cleaned(100),
+  caption: cleaned(140, 0),
   showWeights: z.boolean(),
   entries: z.array(entrySchema).min(1).max(100),
   // Empty means the whole crew.
   recipientIds: z.array(z.string().uuid()).max(100),
 });
-export const createReplySchema = z.object({ text: z.string().trim().min(1).max(140) });
-export const createCallSchema = z.object({ exercise: exerciseName, line: z.string().trim().min(1).max(140) });
+export const createReplySchema = z.object({ text: cleaned(140) });
+export const createCallSchema = z.object({ exercise: exerciseName, line: cleaned(140) });
 export const periodSchema = z.enum(['week', 'month']);
 export type Period = z.infer<typeof periodSchema>;
 
@@ -222,21 +226,21 @@ const apiEntrySchema = z.object({
   includesEquipment: z.boolean().optional(),
   rpe: z.number().min(0).max(10).nullable().default(null),
   minutes: z.number().min(0).max(1440).nullable().default(null),
-  note: z.string().max(200).default(''),
+  note: cleaned(200, 0).default(''),
 });
 
 /** The public API's shape: only name and date are required, everything else has a default. */
 export const apiWorkoutSchema = z.object({
   id: clientId.optional(),
   date: isoDate,
-  title: z.string().trim().min(1).max(100).default('Workout'),
+  title: cleaned(100).default('Workout'),
   savedWorkoutId: clientId.nullable().default(null),
   entries: z.array(apiEntrySchema).min(1).max(100),
 });
 export const apiWorkoutsSchema = z.object({ workouts: z.array(apiWorkoutSchema).min(1).max(500) });
 export const apiSavedWorkoutSchema = z.object({
   id: clientId.optional(),
-  name: z.string().trim().min(1).max(40),
+  name: cleaned(40),
   exercises: z.array(z.object({
     name: exerciseName,
     kind: z.enum(['strength', 'time']).default('strength'),
@@ -244,7 +248,7 @@ export const apiSavedWorkoutSchema = z.object({
     reps: optionalCount,
   })).max(100),
 });
-export const createApiKeySchema = z.object({ name: z.string().trim().min(1).max(40), password: z.string().min(1).max(200) });
+export const createApiKeySchema = z.object({ name: cleaned(40), password: z.string().min(1).max(200) });
 
 export const pushTokenSchema = z.object({ token: z.string().min(20).max(4096) });
 
