@@ -34,6 +34,7 @@ async function settleCalls(tx: Tx, user: { id: string; displayName: string }, wo
         .where(eq(users.id, user.id));
     }
     await notify(tx, call.callerId, {
+      kind: status === 'cleared' ? 'answered' : 'confirmed',
       title: status === 'cleared' ? 'Call answered' : 'Sandbag confirmed',
       body: status === 'cleared' ? voice.callCleared(user.displayName, call.exercise) : voice.callFailed(user.displayName, call.exercise),
       route: 'rankings',

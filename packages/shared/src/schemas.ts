@@ -187,8 +187,12 @@ export interface RankingRow {
   wearingSandbag: boolean;
 }
 
+/** What a notification is about, so the app can show it at a glance without reading the title. */
+export type NotificationKind = 'call' | 'answered' | 'confirmed' | 'reply' | 'saved' | 'recruit' | 'overtaken' | 'trophy';
+
 export interface NotificationView {
   id: string;
+  kind: NotificationKind;
   title: string;
   body: string;
   route: string | null;

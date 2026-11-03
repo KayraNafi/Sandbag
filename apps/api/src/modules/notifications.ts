@@ -1,4 +1,4 @@
-import type { NotificationView } from '@sandbag/shared';
+import type { NotificationKind, NotificationView } from '@sandbag/shared';
 import { and, desc, eq, isNull } from 'drizzle-orm';
 import type { FastifyInstance } from 'fastify';
 import type { Db, DbOrTx } from '../db/client';
@@ -6,7 +6,7 @@ import { notifications } from '../db/schema';
 import { requireUser } from './auth';
 import { awardTrophies } from './trophies';
 
-export async function notify(db: DbOrTx, userId: string, message: { title: string; body: string; route: string | null }): Promise<void> {
+export async function notify(db: DbOrTx, userId: string, message: { kind: NotificationKind; title: string; body: string; route: string | null }): Promise<void> {
   await db.insert(notifications).values({ userId, ...message });
 }
 
@@ -20,7 +20,7 @@ export function notificationRoutes(app: FastifyInstance, db: Db): void {
       .orderBy(desc(notifications.createdAt))
       .limit(50);
     return rows.map((row) => ({
-      id: row.id, title: row.title, body: row.body, route: row.route, read: row.readAt !== null, createdAt: row.createdAt.toISOString(),
+      id: row.id, kind: row.kind, title: row.title, body: row.body, route: row.route, read: row.readAt !== null, createdAt: row.createdAt.toISOString(),
     }));
   });
 

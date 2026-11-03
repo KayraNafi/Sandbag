@@ -51,7 +51,7 @@ export async function notifyOvertaken(db: DbOrTx, user: { id: string; displayNam
     if (friendId === user.id || theirsBefore === 0 || mineBefore > theirsBefore || mineAfter <= score) continue;
     const [recent] = await db.select({ id: notifications.id }).from(notifications)
       .where(and(eq(notifications.userId, friendId), eq(notifications.body, body), gt(notifications.createdAt, dayAgo)));
-    if (!recent) await notify(db, friendId, { title: 'Overtaken', body, route: 'rankings' });
+    if (!recent) await notify(db, friendId, { kind: 'overtaken', title: 'Overtaken', body, route: 'rankings' });
   }
 }
 

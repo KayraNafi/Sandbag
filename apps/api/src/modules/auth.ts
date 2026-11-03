@@ -131,7 +131,7 @@ export function authRoutes(app: FastifyInstance, db: Db, config: { bootstrapInvi
       if (!user) throw conflict('That username is taken');
       if (inviter) {
         await befriend(tx, inviter.id, user.id);
-        await notify(tx, inviter.id, { title: 'New recruit', body: voice.friendJoined(user.displayName), route: 'invites' });
+        await notify(tx, inviter.id, { kind: 'recruit', title: 'New recruit', body: voice.friendJoined(user.displayName), route: 'invites' });
       }
       return { token: await createSession(tx, user.id), user: toMe(user) };
     });

@@ -48,6 +48,7 @@ export async function awardTrophies(db: DbOrTx, user: { id: string; weeklyTarget
   const [only] = fresh;
   if (only) {
     await notify(db, user.id, {
+      kind: 'trophy',
       title: 'Trophy unlocked',
       body: fresh.length === 1 ? voice.trophy(only.name) : voice.trophies(fresh.length),
       route: 'trophies',

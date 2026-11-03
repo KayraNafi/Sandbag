@@ -163,7 +163,7 @@ export function feedRoutes(app: FastifyInstance, db: Db): void {
     await db.transaction(async (tx) => {
       await tx.insert(postReplies).values({ postId: post.id, authorId: user.id, text });
       if (post.authorId !== user.id) {
-        await notify(tx, post.authorId, { title: `${user.displayName} replied`, body: text, route: `post/${post.id}` });
+        await notify(tx, post.authorId, { kind: 'reply', title: `${user.displayName} replied`, body: text, route: `post/${post.id}` });
       }
     });
     reply.code(201);
@@ -195,7 +195,7 @@ export function feedRoutes(app: FastifyInstance, db: Db): void {
         deleted: false,
       };
       await tx.insert(savedWorkouts).values({ ...doc, ownerId: user.id, seq: sql<number>`nextval(${syncSeq.seqName})` });
-      await notify(tx, post.authorId, { title: 'Workout saved', body: voice.workoutSaved(user.displayName, post.title), route: `post/${post.id}` });
+      await notify(tx, post.authorId, { kind: 'saved', title: 'Workout saved', body: voice.workoutSaved(user.displayName, post.title), route: `post/${post.id}` });
       return doc;
     });
   });
@@ -219,7 +219,7 @@ export function feedRoutes(app: FastifyInstance, db: Db): void {
       line: input.line,
     }).onConflictDoNothing().returning();
     if (!call) throw conflict('Someone already called this lift. Wait for the verdict.');
-    await notify(db, post.authorId, { title: `${user.displayName} called sandbag`, body: `On your ${entry.name}. “${input.line}”`, route: 'train' });
+    await notify(db, post.authorId, { kind: 'call', title: `${user.displayName} called sandbag`, body: `On your ${entry.name}. “${input.line}”`, route: 'train' });
     reply.code(201);
     return { id: call.id };
   });

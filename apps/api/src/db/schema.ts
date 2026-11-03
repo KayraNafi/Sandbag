@@ -1,4 +1,4 @@
-import type { AvatarId, Entry, SavedExercise } from '@sandbag/shared';
+import type { AvatarId, Entry, NotificationKind, SavedExercise } from '@sandbag/shared';
 import { sql } from 'drizzle-orm';
 import {
   bigint, boolean, check, date, index, integer, jsonb, pgSequence, pgTable, primaryKey, real, text, timestamp, uniqueIndex, uuid,
@@ -125,6 +125,7 @@ export const sandbagCalls = pgTable('sandbag_calls', {
 export const notifications = pgTable('notifications', {
   id: uuid('id').primaryKey().defaultRandom(),
   userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  kind: text('kind').$type<NotificationKind>().notNull(),
   title: text('title').notNull(),
   body: text('body').notNull(),
   route: text('route'),
