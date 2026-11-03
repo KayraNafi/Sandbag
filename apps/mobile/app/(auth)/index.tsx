@@ -1,10 +1,11 @@
 import { loginSchema } from '@sandbag/shared';
 import { Link } from 'expo-router';
 import { useState } from 'react';
-import { StyleSheet, Text } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 import { api, errorText } from '@/api/client';
 import { useSession } from '@/auth/session';
 import { Logo } from '@/components/Logo';
+import { Pop } from '@/components/motion';
 import { Body, Button, Field, Screen, Title } from '@/components/ui';
 import { colors, fonts, space } from '@/theme';
 
@@ -32,9 +33,11 @@ export default function SignIn() {
 
   return (
     <Screen>
-      <Logo size={112} />
-      <Title style={styles.brand}>Sandbag</Title>
-      <Body>Log your lifts. Prove you’re not holding back.</Body>
+      <View style={styles.hero}>
+        <Pop><Logo size={72} /></Pop>
+        <Title style={styles.brand}>Sandbag</Title>
+        <Body>Log your lifts. Prove you’re not holding back.</Body>
+      </View>
       <Field label="Username" autoCapitalize="none" autoCorrect={false} autoComplete="username" textContentType="username" value={username} onChangeText={setUsername} />
       <Field label="Password" secureTextEntry autoComplete="current-password" textContentType="password" value={password} onChangeText={setPassword} onSubmitEditing={submit} error={error} />
       <Button title="Sign in" busy={busy} onPress={submit} />
@@ -45,6 +48,7 @@ export default function SignIn() {
 }
 
 const styles = StyleSheet.create({
-  brand: { fontSize: 64, lineHeight: 66, color: colors.volt },
+  hero: { gap: space.xs, marginBottom: space.md },
+  brand: { fontSize: 72, lineHeight: 76, color: colors.volt },
   link: { fontFamily: fonts.bodyStrong, fontSize: 15, color: colors.volt, paddingVertical: space.sm },
 });
