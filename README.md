@@ -28,6 +28,8 @@ npm run dev:memory -w @sandbag/api   # throwaway API on :8080, prints the first 
 EXPO_PUBLIC_API_URL=http://localhost:8080 npm run web -w @sandbag/mobile
 ```
 
+Set `DATA_DIR` to keep the local data between runs. Stop the API with Ctrl+C, not by killing it, and never open that folder twice: PGlite may refuse to open it again. It's for development only, and real hosting uses PostgreSQL.
+
 The API has no CORS, so for the web, serve the export and the API on one origin as `deploy/Caddyfile` does.
 Phone builds call the API directly.
 
@@ -54,6 +56,10 @@ Optional, for Android. Without them, notifications still appear inside the app.
 2. Put its `google-services.json` in `apps/mobile`. It's ignored by git. Build the app from there.
 3. Generate a service account key in Firebase and save it as `deploy/.firebase/admin.json`, readable by uid 1000 only.
 4. Set `COMPOSE_PROFILES=push` in `deploy/.env` and run `docker compose up -d --build`.
+
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md), and [SECURITY.md](SECURITY.md) for anything sensitive.
 
 ## Licence
 
