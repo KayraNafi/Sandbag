@@ -49,7 +49,8 @@ export const agoLong = (isoTime: string) => {
   return short === 'now' ? 'just now' : `${short} ago`;
 };
 
-const typedNumber = (text: string) => Number(text.trim().replace(',', '.'));
+/** Plain decimals only. `Number` alone would also accept 0x10 and 1e5, which nobody means. */
+const typedNumber = (text: string) => (/^\d*[.,]?\d*$/.test(text.trim()) ? Number(text.trim().replace(',', '.')) : Number.NaN);
 
 /** Blank or unreadable counts as nothing typed. */
 export function parseNumber(text: string, max: number): number | null {
@@ -62,6 +63,36 @@ export const isOverMax = (text: string, max: number) => typedNumber(text) > max;
 
 export const round2 = (value: number) => Math.round(value * 100) / 100;
 export const num = (value: number) => String(round2(value));
+
+/** Display type is about this wide per character. */
+const DISPLAY_CHAR_WIDTH = 0.56;
+
+/** The biggest size up to `base` at which this many characters fit the width on one line. */
+export const fitSize = (base: number, characters: number, width: number) => Math.min(base, Math.floor(width / (Math.max(characters, 1) * DISPLAY_CHAR_WIDTH)));
+
+/** The next stop on a step's grid, so 57.5 with a 5 kg jump goes to 60 or 55, never 62.5. */
+export function nudge(value: number, delta: number): number {
+  const step = Math.abs(delta);
+  const stops = value / step;
+  const near = Math.round(stops);
+  const from = Math.abs(stops - near) < 1e-6 ? near : delta > 0 ? Math.floor(stops) : Math.ceil(stops);
+  return Math.max(0, round2((from + Math.sign(delta)) * step));
+}
+/** 1st, 2nd, 3rd, 4th, and 11th rather than 11st. */
+export function ordinal(place: number): string {
+  const tens = place % 100;
+  if (tens >= 11 && tens <= 13) return `${place}th`;
+  return `${place}${['th', 'st', 'nd', 'rd'][place % 10] ?? 'th'}`;
+}
+
+/** How one amount compares to another, without printing +19,900% for going from nothing much to something. */
+export function changeWords(now: number, before: number): string | null {
+  if (!before) return null;
+  const percent = ((now - before) / before) * 100;
+  if (percent >= 1000) return `×${Math.round(now / before).toLocaleString('en-US')}`;
+  return `${percent >= 0 ? '+' : '−'}${Math.abs(Math.round(percent * 10) / 10)}%`;
+}
+
 export const plural = (count: number, word: string) => `${count} ${word}${count === 1 ? '' : 's'}`;
 export const signed = (value: number) => `${value > 0 ? '+' : ''}${value}%`;
 
@@ -81,9 +112,12 @@ function equipmentText({ includesEquipment }: Pick<Entry, 'includesEquipment'>):
 export function summary(entry: Entry): string {
   if (entry.kind === 'time') return entry.minutes ? `${num(entry.minutes)} min` : 'No time logged';
   const parts: string[] = [];
-  if (entry.weight !== null) parts.push(`${num(entry.weight)} kg${entry.perSide ? ' each side' : ''}${equipmentText(entry)}`);
+  const weights = entry.setWeights?.length ? entry.setWeights.map((weight) => (weight === null ? '–' : num(weight))).join(', ') : entry.weight !== null ? num(entry.weight) : null;
+  if (weights !== null) parts.push(`${weights} kg${entry.perSide ? ' each side' : ''}${equipmentText(entry)}`);
   const sr = setsReps(entry);
   if (sr) parts.push(sr);
   if (entry.rpe) parts.push(`RPE ${num(entry.rpe)}`);
   return parts.join(' · ') || 'No numbers logged';
 }
+
+export const clock = (seconds: number) => `${Math.floor(seconds / 60)}:${String(Math.max(0, seconds) % 60).padStart(2, '0')}`;

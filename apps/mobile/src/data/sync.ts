@@ -33,7 +33,7 @@ export async function syncNow(): Promise<void> {
       const response = await api.sync({ cursor: state.cursor, loggedWorkouts: logged, savedWorkouts: saved });
       if (logged.length || saved.length || response.loggedWorkouts.length || response.savedWorkouts.length) {
         // Rankings and call verdicts are computed from what just arrived.
-        void queryClient.invalidateQueries({ predicate: ({ queryKey }) => ['rankings', 'calls', 'notifications', 'trophies'].includes(String(queryKey[0])) });
+        void queryClient.invalidateQueries({ predicate: ({ queryKey }) => ['rankings', 'calls', 'crew', 'notifications', 'trophies'].includes(String(queryKey[0])) });
       }
       useData.getState().applySync(response, {
         logged: new Map(logged.map((doc) => [doc.id, doc.updatedAt])),
@@ -43,6 +43,7 @@ export async function syncNow(): Promise<void> {
     }
     await flushOutbox();
     useSyncStatus.setState({ online: true });
+    void useSession.getState().refreshMe().catch(() => {});
   } catch (error) {
     // A server refusal is not being offline; either way the data stays queued.
     if (!(error instanceof ApiError)) useSyncStatus.setState({ online: false });

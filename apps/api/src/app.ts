@@ -6,6 +6,7 @@ import { ZodError } from 'zod';
 import type { Db } from './db/client';
 import { HttpError } from './errors';
 import { authRoutes } from './modules/auth';
+import { crewRoutes } from './modules/crews';
 import { feedRoutes } from './modules/feed';
 import { friendRoutes } from './modules/friends';
 import { notificationRoutes } from './modules/notifications';
@@ -71,6 +72,7 @@ export async function buildApp(db: Db, config: AppConfig = {}): Promise<FastifyI
   syncRoutes(app, db);
   feedRoutes(app, db);
   rankingRoutes(app, db);
+  crewRoutes(app, db);
   notificationRoutes(app, db);
   trophyRoutes(app, db);
   pushRoutes(app, db);

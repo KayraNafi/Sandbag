@@ -26,6 +26,8 @@ function niceTicks(min: number, max: number): number[] {
 const toTime = (iso: string) => Date.parse(`${iso}T00:00:00Z`);
 
 /** One series, so the title names it and there's no legend. Tap selects a point. */
+const MAX_DOTS = 30;
+
 export function LineChart({ points, unit }: { points: ChartPoint[]; unit: string }) {
   const [width, setWidth] = useState(0);
   const [selected, setSelected] = useState<number | null>(null);
@@ -79,7 +81,7 @@ export function LineChart({ points, unit }: { points: ChartPoint[]; unit: string
               <SvgText x={width - PAD.right} y={HEIGHT - 6} fill={colors.ink3} fontSize={12} fontFamily={fonts.body} textAnchor="end">{formatDate(last.date)}</SvgText>
             ) : null}
             <Path d={path} stroke={colors.chart} strokeWidth={2} fill="none" strokeLinejoin="round" strokeLinecap="round" />
-            {points.map((point) => (
+            {(points.length > MAX_DOTS ? [] : points).map((point) => (
               <Circle key={point.date} cx={x(point)} cy={y(point.value)} r={4} fill={colors.chart} stroke={colors.surface} strokeWidth={2} />
             ))}
             <Line x1={x(active)} x2={x(active)} y1={PAD.top} y2={PAD.top + plotHeight} stroke={colors.ink3} strokeWidth={1} strokeDasharray="3 3" />

@@ -3,7 +3,7 @@ import type { LoggedWorkout, Me, SavedWorkout, SyncResponse } from '@sandbag/sha
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
 import type { NewPost } from '@/api/client';
-import type { Draft } from '@/domain/history';
+import { withJump, type Draft, type WeightJumps } from '@/domain/history';
 
 /**
  * The phone is the working copy, so logging never waits on the network.
@@ -19,6 +19,15 @@ interface DataState {
   draft: Draft | null;
   ownerId: string | null;
   profile: Me | null;
+  /** The rules have been shown on this phone. */
+  seenWelcome: boolean;
+  setSeenWelcome: () => void;
+  /** What each lift can actually go up by at this person's gym. It belongs to the gym, so it stays on the phone. */
+  weightJumps: WeightJumps;
+  setWeightJump: (name: string, jump: number) => void;
+  /** The Monday of the last week whose recap was opened. */
+  recapSeen: string | null;
+  setRecapSeen: (monday: string) => void;
   setProfile: (profile: Me) => void;
   claim: (ownerId: string) => void;
   putLogged: (doc: Omit<LoggedWorkout, 'updatedAt'>) => void;
@@ -31,7 +40,7 @@ interface DataState {
   reset: () => void;
 }
 
-const empty = { logged: {}, saved: {}, dirtyLogged: [], dirtySaved: [], outbox: [], cursor: 0, draft: null, ownerId: null, profile: null };
+const empty = { logged: {}, saved: {}, dirtyLogged: [], dirtySaved: [], outbox: [], cursor: 0, draft: null, ownerId: null, profile: null, recapSeen: null };
 
 function withDirty(list: string[], id: string): string[] {
   return list.includes(id) ? list : [...list, id];
@@ -57,6 +66,12 @@ function mergeDocs<T extends { id: string; updatedAt: number }>(
 
 export const useData = create<DataState>()(persist((set) => ({
   ...empty,
+  seenWelcome: false,
+  setSeenWelcome: () => set({ seenWelcome: true }),
+  weightJumps: {},
+  setWeightJump: (name, jump) => set((state) => ({ weightJumps: withJump(state.weightJumps, name, jump) })),
+  recapSeen: null,
+  setRecapSeen: (monday) => set({ recapSeen: monday }),
   // An expired session keeps unsynced work for the same person; anyone else starts clean.
   claim: (ownerId) => set((state) => (state.ownerId === ownerId ? state : { ...empty, ownerId })),
   setProfile: (profile) => set({ profile }),

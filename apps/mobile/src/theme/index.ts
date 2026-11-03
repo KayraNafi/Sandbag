@@ -24,5 +24,6 @@ export const fonts = {
   display: 'BarlowCondensed_800ExtraBold_Italic',
 } as const;
 
-export const space = { xs: 4, sm: 8, md: 12, lg: 18, xl: 28 } as const;
+/** A 4-point grid. lg is the screen margin, the 16 Apple uses on phones. */
+export const space = { xs: 4, sm: 8, md: 12, lg: 16, xl: 24, xxl: 32 } as const;
 export const radius = { sm: 10, md: 14, lg: 20 } as const;

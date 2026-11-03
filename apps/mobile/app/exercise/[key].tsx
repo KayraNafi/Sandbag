@@ -1,27 +1,23 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import { useMemo } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
+import { catalogEntry } from '@sandbag/shared';
 import { LineChart } from '@/components/LineChart';
-import { Card, Heading, Label, Muted, Row, Screen, Title } from '@/components/ui';
+import { LoadView } from '@/components/LoadView';
+import { SessionRow } from '@/components/LiftRow';
+import { CountUp } from '@/components/motion';
+import { Card, Heading, Label, Muted, Screen, ShowMore, Title, useShowMore } from '@/components/ui';
 import { useData } from '@/data/store';
-import { formatDate, num, signed, summary } from '@/domain/format';
+import { agoText, num, signed, summary } from '@/domain/format';
 import { activeLogged, buildHistory } from '@/domain/history';
 import { changePercent, dailyPoints } from '@/domain/progress';
 import { colors, fonts } from '@/theme';
-
-function Stat({ label, value }: { label: string; value: string }) {
-  return (
-    <View style={styles.stat}>
-      <Text style={styles.statValue}>{value}</Text>
-      <Label>{label}</Label>
-    </View>
-  );
-}
 
 export default function ExerciseScreen() {
   const { key = '' } = useLocalSearchParams<{ key: string }>();
   const logged = useData((state) => state.logged);
   const history = useMemo(() => buildHistory(activeLogged(logged)).get(decodeURIComponent(key)), [logged, key]);
+  const sessions = useShowMore(history?.log.length ?? 0);
   if (!history) return <Screen padTop={false}><Muted>No sessions of this one yet.</Muted></Screen>;
 
   const timed = history.log.at(-1)?.kind === 'time';
@@ -35,32 +31,40 @@ export default function ExerciseScreen() {
     <Screen padTop={false}>
       <Title>{history.name}</Title>
       {first && latest && best !== null ? (
-        <Row style={styles.stats}>
-          <Stat label="Start" value={num(first.value)} />
-          <Stat label="Now" value={num(latest.value)} />
-          <Stat label="Best" value={num(best)} />
-          <Stat label="Change" value={signed(changePercent(first.value, latest.value))} />
-        </Row>
+        <View style={styles.numbers}>
+          <CountUp value={Math.round(latest.value)} style={styles.big} />
+          <Text style={styles.unit}>{unit.toUpperCase()}</Text>
+          <View style={styles.flex} />
+          <Text style={[styles.change, latest.value > first.value && styles.changeUp]}>{signed(changePercent(first.value, latest.value))}</Text>
+        </View>
       ) : null}
+      {latest && !timed ? <LoadView weight={latest.value} equipment={catalogEntry(history.name)?.equipment} /> : null}
+      {first && best !== null ? <Muted>Started at {num(first.value)} {unit}. Best ever {num(best)} {unit}.</Muted> : null}
       <Card>
         <Label>{timed ? 'Minutes per session' : 'Weight per session, kg'}</Label>
         {points.length ? <LineChart points={points} unit={unit} /> : <Muted>No numbers logged yet, so nothing to chart.</Muted>}
       </Card>
-      <Heading>Log</Heading>
-      {[...history.log].reverse().map((item) => (
-        <Card key={`${item.workoutId}-${item.id}`} label={`Session on ${formatDate(item.date)}`} onPress={() => router.push(`/workout/logged/${item.workoutId}`)}>
-          <Text style={styles.date}>{formatDate(item.date)}</Text>
-          <Muted>{summary(item)}</Muted>
-          {item.note ? <Muted>{item.note}</Muted> : null}
-        </Card>
+      <Heading section>Every session</Heading>
+      {[...history.log].reverse().slice(0, sessions.shown).map((item, index) => (
+        <SessionRow
+          key={`${item.workoutId}-${item.id}`}
+          date={item.date}
+          title={summary(item)}
+          detail={item.note || agoText(item.date)}
+          delay={Math.min(index, 8) * 40}
+          onPress={() => router.push(`/workout/logged/${item.workoutId}`)}
+        />
       ))}
+      <ShowMore left={sessions.left} page={sessions.page} onPress={sessions.more} />
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  stats: { alignItems: 'stretch' },
-  stat: { flex: 1, alignItems: 'center', gap: 2, paddingVertical: 12, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.line, borderRadius: 14 },
-  statValue: { fontFamily: fonts.display, fontSize: 24, color: colors.ink },
-  date: { fontFamily: fonts.bodyStrong, fontSize: 15, color: colors.ink },
+  flex: { flex: 1 },
+  numbers: { flexDirection: 'row', alignItems: 'flex-end', gap: 4 },
+  big: { fontFamily: fonts.display, fontSize: 96, lineHeight: 100, color: colors.ink },
+  unit: { fontFamily: fonts.label, fontSize: 17, letterSpacing: 1, color: colors.ink3, marginBottom: 18 },
+  change: { fontFamily: fonts.display, fontSize: 40, lineHeight: 44, color: colors.ink2, marginBottom: 12 },
+  changeUp: { color: colors.volt },
 });

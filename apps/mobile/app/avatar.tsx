@@ -4,11 +4,13 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { api, errorText } from '@/api/client';
 import { useSession } from '@/auth/session';
 import { AVATAR_IDS, AVATAR_NAMES, AvatarArt } from '@/components/Avatar';
+import { feel, Pop, Stamp } from '@/components/motion';
 import { toast } from '@/components/Toast';
-import { Muted, Screen } from '@/components/ui';
+import { Muted, Screen, Title } from '@/components/ui';
 import { colors, fonts, space } from '@/theme';
 
 const SIZE = 84;
+const BIG = 168;
 
 export default function AvatarPicker() {
   const me = useSession((state) => state.me);
@@ -26,19 +28,31 @@ export default function AvatarPicker() {
 
   return (
     <Screen padTop={false}>
-      <Muted>Your crew sees this next to your name. Any resemblance to you is aspirational.</Muted>
+      <Title>Pick your fighter</Title>
+      {current ? (
+        <View style={styles.hero}>
+          <Pop key={current} style={styles.big}><AvatarArt id={current} size={BIG} /></Pop>
+          <Stamp key={`${current}-name`} delay={120} style={styles.stamp}><Text style={styles.stampText}>{AVATAR_NAMES[current].toUpperCase()}</Text></Stamp>
+        </View>
+      ) : null}
+      <Muted style={styles.middle}>Your crew sees this next to your name. Any resemblance to you is aspirational.</Muted>
       <View style={styles.grid}>
-        {AVATAR_IDS.map((id) => (
+        {AVATAR_IDS.map((id, index) => (
           <Pressable
             key={id}
             accessibilityRole="radio"
             accessibilityState={{ checked: current === id }}
             accessibilityLabel={AVATAR_NAMES[id]}
-            onPress={() => choose.mutate(id)}
-            style={[styles.option, current === id && styles.selected]}
+            onPress={() => {
+              feel.tick();
+              choose.mutate(id);
+            }}
+            style={styles.option}
           >
-            <View style={styles.art}><AvatarArt id={id} size={SIZE} /></View>
-            <Text style={styles.name}>{AVATAR_NAMES[id]}</Text>
+            <Pop delay={Math.min(index, 12) * 30} style={[styles.ring, current === id && styles.ringOn]}>
+              <View style={styles.art}><AvatarArt id={id} size={SIZE} /></View>
+            </Pop>
+            <Text numberOfLines={1} style={[styles.name, current === id && styles.nameOn]}>{AVATAR_NAMES[id]}</Text>
           </Pressable>
         ))}
       </View>
@@ -47,9 +61,16 @@ export default function AvatarPicker() {
 }
 
 const styles = StyleSheet.create({
-  grid: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm, justifyContent: 'center' },
-  option: { width: 108, alignItems: 'center', gap: space.xs, paddingVertical: space.md, paddingHorizontal: space.xs, borderRadius: 16, borderWidth: 2, borderColor: colors.line, backgroundColor: colors.surface },
-  selected: { borderColor: colors.volt },
+  hero: { alignItems: 'center', marginVertical: space.sm },
+  big: { width: BIG, height: BIG, borderRadius: BIG / 2, overflow: 'hidden' },
+  stamp: { marginTop: -18, paddingHorizontal: space.md, paddingVertical: 2, borderWidth: 3, borderColor: colors.volt, borderRadius: 6, backgroundColor: colors.bg },
+  stampText: { fontFamily: fonts.display, fontSize: 28, lineHeight: 30, color: colors.volt },
+  middle: { textAlign: 'center' },
+  grid: { flexDirection: 'row', flexWrap: 'wrap', rowGap: space.md, marginTop: space.sm },
+  option: { width: '33.33%', alignItems: 'center', gap: space.xs },
+  ring: { padding: 3, borderRadius: SIZE, borderWidth: 3, borderColor: 'transparent' },
+  ringOn: { borderColor: colors.volt },
   art: { width: SIZE, height: SIZE, borderRadius: SIZE / 2, overflow: 'hidden' },
-  name: { fontFamily: fonts.bodyStrong, fontSize: 13, color: colors.ink, textAlign: 'center' },
+  name: { fontFamily: fonts.label, fontSize: 15, color: colors.ink3, textAlign: 'center' },
+  nameOn: { color: colors.volt },
 });

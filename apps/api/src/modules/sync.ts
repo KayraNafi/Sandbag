@@ -7,7 +7,7 @@ import { badRequest } from '../errors';
 import { requireUser } from './auth';
 import { notifyOvertaken, weekScores } from './rankings';
 import { awardTrophies } from './trophies';
-import { saveLogged, saveSaved, toLogged, toSaved } from './workouts';
+import { assertNotFuture, saveLogged, saveSaved, toLogged, toSaved } from './workouts';
 
 const MAX_CLOCK_SKEW_MS = 86_400_000;
 
@@ -24,6 +24,9 @@ export function syncRoutes(app: FastifyInstance, db: Db): void {
     for (const doc of [...input.loggedWorkouts, ...input.savedWorkouts]) {
       if (doc.updatedAt > latest) throw badRequest('Your phone’s clock looks wrong. Fix the date and try again.');
     }
+
+    // Left alone, tomorrow's sessions could be logged today and count when the day comes.
+    for (const doc of input.loggedWorkouts) if (!doc.deleted) assertNotFuture(doc.date);
 
     return db.transaction(async (rawTx) => {
       const tx = rawTx as unknown as Tx;

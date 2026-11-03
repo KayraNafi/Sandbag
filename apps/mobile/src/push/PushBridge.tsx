@@ -7,7 +7,7 @@ import { queryClient } from '@/api/queryClient';
 import { useSession } from '@/auth/session';
 import { hrefFor } from '@/domain/routes';
 
-if (Platform.OS === 'android') {
+if (Platform.OS !== 'web') {
   // Otherwise a notification that arrives with the app open is silently dropped.
   Notifications.setNotificationHandler({
     handleNotification: async () => ({ shouldShowBanner: true, shouldShowList: true, shouldPlaySound: true, shouldSetBadge: false }),

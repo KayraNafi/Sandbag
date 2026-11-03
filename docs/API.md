@@ -19,6 +19,8 @@ Limits: 300 requests a minute per client, and 60 a minute for `POST /v1/workouts
 
 Errors look like `{ "error": "workouts.0.entries.0.rpe: Too big..." }`, naming the field at fault.
 
+Names and text are cleaned as they arrive: put on one line, with invisible characters removed. Text with nothing visible in it is refused. A set beyond the all-time records, or with zero reps, is stored as sent but doesn't count towards scores, bests or calls.
+
 ## Workouts
 
 ### `POST /v1/workouts`
@@ -53,10 +55,11 @@ Only `date` and each entry's `name` are required.
 
 | Entry field | Default | Notes |
 |---|---|---|
-| `name` | required | Matched without regard to case, so `cable CURLS` and `Cable curls` share a history. |
+| `name` | required | Matched without regard to case or small typos, and common names are recognised, so `flat bench` and `Bench press` share a history. |
 | `kind` | `strength` | Or `time`. |
 | `sets`, `reps` | `null` | |
 | `setReps` | not set | Reps for each set when they differ, like `[8, 8, 6]`. Up to 20, one per set. |
+| `setWeights` | not set | Weight for each set when they differ, like `[60, 70, 80]`. `weight` should be the heaviest. |
 | `weight` | `null` | Kilograms. |
 | `perSide` | `false` | The weight is per side. |
 | `includesEquipment` | not set | `true` if the weight counts the bar or machine, `false` if it doesn't. Leave it out to say neither. |
@@ -66,8 +69,8 @@ Only `date` and each entry's `name` are required.
 
 Returns `201` with `{ "created": 1, "updated": 0, "ids": ["log-2026-01-15"] }`. The app picks it up on its next sync.
 
-Imports count towards your rankings, streaks and trophies by their date, as if you'd logged them then. A backdated workout
-can't answer a sandbag call made after it.
+Imports count towards your history, streaks and trophies by their date. A backdated workout can't answer a sandbag call made
+after it, and one written more than 8 days after its date can't be the number your progress is measured against.
 
 ### `GET /v1/workouts?after=0&limit=100`
 
@@ -87,4 +90,4 @@ Returns `204`, or `404` if it doesn't exist.
 
 ## You
 
-`GET /v1/me` returns your id, username, display name and weekly target.
+`GET /v1/me` returns your id, username, display name and weekly target. A changed target starts the following Monday.

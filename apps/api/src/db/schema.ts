@@ -1,7 +1,7 @@
-import type { AvatarId, Entry, SavedExercise } from '@sandbag/shared';
+import type { AvatarId, CallStatus, Entry, SavedExercise, GoalChange } from '@sandbag/shared';
 import { sql } from 'drizzle-orm';
 import {
-  bigint, boolean, check, date, index, integer, jsonb, pgSequence, pgTable, primaryKey, real, text, timestamp, uniqueIndex, uuid,
+  bigint, boolean, check, date, doublePrecision, index, integer, jsonb, pgSequence, pgTable, primaryKey, real, text, timestamp, uniqueIndex, uuid,
 } from 'drizzle-orm/pg-core';
 
 const createdAt = () => timestamp('created_at', { withTimezone: true }).notNull().defaultNow();
@@ -14,6 +14,8 @@ export const users = pgTable('users', {
   avatar: text('avatar').$type<AvatarId>(),
   passwordHash: text('password_hash').notNull(),
   weeklyTarget: integer('weekly_target').notNull().default(3),
+  goalHistory: jsonb('goal_history').$type<GoalChange[]>().notNull().default([]),
+  timeZone: text('time_zone'),
   inviteCode: text('invite_code').notNull().unique(),
   // The invite count is derived from this column, so only real joins count.
   invitedBy: uuid('invited_by').references((): any => users.id, { onDelete: 'set null' }),
@@ -50,7 +52,10 @@ export const loggedWorkouts = pgTable('logged_workouts', {
   entries: jsonb('entries').$type<Entry[]>().notNull(),
   updatedAt: bigint('updated_at', { mode: 'number' }).notNull(),
   deleted: boolean('deleted').notNull().default(false),
+  durationSeconds: integer('duration_seconds'),
   seq: bigint('seq', { mode: 'number' }).notNull(),
+  // The server's clock, unlike updatedAt: when these numbers last changed. Decides what can be a baseline.
+  recordedAt: timestamp('recorded_at', { withTimezone: true }).notNull().defaultNow(),
 }, (t) => [
   primaryKey({ columns: [t.ownerId, t.id] }),
   index('logged_workouts_seq').on(t.ownerId, t.seq),
@@ -111,15 +116,27 @@ export const sandbagCalls = pgTable('sandbag_calls', {
   exercise: text('exercise').notNull(),
   exerciseKey: text('exercise_key').notNull(),
   targetWeight: real('target_weight').notNull(),
+  targetReps: integer('target_reps'),
+  // Estimated strength to beat. Null setup means an older call, which any setup can answer.
+  // Double, because a verdict compares this with the same sum done again, and a rounded copy wouldn't be equal.
+  targetMax: doublePrecision('target_max').notNull(),
+  targetSetup: text('target_setup'),
   weightsHidden: boolean('weights_hidden').notNull(),
   line: text('line').notNull(),
-  status: text('status', { enum: ['open', 'cleared', 'failed'] }).notNull().default('open'),
+  status: text('status').$type<CallStatus>().notNull().default('open'),
   createdAt: createdAt(),
+  // An open call fails here. A watched miss is believed here.
+  deadlineAt: timestamp('deadline_at', { withTimezone: true }).notNull(),
   resolvedAt: timestamp('resolved_at', { withTimezone: true }),
+  // The workout that cleared it, so deleting that workout reopens the call.
+  settledBy: text('settled_by'),
+  /** A failed verdict gets one correction, for a typo. */
+  correctedAt: timestamp('corrected_at', { withTimezone: true }),
 }, (t) => [
   // One open call per lift: a pile-on would make the rule ambiguous.
   uniqueIndex('sandbag_calls_one_open').on(t.targetId, t.exerciseKey).where(sql`${t.status} = 'open'`),
   index('sandbag_calls_caller').on(t.callerId),
+  index('sandbag_calls_post').on(t.postId),
 ]);
 
 export const notifications = pgTable('notifications', {
@@ -161,3 +178,60 @@ export const userTrophies = pgTable('user_trophies', {
   trophyId: text('trophy_id').notNull(),
   earnedAt: createdAt(),
 }, (t) => [primaryKey({ columns: [t.userId, t.trophyId] })]);
+
+export const crews = pgTable('crews', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  name: text('name').notNull(),
+  // Null only once the admin has deleted their account. The longest-standing member stands in.
+  adminId: uuid('admin_id').references(() => users.id, { onDelete: 'set null' }),
+  season: integer('season').notNull().default(1),
+  seasonStart: date('season_start', { mode: 'string' }).notNull(),
+  lastChampionId: uuid('last_champion_id').references(() => users.id, { onDelete: 'set null' }),
+  createdAt: createdAt(),
+});
+
+// Leaving keeps the row, so walking out and back in can't wipe a bad rating.
+export const crewMembers = pgTable('crew_members', {
+  crewId: uuid('crew_id').notNull().references(() => crews.id, { onDelete: 'cascade' }),
+  userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  rating: integer('rating').notNull().default(1000),
+  trend: integer('trend').notNull().default(0),
+  joinedAt: timestamp('joined_at', { withTimezone: true }).notNull().defaultNow(),
+  leftAt: timestamp('left_at', { withTimezone: true }),
+  /** Removed by the admin, which isn't walking out on a match. */
+  removedAt: timestamp('removed_at', { withTimezone: true }),
+}, (t) => [
+  primaryKey({ columns: [t.crewId, t.userId] }),
+  // One crew at a time.
+  uniqueIndex('crew_members_one_active').on(t.userId).where(sql`${t.leftAt} is null`),
+]);
+
+export interface CrewWeekResult {
+  userId: string;
+  opponentId: string | null;
+  score: number;
+  opponentScore: number;
+  change: number;
+  note: 'match' | 'bye' | 'paused' | 'idle' | 'forfeit';
+}
+
+// Each week is settled once, so a late edit can't change a result anyone has already seen.
+export const crewWeeks = pgTable('crew_weeks', {
+  crewId: uuid('crew_id').notNull().references(() => crews.id, { onDelete: 'cascade' }),
+  week: date('week', { mode: 'string' }).notNull(),
+  season: integer('season').notNull(),
+  results: jsonb('results').$type<CrewWeekResult[]>().notNull(),
+  createdAt: createdAt(),
+}, (t) => [primaryKey({ columns: [t.crewId, t.week] })]);
+
+export const streakPauses = pgTable('streak_pauses', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  crewId: uuid('crew_id').notNull().references(() => crews.id, { onDelete: 'cascade' }),
+  weeks: integer('weeks').notNull(),
+  // Set when it's approved, never earlier, so a week already missed can't be paused afterwards.
+  fromWeek: date('from_week', { mode: 'string' }),
+  status: text('status', { enum: ['pending', 'approved', 'declined'] }).notNull().default('pending'),
+  decidedBy: uuid('decided_by').references(() => users.id, { onDelete: 'set null' }),
+  createdAt: createdAt(),
+}, (t) => [index('streak_pauses_user').on(t.userId), index('streak_pauses_crew').on(t.crewId)]);

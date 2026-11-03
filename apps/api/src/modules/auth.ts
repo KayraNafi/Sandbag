@@ -1,11 +1,13 @@
 import { createHash, randomBytes } from 'node:crypto';
 import { hash, verify } from '@node-rs/argon2';
-import { changePasswordSchema, defaultAvatar, deleteAccountSchema, loginSchema, registerSchema, updateProfileSchema, voice, type AuthResponse, type AvatarId, type DataExport, type Me, type PublicUser } from '@sandbag/shared';
+import { addDays, changePasswordSchema, checkSignUpSchema, dateIn, defaultAvatar, mondayOf, deleteAccountSchema, loginSchema, registerSchema, updateProfileSchema, voice, type AuthResponse, type GoalChange, type SignUpCheck, type AvatarId, type DataExport, type Me, type PublicUser } from '@sandbag/shared';
 import { and, eq, lt, ne, sql } from 'drizzle-orm';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { lockUser, type Db, type DbOrTx, type Tx } from '../db/client';
 import { apiKeys, authSessions, loggedWorkouts, posts, savedWorkouts, users } from '../db/schema';
 import { conflict, HttpError, unauthorized } from '../errors';
+import { joinInvitersCrew } from './crews';
+import { pausedWeeksFor } from './rankings';
 import { befriend } from './friends';
 import { notify } from './notifications';
 
@@ -50,8 +52,25 @@ export function toPublic(user: { id: string; username: string; displayName: stri
   return { id: user.id, username: user.username, displayName: user.displayName, avatar: user.avatar ?? defaultAvatar(user.id) };
 }
 
-function toMe(user: typeof users.$inferSelect): Me {
-  return { ...toPublic(user), weeklyTarget: user.weeklyTarget, inviteCode: user.inviteCode };
+function toMe(user: typeof users.$inferSelect, pausedWeeks: string[] = []): Me {
+  return { ...toPublic(user), weeklyTarget: user.weeklyTarget, goalHistory: user.goalHistory, pausedWeeks, timeZone: user.timeZone, inviteCode: user.inviteCode };
+}
+
+/** Far enough back to cover everything logged under the first goal. */
+const SINCE_THE_START = '2000-01-03';
+
+/**
+ * A new goal starts next Monday: the week under way keeps the goal it began with, so it
+ * can't be lowered on a Sunday to rescue a streak, and the weeks behind you stay as they
+ * were. With nothing logged yet there's nothing to protect, so it starts straight away.
+ */
+async function goalChange(db: Db, user: typeof users.$inferSelect, goal: number): Promise<GoalChange[]> {
+  if (goal === user.weeklyTarget) return user.goalHistory;
+  const [logged] = await db.select({ id: loggedWorkouts.id }).from(loggedWorkouts).where(eq(loggedWorkouts.ownerId, user.id)).limit(1);
+  if (!logged) return [];
+  const from = addDays(mondayOf(dateIn(user.timeZone)), 7);
+  const history = user.goalHistory.length ? user.goalHistory : [{ from: SINCE_THE_START, goal: user.weeklyTarget }];
+  return [...history.filter((change) => change.from < from), { from, goal }];
 }
 
 async function createSession(db: DbOrTx, userId: string): Promise<string> {
@@ -107,6 +126,22 @@ export async function requireUser(db: Db, request: FastifyRequest): Promise<type
 export function authRoutes(app: FastifyInstance, db: Db, config: { bootstrapInviteCode?: string }): void {
   const strict = { config: { rateLimit: { max: 10, timeWindow: '1 minute' } } };
 
+  // Asked at each step of signing up. Limited like the rest, because it answers the same questions register does.
+  app.post('/auth/check', strict, async (request): Promise<SignUpCheck> => {
+    const input = checkSignUpSchema.parse(request.body);
+    const result: SignUpCheck = {};
+    if (input.inviteCode !== undefined) {
+      const [inviter] = await db.select({ id: users.id }).from(users).where(eq(users.inviteCode, input.inviteCode.toUpperCase()));
+      const [{ total } = { total: 0 }] = inviter ? [] : await db.select({ total: sql<number>`count(*)::int` }).from(users);
+      result.inviteCode = Boolean(inviter) || (total === 0 && Boolean(config.bootstrapInviteCode) && input.inviteCode.toUpperCase() === config.bootstrapInviteCode?.toUpperCase());
+    }
+    if (input.username !== undefined) {
+      const [taken] = await db.select({ id: users.id }).from(users).where(eq(users.username, input.username));
+      result.username = !taken;
+    }
+    return result;
+  });
+
   app.post('/auth/register', strict, async (request, reply): Promise<AuthResponse> => {
     const input = registerSchema.parse(request.body);
     const passwordHash = await hash(input.password);
@@ -131,6 +166,7 @@ export function authRoutes(app: FastifyInstance, db: Db, config: { bootstrapInvi
       if (!user) throw conflict('That username is taken');
       if (inviter) {
         await befriend(tx, inviter.id, user.id);
+        await joinInvitersCrew(tx, inviter.id, user);
         await notify(tx, inviter.id, { title: 'New recruit', body: voice.friendJoined(user.displayName), route: 'invites' });
       }
       return { token: await createSession(tx, user.id), user: toMe(user) };
@@ -159,14 +195,17 @@ export function authRoutes(app: FastifyInstance, db: Db, config: { bootstrapInvi
     reply.code(204);
   });
 
-  app.get('/me', async (request): Promise<Me> => toMe(await requireUser(db, request)));
+  const meView = async (user: typeof users.$inferSelect): Promise<Me> => toMe(user, (await pausedWeeksFor(db, [user.id])).get(user.id) ?? []);
+
+  app.get('/me', async (request): Promise<Me> => meView(await requireUser(db, request)));
 
   app.patch('/me', async (request): Promise<Me> => {
     const user = await requireUser(db, request);
     const input = updateProfileSchema.parse(request.body);
-    const [updated] = await db.update(users).set(input).where(eq(users.id, user.id)).returning();
+    const goalHistory = input.weeklyTarget === undefined ? user.goalHistory : await goalChange(db, user, input.weeklyTarget);
+    const [updated] = await db.update(users).set({ ...input, goalHistory }).where(eq(users.id, user.id)).returning();
     if (!updated) throw unauthorized();
-    return toMe(updated);
+    return meView(updated);
   });
 
   // Signs out every other device and revokes API keys, in case the old password is why this is happening.

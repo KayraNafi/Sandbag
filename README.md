@@ -4,9 +4,18 @@ Log your lifts, share them with friends, and find out who's been holding back.
 
 *Sandbagging: looking weaker than you are, on purpose.* Friends can call you on a lift, your next session of it
 settles the call, and if you don't beat the number you wear the badge in the rankings for a week. Rankings use
-progress and consistency against your own numbers, so heavier friends get no head start.
+progress against your own numbers and days trained, so heavier friends get no head start. Crews play eight-week
+seasons of weekly head-to-heads, and the rules are all in `packages/shared/src/scoring.ts`.
 
 Sandbag is invite-only and self-hosted: you run the server, and your crew's data stays on it.
+
+## What's in it
+
+- **Logging, one set at a time.** The plates to load, a number to beat, a rest timer and a warm-up ladder, with your numbers already filled in. It works offline and syncs later.
+- **A finish worth having.** Each session ends in a story: what you moved, medals for new bests, what you hit, the streak, any verdict on a call, and a card to share.
+- **Calls.** Friends call you on a lift. Beat it next session or wear the sandbag for a week. False accusations cost the caller.
+- **Crews and seasons.** Weekly head-to-heads, rankings, nudges, trophies and a recap of last week.
+- **Numbers we believe.** A set beyond the all-time records, or with zero reps, is kept in your log but doesn't count. It can't score, set a best, answer a call, or become next session's starting point. The app will tell you what it thinks of it.
 
 ## Layout
 
@@ -27,6 +36,8 @@ npm test && npm run typecheck
 npm run dev:memory -w @sandbag/api   # throwaway API on :8080, prints the first invite code
 EXPO_PUBLIC_API_URL=http://localhost:8080 npm run web -w @sandbag/mobile
 ```
+
+Set `DATA_DIR` to keep the local data between runs. Stop the API with Ctrl+C, not by killing it, and never open that folder twice: PGlite may refuse to open it again. It's for development only, and real hosting uses PostgreSQL.
 
 The API has no CORS, so for the web, serve the export and the API on one origin as `deploy/Caddyfile` does.
 Phone builds call the API directly.
@@ -54,6 +65,10 @@ Optional, for Android. Without them, notifications still appear inside the app.
 2. Put its `google-services.json` in `apps/mobile`. It's ignored by git. Build the app from there.
 3. Generate a service account key in Firebase and save it as `deploy/.firebase/admin.json`, readable by uid 1000 only.
 4. Set `COMPOSE_PROFILES=push` in `deploy/.env` and run `docker compose up -d --build`.
+
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md), and [SECURITY.md](SECURITY.md) for anything sensitive.
 
 ## Licence
 
