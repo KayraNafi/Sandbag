@@ -15,7 +15,8 @@ export function Logo({ size = 96 }: { size?: number }) {
           <Polygon points="622,437 698,437 638,647 562,647" fill="#000" />
         </Mask>
       </Defs>
-      <G rotation={-9} originX={512} originY={512}>
+      {/* Rotated about its centre in SVG's own terms: an origin prop becomes an invalid DOM attribute on the web. */}
+      <G transform="rotate(-9 512 512)">
         <Path d="M300 372C300 262 440 262 440 372" fill="none" stroke={colors.volt} strokeWidth={40} />
         <Path d="M584 372C584 262 724 262 724 372" fill="none" stroke={colors.volt} strokeWidth={40} />
         <Rect x="110" y="356" width="804" height="372" rx="120" fill={colors.volt} mask="url(#cuts)" />
