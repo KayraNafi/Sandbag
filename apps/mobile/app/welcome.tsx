@@ -1,3 +1,4 @@
+import type { Muscle } from '@sandbag/shared';
 import { router } from 'expo-router';
 import { useRef, useState, type ComponentRef } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View, type NativeScrollEvent, type NativeSyntheticEvent } from 'react-native';
@@ -58,10 +59,13 @@ function CallPicture() {
   );
 }
 
+/** What a real Upper day works, so the picture looks like a session and not a random sample. */
+const UPPER_DAY: Partial<Record<Muscle, number>> = { chest: 1, back: 1, shoulders: 0.7, biceps: 0.5, triceps: 0.5 };
+
 const CARDS = [
   { title: 'Log it', body: 'Pick a workout. Your numbers are already there. Change what you beat and tick each lift off.', picture: <LogPicture /> },
   { title: 'Call it', body: 'See a lift that looks too easy? Call sandbag. If their next session of it doesn’t beat the number, they wear the badge.', picture: <CallPicture /> },
-  { title: 'Win it', body: 'Beat your own numbers and show up. Rankings measure you against yourself, so heavier friends get no head start.', picture: <BodyMap size={110} levels={{ chest: 1, back: 0.7, quads: 1, shoulders: 0.5, glutes: 0.8 }} /> },
+  { title: 'Win it', body: 'Beat your own numbers and show up. Rankings measure you against yourself, so heavier friends get no head start.', picture: <BodyMap size={110} levels={UPPER_DAY} /> },
 ];
 
 /** Three cards straight after sign-up, then lifting. The detail waits until the first time it matters. */

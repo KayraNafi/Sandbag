@@ -1,8 +1,8 @@
 import { MUSCLES, type Muscle } from '@sandbag/shared';
 import { useEffect, useId, useRef } from 'react';
-import { Animated, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { Animated, StyleSheet, useWindowDimensions, View } from 'react-native';
 import Svg, { Defs, G, Path, RadialGradient, Stop } from 'react-native-svg';
-import { colors, fonts, space } from '@/theme';
+import { space } from '@/theme';
 import { EASE_OUT, NATIVE, prefersLessMotion } from './motion';
 
 const MUSCLE_NAMES: Record<Muscle, string> = {
@@ -242,11 +242,9 @@ export function BodyMap({ levels = {}, size = 96 }: { levels?: Partial<Record<Mu
     <View style={styles.host} accessible accessibilityLabel={worked.length ? `Worked: ${worked.join(', ')}` : 'Body diagram'}>
       <View style={styles.side}>
         <Figure shapes={FRONT} lines={LINES_FRONT} shine={SHINE_FRONT} foot={FOOT_FRONT} level={level} size={fitted} delay={120} />
-        {fitted > 60 ? <Text style={styles.caption}>FRONT</Text> : null}
       </View>
       <View style={styles.side}>
         <Figure shapes={BACK} lines={LINES_BACK} shine={SHINE_BACK} foot={FOOT_BACK} level={level} size={fitted} delay={240} />
-        {fitted > 60 ? <Text style={styles.caption}>BACK</Text> : null}
       </View>
     </View>
   );
@@ -254,6 +252,5 @@ export function BodyMap({ levels = {}, size = 96 }: { levels?: Partial<Record<Mu
 
 const styles = StyleSheet.create({
   host: { flexDirection: 'row', justifyContent: 'center', gap: space.md },
-  side: { alignItems: 'center', gap: space.sm },
-  caption: { fontFamily: fonts.label, fontSize: 11, letterSpacing: 1, color: colors.ink3 },
+  side: { alignItems: 'center' },
 });
