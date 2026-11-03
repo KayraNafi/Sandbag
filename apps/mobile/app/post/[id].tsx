@@ -1,3 +1,4 @@
+import { CALL_DAYS, CALLABLE_DAYS, DAY_MS } from '@sandbag/shared';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
@@ -50,7 +51,7 @@ export default function PostScreen() {
     mutationFn: () => api.callSandbag(id, lift ?? '', line),
     onSuccess: () => {
       setCalling(false);
-      toast('Called. Their next session settles it.');
+      toast(`Called. They have ${CALL_DAYS} days to answer it.`);
       return Promise.all([refresh(), client.invalidateQueries({ queryKey: ['calls'] })]);
     },
     onError: (error) => toast(errorText(error)),
@@ -68,7 +69,9 @@ export default function PostScreen() {
   if (!post.data) return <Screen padTop={false}><Muted>This post is gone, or isn’t for you.</Muted></Screen>;
   const data = post.data;
   const mine = data.author.id === me?.id;
-  const callable = data.entries.filter((entry) => entry.kind === 'strength' && (entry.weight !== null || !data.showWeights));
+  // Only recent posts can be called, so nobody is held to a number from months ago.
+  const recent = Date.now() - Date.parse(data.createdAt) <= CALLABLE_DAYS * DAY_MS;
+  const callable = recent ? data.entries.filter((entry) => entry.kind === 'strength' && (entry.weight !== null || !data.showWeights)) : [];
 
   return (
     <Screen padTop={false} onRefresh={() => post.refetch()}>

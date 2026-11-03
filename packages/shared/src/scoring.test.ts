@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { beatABest, weekStreak } from './scoring';
-import { nextInviteGoal, periodStats, resolveCall } from './scoring';
+import { nextInviteGoal, periodStats } from './scoring';
 
 const lift = (name: string, weight: number | null) => ({ name, kind: 'strength' as const, weight });
 const TODAY = '2026-10-30';
@@ -84,13 +84,6 @@ describe('periodStats', () => {
 
   it('handles someone with no workouts', () => {
     expect(periodStats([], 'month', 3, TODAY)).toEqual({ progress: 0, workouts: 0, consistency: 0, score: 0 });
-  });
-});
-
-describe('resolveCall', () => {
-  it('needs strictly more than the called weight', () => {
-    expect(resolveCall(86, 88.5)).toBe('cleared');
-    expect(resolveCall(86, 86)).toBe('failed');
   });
 });
 

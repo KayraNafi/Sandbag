@@ -16,6 +16,8 @@ const LOOK: Record<NotificationKind, { icon: IconName; color: string }> = {
   call: { icon: 'bag', color: colors.warn },
   confirmed: { icon: 'bag', color: colors.volt },
   answered: { icon: 'shield', color: colors.ink2 },
+  watching: { icon: 'clock', color: colors.ink2 },
+  honest: { icon: 'shield', color: colors.ink },
   overtaken: { icon: 'flame', color: colors.warn },
   trophy: { icon: 'crown', color: colors.volt },
   recruit: { icon: 'people', color: colors.volt },

@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import type { CallStatus } from './calls';
 import { cleanText } from './text';
 
 const clientId = z.string().regex(/^[A-Za-z0-9_-]{1,64}$/);
@@ -170,8 +171,13 @@ export interface CallView {
   exercise: string;
   /** Null when the post hid its weights and you aren't the one called out. */
   targetWeight: number | null;
+  targetReps: number | null;
   line: string;
-  status: 'open' | 'cleared' | 'failed';
+  status: CallStatus;
+  /** When an open call fails, or a watched miss is believed. Null once it's settled. */
+  deadlineAt: string | null;
+  /** What it did to your score, as whichever side you're on. */
+  points: number;
   createdAt: string;
 }
 
@@ -183,12 +189,14 @@ export interface RankingRow {
   workouts: number;
   target: number;
   consistency: number;
+  /** Points from calls settled in the period, already part of score. */
+  calls: number;
   score: number;
   wearingSandbag: boolean;
 }
 
 /** What a notification is about, so the app can show it at a glance without reading the title. */
-export type NotificationKind = 'call' | 'answered' | 'confirmed' | 'reply' | 'saved' | 'recruit' | 'overtaken' | 'trophy';
+export type NotificationKind = 'call' | 'answered' | 'confirmed' | 'watching' | 'honest' | 'reply' | 'saved' | 'recruit' | 'overtaken' | 'trophy';
 
 export interface NotificationView {
   id: string;

@@ -1,7 +1,7 @@
-import type { AvatarId, Entry, NotificationKind, SavedExercise } from '@sandbag/shared';
+import type { AvatarId, CallStatus, Entry, NotificationKind, SavedExercise } from '@sandbag/shared';
 import { sql } from 'drizzle-orm';
 import {
-  bigint, boolean, check, date, index, integer, jsonb, pgSequence, pgTable, primaryKey, real, text, timestamp, uniqueIndex, uuid,
+  bigint, boolean, check, date, doublePrecision, index, integer, jsonb, pgSequence, pgTable, primaryKey, real, text, timestamp, uuid,
 } from 'drizzle-orm/pg-core';
 
 const createdAt = () => timestamp('created_at', { withTimezone: true }).notNull().defaultNow();
@@ -111,15 +111,27 @@ export const sandbagCalls = pgTable('sandbag_calls', {
   exercise: text('exercise').notNull(),
   exerciseKey: text('exercise_key').notNull(),
   targetWeight: real('target_weight').notNull(),
+  targetReps: integer('target_reps'),
+  // The estimated max to beat. Double, so the same numbers logged again come out exactly equal.
+  targetMax: doublePrecision('target_max').notNull(),
   weightsHidden: boolean('weights_hidden').notNull(),
   line: text('line').notNull(),
-  status: text('status', { enum: ['open', 'cleared', 'failed'] }).notNull().default('open'),
+  status: text('status').$type<CallStatus>().notNull().default('open'),
   createdAt: createdAt(),
+  // When an open call fails, or a watched miss is believed.
+  deadlineAt: timestamp('deadline_at', { withTimezone: true }).notNull(),
   resolvedAt: timestamp('resolved_at', { withTimezone: true }),
+  // The session that last answered it, so editing or deleting that session revisits the verdict.
+  settledBy: text('settled_by'),
+  // A failed verdict can be corrected once, for a typo.
+  correctedAt: timestamp('corrected_at', { withTimezone: true }),
 }, (t) => [
-  // One open call per lift: a pile-on would make the rule ambiguous.
-  uniqueIndex('sandbag_calls_one_open').on(t.targetId, t.exerciseKey).where(sql`${t.status} = 'open'`),
+  // One open call per lift is checked when calling, not here: deleting the session that
+  // answered a call reopens it, and that must work even if the lift has been called again since.
+  index('sandbag_calls_target_lift').on(t.targetId, t.exerciseKey),
   index('sandbag_calls_caller').on(t.callerId),
+  index('sandbag_calls_post').on(t.postId),
+  index('sandbag_calls_due').on(t.deadlineAt).where(sql`${t.status} in ('open', 'watching')`),
 ]);
 
 export const notifications = pgTable('notifications', {

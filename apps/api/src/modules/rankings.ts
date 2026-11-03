@@ -1,9 +1,10 @@
-import { periodSchema, periodStats, voice, weekStreak, type Period, type RankingRow } from '@sandbag/shared';
+import { DAY_MS, PERIOD_DAYS, periodSchema, periodStats, voice, weekStreak, type Period, type RankingRow } from '@sandbag/shared';
 import { and, eq, gt, inArray } from 'drizzle-orm';
 import type { FastifyInstance } from 'fastify';
 import type { Db, DbOrTx } from '../db/client';
 import { loggedWorkouts, notifications, users } from '../db/schema';
 import { requireUser, toPublic } from './auth';
+import { callPointsSince, expireCalls } from './calls';
 import { friendIds } from './friends';
 import { notify } from './notifications';
 
@@ -17,16 +18,22 @@ export async function crewTable(db: DbOrTx, userId: string, period: Period): Pro
     .from(loggedWorkouts)
     .where(and(inArray(loggedWorkouts.ownerId, crew), eq(loggedWorkouts.deleted, false)));
   const now = new Date();
+  const calls = await callPointsSince(db, crew, new Date(now.getTime() - PERIOD_DAYS[period] * DAY_MS));
 
   const rows = people.map((person) => {
     const own = workouts.filter((workout) => workout.ownerId === person.id);
+    const stats = periodStats(own, period, person.weeklyTarget, today());
+    const fromCalls = calls.get(person.id) ?? 0;
     return {
       user: toPublic(person),
       rank: 0,
       target: person.weeklyTarget,
       wearingSandbag: person.sandbagUntil !== null && person.sandbagUntil > now,
       streak: weekStreak(own.map((workout) => workout.date), person.weeklyTarget, today()).current,
-      ...periodStats(own, period, person.weeklyTarget, today()),
+      ...stats,
+      calls: fromCalls,
+      // Calls can cost points, but never below nothing.
+      score: Math.max(0, stats.score + fromCalls),
     };
   });
   rows.sort((a, b) => b.score - a.score || a.user.displayName.localeCompare(b.user.displayName));
@@ -58,6 +65,7 @@ export async function notifyOvertaken(db: DbOrTx, user: { id: string; displayNam
 export function rankingRoutes(app: FastifyInstance, db: Db): void {
   app.get<{ Querystring: { period?: string } }>('/rankings', async (request): Promise<RankingRow[]> => {
     const user = await requireUser(db, request);
+    await expireCalls(db);
     return crewTable(db, user.id, periodSchema.parse(request.query.period ?? 'week'));
   });
 }

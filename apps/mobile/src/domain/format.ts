@@ -1,4 +1,4 @@
-import type { Entry } from '@sandbag/shared';
+import { DAY_MS, type Entry } from '@sandbag/shared';
 
 const pad = (value: number) => String(value).padStart(2, '0');
 
@@ -64,6 +64,13 @@ export const round2 = (value: number) => Math.round(value * 100) / 100;
 export const num = (value: number) => String(round2(value));
 export const plural = (count: number, word: string) => `${count} ${word}${count === 1 ? '' : 's'}`;
 export const signed = (value: number) => `${value > 0 ? '+' : ''}${value}%`;
+export const signedPoints = (value: number) => `${value > 0 ? '+' : ''}${value}`;
+
+/** Whole days until a deadline, counting today: "5 days left", then "last day". */
+export function daysLeft(isoTime: string): string {
+  const days = Math.ceil((Date.parse(isoTime) - Date.now()) / DAY_MS);
+  return days <= 1 ? 'last day' : `${days} days left`;
+}
 
 export function setsReps(entry: Pick<Entry, 'sets' | 'reps' | 'setReps'>): string {
   if (entry.setReps?.length && entry.setReps.length === entry.sets) return entry.setReps.map((reps) => reps ?? '–').join(', ');

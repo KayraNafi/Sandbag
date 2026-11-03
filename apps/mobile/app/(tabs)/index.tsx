@@ -1,4 +1,4 @@
-import { voice, type CallView, type SavedWorkout } from '@sandbag/shared';
+import { HONEST_MARGIN, voice, type CallStatus, type CallView, type SavedWorkout } from '@sandbag/shared';
 import { useQuery } from '@tanstack/react-query';
 import { router } from 'expo-router';
 import { useMemo } from 'react';
@@ -9,17 +9,32 @@ import { Button, Card, Heading, Label, MoveButtons, Muted, Row, Screen, Title } 
 import { moveSaved, startBlank, startFromSaved } from '@/data/actions';
 import { useData } from '@/data/store';
 import { syncNow } from '@/data/sync';
-import { agoLong, agoText, formatDate, num, plural, today } from '@/domain/format';
+import { agoLong, agoText, daysLeft, formatDate, num, plural, signedPoints, today } from '@/domain/format';
 import { activeLogged, activeSaved, nextWorkout } from '@/domain/history';
 import { colors, fonts, space } from '@/theme';
 
 const QUIET_DAYS = 5;
 const MY_CALLS_SHOWN = 5;
-const VERDICT: Record<CallView['status'], string> = {
+const VERDICT: Record<CallStatus, string> = {
   open: 'Waiting on their next session of it',
+  watching: 'Just missed, at their limit. Watching them.',
   cleared: 'They beat it. Call answered.',
   failed: 'Sandbag confirmed. You were right.',
+  honest: 'An honest miss. Nobody scores.',
+  caught: 'Caught sandbagging. Double points.',
 };
+
+/** The number to beat, when you're allowed to see it: "60 kg × 8". */
+function targetText(call: CallView): string | null {
+  if (call.targetWeight === null) return null;
+  return call.targetReps ? `${num(call.targetWeight)} kg × ${call.targetReps}` : `${num(call.targetWeight)} kg`;
+}
+
+/** Where a call stands, from your side: time left while it's live, points once it's settled. */
+function standing(call: CallView): string {
+  if (call.deadlineAt) return `${VERDICT[call.status]} · ${daysLeft(call.deadlineAt)}`;
+  return call.points ? `${VERDICT[call.status]} · ${signedPoints(call.points)}` : VERDICT[call.status];
+}
 
 function start(workout: SavedWorkout) {
   startFromSaved(workout);
@@ -37,7 +52,7 @@ export default function Train() {
   const calls = useQuery({ queryKey: ['calls'], queryFn: api.calls });
   const notifications = useQuery({ queryKey: ['notifications'], queryFn: api.notifications });
   const unread = notifications.data?.filter((item) => !item.read).length ?? 0;
-  const openOnMe = calls.data?.filter((call) => call.status === 'open' && call.target.id === me?.id) ?? [];
+  const onMe = calls.data?.filter((call) => call.deadlineAt && call.target.id === me?.id) ?? [];
   const byMe = calls.data?.filter((call) => call.caller.id === me?.id).slice(0, MY_CALLS_SHOWN) ?? [];
   const last = workouts[0];
   const quietDays = last ? Math.round((Date.parse(today()) - Date.parse(last.date)) / 86_400_000) : 0;
@@ -75,11 +90,15 @@ export default function Train() {
         </Card>
       )}
 
-      {openOnMe.map((call) => (
+      {onMe.map((call) => (
         <Card key={call.id} style={styles.call}>
-          <Label style={styles.callLabel}>{call.caller.displayName} called sandbag</Label>
-          <Text style={styles.callTitle}>{`${call.exercise}${call.targetWeight === null ? '' : `: beat ${num(call.targetWeight)} kg`}`.toUpperCase()}</Text>
-          <Muted>“{call.line}” Your next session of this lift settles it.</Muted>
+          <Label style={styles.callLabel}>{call.status === 'watching' ? 'Honest miss, for now' : `${call.caller.displayName} called sandbag`}</Label>
+          <Text style={styles.callTitle}>{`${call.exercise}: ${call.status === 'watching' ? '' : 'beat '}${targetText(call)}`.toUpperCase()}</Text>
+          <Muted>
+            {call.status === 'watching'
+              ? `You were just short, at your limit. Lift ${HONEST_MARGIN * 100}% past it before the watch ends and it was a sandbag. ${daysLeft(call.deadlineAt!)}.`
+              : `“${call.line}” Your next session of this lift settles it. ${daysLeft(call.deadlineAt!)}.`}
+          </Muted>
         </Card>
       ))}
 
@@ -89,8 +108,8 @@ export default function Train() {
           <Card>
             {byMe.map((call, index) => (
               <View key={call.id} style={[styles.myCall, index > 0 && styles.myCallDivider]}>
-                <Text style={styles.name}>{call.target.displayName} · {call.exercise}{call.targetWeight === null ? '' : ` ${num(call.targetWeight)} kg`}</Text>
-                <Text style={[styles.verdict, call.status === 'failed' && styles.verdictWon, call.status === 'cleared' && styles.verdictLost]}>{VERDICT[call.status]}</Text>
+                <Text style={styles.name}>{call.target.displayName} · {call.exercise}{targetText(call) ? ` ${targetText(call)}` : ''}</Text>
+                <Text style={[styles.verdict, call.points > 0 && styles.verdictWon, call.points < 0 && styles.verdictLost]}>{standing(call)}</Text>
                 <Muted>“{call.line}” · {agoLong(call.createdAt)}</Muted>
               </View>
             ))}

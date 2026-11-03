@@ -69,12 +69,6 @@ export function periodStats(workouts: ScoringWorkout[], period: Period, weeklyTa
   return { progress: roundOne(progress), workouts: count, consistency, score: Math.round((progressPoints + consistency) / 2) };
 }
 
-/** Beat the called number on your next session of that lift, or wear the sandbag. */
-export function resolveCall(targetWeight: number, loggedWeight: number): 'cleared' | 'failed' {
-  return loggedWeight > targetWeight ? 'cleared' : 'failed';
-}
-
-export const SANDBAG_BADGE_DAYS = 7;
 
 export const INVITE_GOALS = [
   { count: 3, name: 'Recruiter' },

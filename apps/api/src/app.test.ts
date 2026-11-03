@@ -253,6 +253,117 @@ describe('sandbag calls', () => {
     expect(asCaller?.targetWeight).toBeNull();
     expect(asTarget?.targetWeight).toBe(86);
   });
+
+  const statusOf = async (token: string) => (await call<CallView[]>('GET', '/calls', token)).body[0]?.status;
+  const rowOf = async (token: string, userId: string) => (await call<RankingRow[]>('GET', '/rankings', token)).body.find((row) => row.user.id === userId);
+  const at = (offset: number) => ({ updatedAt: Date.now() + offset });
+
+  it('clears a call with more reps at the same weight', async () => {
+    const { friend } = await called();
+    await sync(friend.token, 0, [logged('w2', [entry('Lat pulldown', 86, { reps: 10 })], later())]);
+    expect(await statusOf(friend.token)).toBe('cleared');
+  });
+
+  it('fails a call nobody answers in time, and puts the sandbag on', async () => {
+    const { founder, friend } = await called();
+    await db.update(schema.sandbagCalls).set({ deadlineAt: new Date(Date.now() - 1000) });
+    expect(await statusOf(founder.token)).toBe('failed');
+    expect((await rowOf(founder.token, friend.user.id))?.wearingSandbag).toBe(true);
+    const notes = (await call<NotificationView[]>('GET', '/notifications', friend.token)).body;
+    expect(notes.map((note) => note.title)).toContain('Call ran out');
+  });
+
+  it('allows three open calls per caller', async () => {
+    const { founder, friend } = await crew();
+    const lifts = ['Squat', 'Bench', 'Row', 'Curl'];
+    const created = await post(friend.token, { entries: lifts.map((name) => entry(name, 50)) });
+    const results = [];
+    for (const name of lifts) results.push((await call('POST', `/posts/${created.body.id}/calls`, founder.token, { exercise: name, line: 'Hm.' })).status);
+    expect(results).toEqual([201, 201, 201, 409]);
+  });
+
+  it('only calls posts from the last two weeks', async () => {
+    const { founder, friend } = await crew();
+    const created = await post(friend.token);
+    await db.update(schema.posts).set({ createdAt: new Date(Date.now() - 15 * 86_400_000) });
+    expect((await call('POST', `/posts/${created.body.id}/calls`, founder.token, { exercise: 'Lat pulldown', line: 'Hm.' })).status).toBe(400);
+  });
+
+  it('calls each lift of a post once, even after the verdict', async () => {
+    const { friend, postId } = await called();
+    await sync(friend.token, 0, [logged('w2', [entry('Lat pulldown', 90)], later())]);
+    const third = await register('third', friend.user.inviteCode);
+    expect((await call('POST', `/posts/${postId}/calls`, third.token, { exercise: 'Lat pulldown', line: 'Again.' })).status).toBe(409);
+  });
+
+  it('watches a close miss at full effort, then catches a big jump', async () => {
+    const { founder, friend } = await called();
+    await sync(friend.token, 0, [logged('w2', [entry('Lat pulldown', 84, { rpe: 9.5 })], at(1000))]);
+    expect(await statusOf(friend.token)).toBe('watching');
+    expect((await rowOf(founder.token, friend.user.id))?.wearingSandbag).toBe(false);
+    await sync(friend.token, 0, [logged('w3', [entry('Lat pulldown', 95)], at(2000))]);
+    const [caught] = (await call<CallView[]>('GET', '/calls', founder.token)).body;
+    expect(caught?.status).toBe('caught');
+    expect(caught?.points).toBe(10);
+    expect((await rowOf(founder.token, friend.user.id))?.wearingSandbag).toBe(true);
+  });
+
+  it('believes a watched miss once the watch runs out', async () => {
+    const { founder, friend } = await called();
+    await sync(friend.token, 0, [logged('w2', [entry('Lat pulldown', 84, { rpe: 10 })], later())]);
+    await db.update(schema.sandbagCalls).set({ deadlineAt: new Date(Date.now() - 1000) });
+    expect(await statusOf(founder.token)).toBe('honest');
+    expect((await rowOf(founder.token, friend.user.id))?.wearingSandbag).toBe(false);
+  });
+
+  it('lets a failed verdict be corrected once, by editing the session', async () => {
+    const { founder, friend } = await called();
+    await sync(friend.token, 0, [logged('w2', [entry('Lat pulldown', 80)], at(1000))]);
+    expect(await statusOf(friend.token)).toBe('failed');
+    await sync(friend.token, 0, [logged('w2', [entry('Lat pulldown', 90)], at(2000))]);
+    expect(await statusOf(friend.token)).toBe('cleared');
+    expect((await rowOf(founder.token, friend.user.id))?.wearingSandbag).toBe(false);
+    // Numbers that go down again fail it again, and there's no second correction.
+    await sync(friend.token, 0, [logged('w2', [entry('Lat pulldown', 80)], at(3000))]);
+    await sync(friend.token, 0, [logged('w2', [entry('Lat pulldown', 90)], at(4000))]);
+    expect(await statusOf(friend.token)).toBe('failed');
+  });
+
+  it('doesn’t correct a failed verdict after a day', async () => {
+    const { friend } = await called();
+    await sync(friend.token, 0, [logged('w2', [entry('Lat pulldown', 80)], at(1000))]);
+    await db.update(schema.sandbagCalls).set({ resolvedAt: new Date(Date.now() - 25 * 3_600_000) });
+    await sync(friend.token, 0, [logged('w2', [entry('Lat pulldown', 90)], at(2000))]);
+    expect(await statusOf(friend.token)).toBe('failed');
+  });
+
+  it('reopens a call when its answer is deleted, and undoing the delete answers it again', async () => {
+    const { friend } = await called();
+    const answer = logged('w2', [entry('Lat pulldown', 90)], at(1000));
+    await sync(friend.token, 0, [answer]);
+    await sync(friend.token, 0, [{ ...answer, deleted: true, ...at(2000) }]);
+    expect(await statusOf(friend.token)).toBe('open');
+    await sync(friend.token, 0, [{ ...answer, ...at(3000) }]);
+    expect(await statusOf(friend.token)).toBe('cleared');
+  });
+
+  it('keeps a failed verdict when its session is deleted', async () => {
+    const { friend } = await called();
+    const answer = logged('w2', [entry('Lat pulldown', 80)], at(1000));
+    await sync(friend.token, 0, [answer]);
+    await sync(friend.token, 0, [{ ...answer, deleted: true, ...at(2000) }]);
+    expect(await statusOf(friend.token)).toBe('failed');
+  });
+
+  it('puts call points on the ranking score', async () => {
+    const { founder, friend } = await called();
+    await sync(friend.token, 0, [logged('w2', [entry('Lat pulldown', 80)], later())]);
+    const caller = await rowOf(founder.token, founder.user.id);
+    const target = await rowOf(founder.token, friend.user.id);
+    expect(caller?.calls).toBe(5);
+    expect(caller?.score).toBeGreaterThanOrEqual(5);
+    expect(target?.calls).toBe(-5);
+  });
 });
 
 describe('rankings', () => {

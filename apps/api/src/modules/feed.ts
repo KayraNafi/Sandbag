@@ -1,5 +1,5 @@
 import {
-  createCallSchema, createPostSchema, createReplySchema, exerciseKey, voice,
+  CALL_DAYS, CALL_POINTS, CALLABLE_DAYS, createCallSchema, createPostSchema, createReplySchema, DAY_MS, entryMax, exerciseKey, LIVE_CALLS, MAX_OPEN_CALLS, topReps, voice,
   type CallView, type Entry, type PostView, type ReplyView, type SavedWorkout,
 } from '@sandbag/shared';
 import { randomUUID } from 'node:crypto';
@@ -10,6 +10,7 @@ import type { Db, DbOrTx } from '../db/client';
 import { postReplies, postRespects, posts, postSaves, sandbagCalls, savedWorkouts, syncSeq, users } from '../db/schema';
 import { badRequest, conflict, forbidden, notFound } from '../errors';
 import { requireUser, toPublic } from './auth';
+import { expireCalls } from './calls';
 import { friendIds } from './friends';
 import { notify } from './notifications';
 
@@ -204,10 +205,27 @@ export function feedRoutes(app: FastifyInstance, db: Db): void {
     const user = await requireUser(db, request);
     const post = await loadVisiblePost(db, request.params.id, user.id);
     if (post.authorId === user.id) throw badRequest('Calling yourself out is just therapy');
+    if (Date.now() - post.createdAt.getTime() > CALLABLE_DAYS * DAY_MS) throw badRequest('That workout’s too old to call. Catch them on a fresh one.');
     const input = createCallSchema.parse(request.body);
     const key = exerciseKey(input.exercise);
-    const entry = post.entries.find((item) => exerciseKey(item.name) === key && item.weight !== null);
+    // The best of that lift in the post, so a lighter warm-up entry can't be the one to beat.
+    const entry = post.entries
+      .filter((item) => item.kind === 'strength' && exerciseKey(item.name) === key && item.weight !== null)
+      .sort((a, b) => entryMax(b)! - entryMax(a)!)[0];
     if (!entry || entry.weight === null) throw badRequest('That lift isn’t in this workout');
+
+    await expireCalls(db);
+    const [{ out } = { out: 0 }] = await db.select({ out: sql<number>`count(*)::int` }).from(sandbagCalls)
+      .where(and(eq(sandbagCalls.callerId, user.id), eq(sandbagCalls.status, 'open')));
+    if (out >= MAX_OPEN_CALLS) throw conflict(`You’ve got ${MAX_OPEN_CALLS} calls out already. Let one land first.`);
+    const [taken] = await db.select({ id: sandbagCalls.id }).from(sandbagCalls).where(and(
+      eq(sandbagCalls.exerciseKey, key),
+      // One live call per lift, so nobody gets piled on, and one call per lift per post, ever.
+      or(and(eq(sandbagCalls.targetId, post.authorId), inArray(sandbagCalls.status, LIVE_CALLS)), eq(sandbagCalls.postId, post.id)),
+    )).limit(1);
+    if (taken) throw conflict('Someone already called this lift. Wait for the verdict.');
+
+    const now = Date.now();
     const [call] = await db.insert(sandbagCalls).values({
       callerId: user.id,
       targetId: post.authorId,
@@ -215,17 +233,22 @@ export function feedRoutes(app: FastifyInstance, db: Db): void {
       exercise: entry.name,
       exerciseKey: key,
       targetWeight: entry.weight,
+      targetReps: topReps(entry),
+      targetMax: entryMax(entry)!,
       weightsHidden: !post.showWeights,
       line: input.line,
-    }).onConflictDoNothing().returning();
-    if (!call) throw conflict('Someone already called this lift. Wait for the verdict.');
+      createdAt: new Date(now),
+      deadlineAt: new Date(now + CALL_DAYS * DAY_MS),
+    }).returning({ id: sandbagCalls.id });
     await notify(db, post.authorId, { kind: 'call', title: `${user.displayName} called sandbag`, body: `On your ${entry.name}. “${input.line}”`, route: 'train' });
     reply.code(201);
-    return { id: call.id };
+    // An insert without a conflict clause always returns its row.
+    return { id: call!.id };
   });
 
   app.get('/calls', async (request): Promise<CallView[]> => {
     const user = await requireUser(db, request);
+    await expireCalls(db);
     const caller = alias(users, 'caller');
     const target = alias(users, 'target');
     const rows = await db.select({ call: sandbagCalls, caller, target }).from(sandbagCalls)
@@ -240,8 +263,11 @@ export function feedRoutes(app: FastifyInstance, db: Db): void {
       target: toPublic(row.target),
       exercise: row.call.exercise,
       targetWeight: row.call.weightsHidden && row.call.targetId !== user.id ? null : row.call.targetWeight,
+      targetReps: row.call.targetReps,
       line: row.call.line,
       status: row.call.status,
+      deadlineAt: LIVE_CALLS.includes(row.call.status) ? row.call.deadlineAt.toISOString() : null,
+      points: CALL_POINTS[row.call.status][row.call.callerId === user.id ? 'caller' : 'target'],
       createdAt: row.call.createdAt.toISOString(),
     }));
   });

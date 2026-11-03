@@ -6,7 +6,7 @@ import { StyleSheet, Text, View } from 'react-native';
 import { api } from '@/api/client';
 import { useSession } from '@/auth/session';
 import { Button, Card, Chip, Empty, Label, Loading, Muted, Row, Screen, Title } from '@/components/ui';
-import { signed } from '@/domain/format';
+import { signed, signedPoints } from '@/domain/format';
 import { Avatar } from '@/components/Avatar';
 import { colors, fonts, space } from '@/theme';
 
@@ -46,6 +46,7 @@ export default function Rankings() {
               <Muted>Progress {signed(row.progress)}</Muted>
               <Muted>{row.workouts} of {row.target} workouts</Muted>
               {row.streak ? <Muted>{row.streak} {row.streak === 1 ? 'week' : 'weeks'} on target</Muted> : null}
+              {row.calls ? <Muted>Calls {signedPoints(row.calls)}</Muted> : null}
             </View>
             <View style={styles.scoreBox} accessibilityLabel={`${row.score} points`}>
               <Text style={styles.score}>{row.score}</Text>
@@ -63,6 +64,7 @@ export default function Rankings() {
       <Muted>
         Your points are the average of two scores out of 100. Progress: every +1% on your own lifts is 10 points, and each lift counts for 25% at most, up or down.
         Consistency: workouts done against your weekly target. Heavier friends get no head start.
+        Calls settled in the period add or take points on top: +5 for beating one, −5 for failing it, double for getting caught, and −3 for calling wrong.
       </Muted>
       <Button title="What’s sandbagging?" variant="ghost" onPress={() => router.push('/about')} />
     </Screen>

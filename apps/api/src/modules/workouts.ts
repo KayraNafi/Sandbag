@@ -1,11 +1,8 @@
-import {
-  exerciseKey, resolveCall, SANDBAG_BADGE_DAYS, voice,
-  type LoggedWorkout, type SavedWorkout,
-} from '@sandbag/shared';
+import type { LoggedWorkout, SavedWorkout } from '@sandbag/shared';
 import { and, eq, sql } from 'drizzle-orm';
 import type { Tx } from '../db/client';
-import { loggedWorkouts, sandbagCalls, savedWorkouts, syncSeq, users } from '../db/schema';
-import { notify } from './notifications';
+import { loggedWorkouts, savedWorkouts, syncSeq } from '../db/schema';
+import { callsOnSave, expireCalls } from './calls';
 
 const nextSeq = () => sql<number>`nextval(${syncSeq.seqName})`;
 
@@ -17,35 +14,12 @@ export const toSaved = (row: typeof savedWorkouts.$inferSelect): SavedWorkout =>
   id: row.id, name: row.name, position: row.position, exercises: row.exercises, savedFrom: row.savedFrom, updatedAt: row.updatedAt, deleted: row.deleted,
 });
 
-/** A sandbag call is settled by the next logged session of that lift. */
-async function settleCalls(tx: Tx, user: { id: string; displayName: string }, workout: LoggedWorkout): Promise<void> {
-  if (workout.deleted) return;
-  const open = await tx.select().from(sandbagCalls).where(and(eq(sandbagCalls.targetId, user.id), eq(sandbagCalls.status, 'open')));
-  for (const call of open) {
-    // Only workouts logged after the call can answer it, and backdating one in doesn't count.
-    if (workout.updatedAt <= call.createdAt.getTime() || Date.parse(`${workout.date}T00:00:00Z`) < call.createdAt.getTime() - 86_400_000) continue;
-    const entry = workout.entries.find((item) => exerciseKey(item.name) === call.exerciseKey && item.weight !== null);
-    if (entry?.weight === undefined || entry.weight === null) continue;
-    const status = resolveCall(call.targetWeight, entry.weight);
-    await tx.update(sandbagCalls).set({ status, resolvedAt: new Date() }).where(eq(sandbagCalls.id, call.id));
-    if (status === 'failed') {
-      await tx.update(users)
-        .set({ sandbagUntil: new Date(Date.now() + SANDBAG_BADGE_DAYS * 86_400_000) })
-        .where(eq(users.id, user.id));
-    }
-    await notify(tx, call.callerId, {
-      kind: status === 'cleared' ? 'answered' : 'confirmed',
-      title: status === 'cleared' ? 'Call answered' : 'Sandbag confirmed',
-      body: status === 'cleared' ? voice.callCleared(user.displayName, call.exercise) : voice.callFailed(user.displayName, call.exercise),
-      route: 'rankings',
-    });
-  }
-}
-
 /** Last write wins on updatedAt. Returns the server copies that beat what was sent. */
 export async function saveLogged(tx: Tx, user: { id: string; displayName: string }, docs: LoggedWorkout[]): Promise<{ rejected: LoggedWorkout[]; written: number }> {
   const rejected: LoggedWorkout[] = [];
   let written = 0;
+  // Before anything is answered, so a session that comes in late can't answer a call that ran out.
+  await expireCalls(tx);
   for (const doc of docs) {
     const [existing] = await tx.select().from(loggedWorkouts).where(and(eq(loggedWorkouts.ownerId, user.id), eq(loggedWorkouts.id, doc.id)));
     if (existing && existing.updatedAt >= doc.updatedAt) {
@@ -55,7 +29,7 @@ export async function saveLogged(tx: Tx, user: { id: string; displayName: string
     const values = { ...doc, ownerId: user.id, seq: nextSeq() };
     await tx.insert(loggedWorkouts).values(values).onConflictDoUpdate({ target: [loggedWorkouts.ownerId, loggedWorkouts.id], set: values });
     written += 1;
-    if (!existing) await settleCalls(tx, user, doc);
+    await callsOnSave(tx, user, existing ? toLogged(existing) : null, doc);
   }
   return { rejected, written };
 }

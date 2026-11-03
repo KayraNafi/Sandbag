@@ -1,4 +1,4 @@
-import { beatABest, TROPHIES, voice, weekStreak, type TrophyFacts, type TrophyView } from '@sandbag/shared';
+import { beatABest, DAY_MS, TROPHIES, voice, weekStreak, type CallStatus, type TrophyFacts, type TrophyView } from '@sandbag/shared';
 import { and, eq, or, sql } from 'drizzle-orm';
 import type { FastifyInstance } from 'fastify';
 import type { Db, DbOrTx } from '../db/client';
@@ -7,7 +7,9 @@ import { requireUser } from './auth';
 import { notify } from './notifications';
 import { crewTable } from './rankings';
 
-const MONTH_MS = 30 * 86_400_000;
+const MONTH_MS = 30 * DAY_MS;
+/** The target lost: failed outright, or caught after a watched miss. */
+const lost = (status: CallStatus) => status === 'failed' || status === 'caught';
 
 async function factsFor(db: DbOrTx, user: { id: string; weeklyTarget: number }): Promise<TrophyFacts> {
   const workouts = await db.select({ date: loggedWorkouts.date, entries: loggedWorkouts.entries }).from(loggedWorkouts)
@@ -28,8 +30,8 @@ async function factsFor(db: DbOrTx, user: { id: string; weeklyTarget: number }):
     beatABest: beatABest(workouts),
     callsBeaten: against.filter((call) => call.status === 'cleared').length,
     callsAgainst: against.length,
-    callsFailed: against.filter((call) => call.status === 'failed').length,
-    callsWon: calls.filter((call) => call.callerId === user.id && call.status === 'failed').length,
+    callsFailed: against.filter((call) => lost(call.status)).length,
+    callsWon: calls.filter((call) => call.callerId === user.id && lost(call.status)).length,
     joined,
     bestStreak: weekStreak(workouts.map((workout) => workout.date), user.weeklyTarget, today).best,
     ledTheMonth: table.length > 1 && table.find((row) => row.user.id === user.id)?.rank === 1,
