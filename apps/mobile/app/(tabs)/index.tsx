@@ -1,4 +1,4 @@
-import { voice, type SavedWorkout } from '@sandbag/shared';
+import { voice, type CallView, type SavedWorkout } from '@sandbag/shared';
 import { useQuery } from '@tanstack/react-query';
 import { router } from 'expo-router';
 import { useMemo } from 'react';
@@ -9,11 +9,17 @@ import { Button, Card, Heading, Label, Muted, Row, Screen, Title } from '@/compo
 import { moveSaved, startBlank, startFromSaved } from '@/data/actions';
 import { useData } from '@/data/store';
 import { syncNow } from '@/data/sync';
-import { agoText, formatDate, num, plural, today } from '@/domain/format';
+import { agoLong, agoText, formatDate, num, plural, today } from '@/domain/format';
 import { activeLogged, activeSaved, nextWorkout } from '@/domain/history';
 import { colors, fonts, space } from '@/theme';
 
 const QUIET_DAYS = 5;
+const MY_CALLS_SHOWN = 5;
+const VERDICT: Record<CallView['status'], string> = {
+  open: 'Waiting on their next session of it',
+  cleared: 'They beat it. Call answered.',
+  failed: 'Sandbag confirmed. You were right.',
+};
 
 function start(workout: SavedWorkout) {
   startFromSaved(workout);
@@ -32,6 +38,7 @@ export default function Train() {
   const notifications = useQuery({ queryKey: ['notifications'], queryFn: api.notifications });
   const unread = notifications.data?.filter((item) => !item.read).length ?? 0;
   const openOnMe = calls.data?.filter((call) => call.status === 'open' && call.target.id === me?.id) ?? [];
+  const byMe = calls.data?.filter((call) => call.caller.id === me?.id).slice(0, MY_CALLS_SHOWN) ?? [];
   const last = workouts[0];
   const quietDays = last ? Math.round((Date.parse(today()) - Date.parse(last.date)) / 86_400_000) : 0;
 
@@ -75,6 +82,21 @@ export default function Train() {
           <Muted>“{call.line}” Your next session of this lift settles it.</Muted>
         </Card>
       ))}
+
+      {byMe.length ? (
+        <>
+          <Heading style={styles.section}>Your calls</Heading>
+          <Card>
+            {byMe.map((call, index) => (
+              <View key={call.id} style={[styles.myCall, index > 0 && styles.myCallDivider]}>
+                <Text style={styles.name}>{call.target.displayName} · {call.exercise}{call.targetWeight === null ? '' : ` ${num(call.targetWeight)} kg`}</Text>
+                <Text style={[styles.verdict, call.status === 'failed' && styles.verdictWon, call.status === 'cleared' && styles.verdictLost]}>{VERDICT[call.status]}</Text>
+                <Muted>“{call.line}” · {agoLong(call.createdAt)}</Muted>
+              </View>
+            ))}
+          </Card>
+        </>
+      ) : null}
 
       <Row style={styles.section}>
         <Heading>Your workouts</Heading>
@@ -139,6 +161,11 @@ const styles = StyleSheet.create({
   callLabel: { color: colors.warn },
   callTitle: { fontFamily: fonts.display, fontSize: 24, color: colors.ink },
   section: { justifyContent: 'space-between', marginTop: space.md },
+  myCall: { gap: 2, paddingVertical: space.xs },
+  myCallDivider: { borderTopWidth: 1, borderTopColor: colors.line, marginTop: space.xs, paddingTop: space.sm },
+  verdict: { fontFamily: fonts.bodyStrong, fontSize: 14, color: colors.warn },
+  verdictWon: { color: colors.volt },
+  verdictLost: { color: colors.ink3 },
   link: { fontFamily: fonts.bodyStrong, fontSize: 15, color: colors.volt },
   name: { fontFamily: fonts.bodyStrong, fontSize: 17, color: colors.ink },
   arrow: { width: 44, height: 44, borderRadius: 10, backgroundColor: colors.surface2, alignItems: 'center', justifyContent: 'center' },

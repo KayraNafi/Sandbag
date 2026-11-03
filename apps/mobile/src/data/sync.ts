@@ -90,7 +90,10 @@ export function useSyncLoop(): void {
     });
     const interval = setInterval(() => void syncNow(), INTERVAL_MS);
     const appState = AppState.addEventListener('change', (next) => {
-      if (next === 'active') void syncNow();
+      if (next !== 'active') return;
+      void syncNow();
+      // Calls and the inbox change without any sync, so reload them on every return, however fresh they look.
+      void queryClient.invalidateQueries({ predicate: ({ queryKey }) => ['calls', 'notifications'].includes(String(queryKey[0])) });
     });
 
     return () => {
