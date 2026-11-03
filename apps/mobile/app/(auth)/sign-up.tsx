@@ -1,5 +1,5 @@
 import { registerSchema } from '@sandbag/shared';
-import { Link } from 'expo-router';
+import { Link, router } from 'expo-router';
 import { useState } from 'react';
 import { StyleSheet } from 'react-native';
 import { api, errorText } from '@/api/client';
@@ -25,6 +25,8 @@ export default function SignUp() {
     setBusy(true);
     try {
       await useSession.getState().signIn(await api.register(input.data));
+      // Only new accounts get the walkthrough. Signing in again goes straight to training.
+      router.replace('/welcome');
     } catch (error) {
       setFailure(errorText(error));
       setBusy(false);

@@ -51,6 +51,7 @@ export default function RootLayout() {
         <Stack screenOptions={stackOptions}>
           <Stack.Protected guard={status === 'signedIn'}>
             <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+            <Stack.Screen name="welcome" options={{ headerShown: false, gestureEnabled: false }} />
             <Stack.Screen name="workout/active" options={{ title: 'Workout', gestureEnabled: false }} />
             <Stack.Screen name="workout/finished" options={{ title: 'Logged', headerBackVisible: false, gestureEnabled: false }} />
             <Stack.Screen name="workout/saved/[id]" options={{ title: 'Saved workout' }} />
