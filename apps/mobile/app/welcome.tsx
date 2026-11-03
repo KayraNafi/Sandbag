@@ -1,13 +1,13 @@
 import type { Muscle } from '@sandbag/shared';
 import { router } from 'expo-router';
-import { useRef, useState, type ComponentRef } from 'react';
+import { useEffect, useRef, useState, type ComponentRef } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View, type NativeScrollEvent, type NativeSyntheticEvent } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AvatarArt } from '@/components/Avatar';
 import { BodyMap } from '@/components/BodyMap';
 import { Logo } from '@/components/Logo';
-import { Burst, FadeIn, feel, Pop, Stamp } from '@/components/motion';
-import { Button } from '@/components/ui';
+import { Burst, FadeIn, feel, Pop, prefersLessMotion, Stamp } from '@/components/motion';
+import { Button, Chip } from '@/components/ui';
 import { colors, fonts, space } from '@/theme';
 
 /** The same three ticks as a real workout: one per lift. */
@@ -59,13 +59,43 @@ function CallPicture() {
   );
 }
 
-/** What a real Upper day works, so the picture looks like a session and not a random sample. */
-const UPPER_DAY: Partial<Record<Muscle, number>> = { chest: 1, back: 1, shoulders: 0.7, biceps: 0.5, triceps: 0.5 };
+/** A real split, so the picture looks like the weeks people actually train. */
+const SPLIT: { name: string; levels: Partial<Record<Muscle, number>> }[] = [
+  { name: 'Upper', levels: { chest: 1, back: 1, shoulders: 0.7, biceps: 0.5, triceps: 0.5 } },
+  { name: 'Lower', levels: { quads: 1, glutes: 1, hamstrings: 0.8, calves: 0.5 } },
+];
+const SPLIT_MS = 2200;
+
+/** Upper, then Lower, then round again, until someone picks one. */
+function SplitPicture() {
+  const [day, setDay] = useState(0);
+  const [picked, setPicked] = useState(false);
+  useEffect(() => {
+    if (picked || prefersLessMotion()) return undefined;
+    const timer = setInterval(() => setDay((current) => (current + 1) % SPLIT.length), SPLIT_MS);
+    return () => clearInterval(timer);
+  }, [picked]);
+  return (
+    <View style={styles.picture}>
+      <View style={styles.days}>
+        {SPLIT.map((item, index) => (
+          <Chip key={item.name} title={item.name} active={index === day} onPress={() => {
+            feel.tap();
+            setPicked(true);
+            setDay(index);
+          }} />
+        ))}
+      </View>
+      {/* A new key lights the body up again, so each day arrives like a session. */}
+      <BodyMap key={day} size={110} levels={SPLIT[day]!.levels} />
+    </View>
+  );
+}
 
 const CARDS = [
   { title: 'Log it', body: 'Pick a workout. Your numbers are already there. Change what you beat and tick each lift off.', picture: <LogPicture /> },
   { title: 'Call it', body: 'See a lift that looks too easy? Call sandbag. If their next session of it doesn’t beat the number, they wear the badge.', picture: <CallPicture /> },
-  { title: 'Win it', body: 'Beat your own numbers and show up. Rankings measure you against yourself, so heavier friends get no head start.', picture: <BodyMap size={110} levels={UPPER_DAY} /> },
+  { title: 'Win it', body: 'Beat your own numbers and show up. Rankings measure you against yourself, so heavier friends get no head start.', picture: <SplitPicture /> },
 ];
 
 /** Three cards straight after sign-up, then lifting. The detail waits until the first time it matters. */
@@ -146,6 +176,7 @@ const styles = StyleSheet.create({
   pipText: { fontFamily: fonts.display, fontSize: 17, color: colors.ink2 },
   pipTextDone: { color: colors.voltInk },
   tryNumbers: { fontFamily: fonts.display, fontSize: 56, lineHeight: 62, color: colors.ink, textAlign: 'center' },
+  days: { flexDirection: 'row', justifyContent: 'center', gap: space.sm },
   faces: { flexDirection: 'row', justifyContent: 'center', gap: space.xl },
   stamp: { alignSelf: 'center', marginTop: space.md, paddingHorizontal: space.lg, paddingVertical: space.sm, borderWidth: 4, borderColor: colors.warn, borderRadius: 8 },
   stampText: { fontFamily: fonts.display, fontSize: 40, lineHeight: 48, color: colors.warn },
