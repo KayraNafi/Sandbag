@@ -1,4 +1,4 @@
-import { DAY_MS, PERIOD_DAYS, periodSchema, periodStats, voice, weekStreak, type Period, type RankingRow } from '@sandbag/shared';
+import { addDays, periodDays, periodSchema, periodStats, trainedDates, voice, weekStreak, type Period, type RankingRow } from '@sandbag/shared';
 import { and, eq, gt, inArray } from 'drizzle-orm';
 import type { FastifyInstance } from 'fastify';
 import type { Db, DbOrTx } from '../db/client';
@@ -14,22 +14,23 @@ const today = () => new Date().toISOString().slice(0, 10);
 export async function crewTable(db: DbOrTx, userId: string, period: Period): Promise<RankingRow[]> {
   const crew = [userId, ...(await friendIds(db, userId))];
   const people = await db.select().from(users).where(inArray(users.id, crew));
-  const workouts = await db.select({ ownerId: loggedWorkouts.ownerId, date: loggedWorkouts.date, entries: loggedWorkouts.entries })
+  const workouts = await db.select({ ownerId: loggedWorkouts.ownerId, date: loggedWorkouts.date, entries: loggedWorkouts.entries, recordedAt: loggedWorkouts.recordedAt })
     .from(loggedWorkouts)
     .where(and(inArray(loggedWorkouts.ownerId, crew), eq(loggedWorkouts.deleted, false)));
   const now = new Date();
-  const calls = await callPointsSince(db, crew, new Date(now.getTime() - PERIOD_DAYS[period] * DAY_MS));
+  const day = today();
+  const calls = await callPointsSince(db, crew, new Date(`${addDays(day, 1 - periodDays(period, day))}T00:00:00Z`));
 
   const rows = people.map((person) => {
     const own = workouts.filter((workout) => workout.ownerId === person.id);
-    const stats = periodStats(own, period, person.weeklyTarget, today());
+    const stats = periodStats(own, period, person.weeklyTarget, day);
     const fromCalls = calls.get(person.id) ?? 0;
     return {
       user: toPublic(person),
       rank: 0,
       target: person.weeklyTarget,
       wearingSandbag: person.sandbagUntil !== null && person.sandbagUntil > now,
-      streak: weekStreak(own.map((workout) => workout.date), person.weeklyTarget, today()).current,
+      streak: weekStreak(trainedDates(own), person.weeklyTarget, day).current,
       ...stats,
       calls: fromCalls,
       // Calls can cost points, but never below nothing.

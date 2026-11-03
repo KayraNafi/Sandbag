@@ -1,4 +1,4 @@
-import { weekStreak } from '@sandbag/shared';
+import { trainedDates, weekStreak } from '@sandbag/shared';
 import { useQuery } from '@tanstack/react-query';
 import { router, type Href } from 'expo-router';
 import { useMemo } from 'react';
@@ -49,7 +49,7 @@ export default function You() {
   const weekAgo = toIsoDate(new Date(Date.now() - 6 * 86_400_000));
   const thisWeek = workouts.filter((workout) => workout.date >= weekAgo).length;
   const streak = useMemo(
-    () => weekStreak(workouts.map((workout) => workout.date), me?.weeklyTarget ?? 3, toIsoDate(new Date())),
+    () => weekStreak(trainedDates(workouts), me?.weeklyTarget ?? 3, toIsoDate(new Date())),
     [workouts, me?.weeklyTarget],
   );
 

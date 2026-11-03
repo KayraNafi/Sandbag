@@ -1,4 +1,4 @@
-import { voice, weekStreak } from '@sandbag/shared';
+import { trainedDates, voice, weekStreak } from '@sandbag/shared';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useMemo, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
@@ -19,7 +19,7 @@ export default function Finished() {
   const [handled, setHandled] = useState(false);
   const target = useSession((state) => state.me?.weeklyTarget ?? 3);
   const streak = useMemo(
-    () => weekStreak(activeLogged(logged).map((item) => item.date), target, toIsoDate(new Date())).current,
+    () => weekStreak(trainedDates(activeLogged(logged)), target, toIsoDate(new Date())).current,
     [logged, target],
   );
 

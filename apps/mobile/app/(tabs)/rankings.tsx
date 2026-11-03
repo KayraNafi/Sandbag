@@ -62,9 +62,9 @@ export default function Rankings() {
         </>
       ) : null}
       <Muted>
-        Your points are the average of two scores out of 100. Progress: every +1% on your own lifts is 10 points, and each lift counts for 25% at most, up or down.
-        Consistency: workouts done against your weekly target. Heavier friends get no head start.
-        Calls settled in the period add or take points on top: +5 for beating one, −5 for failing it, double for getting caught, and −3 for calling wrong.
+        Your points are the average of two scores out of 100. Progress: how much stronger you got on the lifts you did, using weight and reps, against your best of the four weeks before. Small gains count for plenty, and +25% is full marks.
+        Consistency: days trained against your weekly goal, counted as at least 3. The week runs Monday to Sunday. Heavier friends get no head start.
+        Calls settled in the period add or take points on top: +5 for beating one, −5 for failing it, double for getting caught, and −3 for calling wrong, up to 10 either way a week.
       </Muted>
       <Button title="What’s sandbagging?" variant="ghost" onPress={() => router.push('/about')} />
     </Screen>

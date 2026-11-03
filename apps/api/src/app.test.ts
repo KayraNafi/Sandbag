@@ -1,5 +1,5 @@
 import { PGlite } from '@electric-sql/pglite';
-import type { ApiKeyView, AuthResponse, CallView, NotificationView, TrophyView, Entry, InviteSummary, LoggedWorkout, PostView, RankingRow, SyncResponse } from '@sandbag/shared';
+import { addDays, mondayOf, type ApiKeyView, type AuthResponse, type CallView, type NotificationView, type TrophyView, type Entry, type InviteSummary, type LoggedWorkout, type PostView, type RankingRow, type SyncResponse } from '@sandbag/shared';
 import { eq } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/pglite';
 import { migrate } from 'drizzle-orm/pglite/migrator';
@@ -46,6 +46,8 @@ async function crew(): Promise<{ founder: AuthResponse; friend: AuthResponse }> 
 const entry = (name: string, weight: number | null, extra: Partial<Entry> = {}): Entry => ({
   id: `${name.replace(/\W/g, '')}-1`, name, kind: 'strength', sets: 3, reps: 8, weight, perSide: false, rpe: 8, minutes: null, note: '', ...extra,
 });
+
+const todayIso = () => new Date().toISOString().slice(0, 10);
 
 const logged = (id: string, entries: Entry[], extra: Partial<LoggedWorkout> = {}): LoggedWorkout => ({
   id, date: new Date().toISOString().slice(0, 10), title: 'Upper', savedWorkoutId: null, entries, updatedAt: Date.now(), deleted: false, ...extra,
@@ -355,6 +357,16 @@ describe('sandbag calls', () => {
     expect(await statusOf(friend.token)).toBe('failed');
   });
 
+  it('caps call points at 10 a week, either way', async () => {
+    const { founder, friend } = await crew();
+    const lifts = ['Squat', 'Bench', 'Row'];
+    const created = await post(friend.token, { entries: lifts.map((name) => entry(name, 50)) });
+    for (const name of lifts) await call('POST', `/posts/${created.body.id}/calls`, founder.token, { exercise: name, line: 'Hm.' });
+    await sync(friend.token, 0, [logged('w2', lifts.map((name) => entry(name, 40)), later())]);
+    expect((await rowOf(founder.token, founder.user.id))?.calls).toBe(10);
+    expect((await rowOf(founder.token, friend.user.id))?.calls).toBe(-10);
+  });
+
   it('puts call points on the ranking score', async () => {
     const { founder, friend } = await called();
     await sync(friend.token, 0, [logged('w2', [entry('Lat pulldown', 80)], later())]);
@@ -447,7 +459,8 @@ describe('overtaking', () => {
   it('tells a friend you passed them, once a day', async () => {
     const { founder, friend } = await crew();
     await sync(friend.token, 0, [logged('f1', [entry('Curl', 10)])]);
-    await sync(founder.token, 0, [logged('m1', [entry('Curl', 10)]), logged('m2', [entry('Row', 10)])]);
+    // Two days to the friend's one. Tomorrow counts, as someone in a later time zone.
+    await sync(founder.token, 0, [logged('m1', [entry('Curl', 10)]), logged('m2', [entry('Row', 10)], { date: addDays(todayIso(), 1) })]);
     await sync(founder.token, 0, [logged('m3', [entry('Press', 10)])]);
     const notes = await call<NotificationView[]>('GET', '/notifications', friend.token);
     expect(notes.body.filter((note) => note.title === 'Overtaken')).toHaveLength(1);
@@ -458,6 +471,21 @@ describe('overtaking', () => {
     await sync(founder.token, 0, [logged('m1', [entry('Curl', 10)])]);
     const notes = await call<NotificationView[]>('GET', '/notifications', friend.token);
     expect(notes.body.filter((note) => note.title === 'Overtaken')).toHaveLength(0);
+  });
+});
+
+describe('recorded time', () => {
+  it('moves when a session’s numbers change, not its note', async () => {
+    const founder = await register('founder', BOOTSTRAP);
+    const first = logged('w1', [entry('Row', 50)], { updatedAt: 1000 });
+    await sync(founder.token, 0, [first]);
+    const long = new Date('2026-01-01T00:00:00Z');
+    await db.update(schema.loggedWorkouts).set({ recordedAt: long });
+    const recorded = async () => (await db.select().from(schema.loggedWorkouts))[0]?.recordedAt;
+    await sync(founder.token, 0, [{ ...first, entries: [entry('Row', 50, { note: 'felt good' })], updatedAt: 2000 }]);
+    expect(await recorded()).toEqual(long);
+    await sync(founder.token, 0, [{ ...first, entries: [entry('Row', 55)], updatedAt: 3000 }]);
+    expect((await recorded())!.getTime()).toBeGreaterThan(Date.now() - 60_000);
   });
 });
 
@@ -477,7 +505,9 @@ describe('streaks and trophies', () => {
 
   it('puts the streak in the rankings', async () => {
     const founder = await register('founder', BOOTSTRAP);
-    await sync(founder.token, 0, [logged('a', [entry('Curl', 10)]), logged('b', [entry('Curl', 10)]), logged('c', [entry('Curl', 10)])]);
+    // Three days last week. Three sessions in one day would be one day trained.
+    const lastMonday = addDays(mondayOf(todayIso()), -7);
+    await sync(founder.token, 0, ['a', 'b', 'c'].map((id, day) => logged(id, [entry('Curl', 10)], { date: addDays(lastMonday, day) })));
     const rows = await call<RankingRow[]>('GET', '/rankings?period=week', founder.token);
     expect(rows.body[0]?.streak).toBe(1);
   });

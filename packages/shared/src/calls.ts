@@ -1,7 +1,7 @@
 import type { Entry } from './schemas';
 import { exerciseKey } from './scoring';
-
-export const DAY_MS = 86_400_000;
+import { entryMax } from './strength';
+import { DAY_MS } from './time';
 
 /**
  * open: waiting on their next session of the lift.
@@ -27,6 +27,9 @@ export const HONEST_MARGIN = 0.05;
 export const HONEST_RPE = 9;
 export const SANDBAG_BADGE_DAYS = 7;
 
+/** Calls can move someone's score this far in a week, either way, so two friends can't trade points to win. */
+export const MAX_WEEKLY_CALL_POINTS = 10;
+
 /** Points for each side once a call is settled. Calling isn't free: being wrong costs the caller. */
 export const CALL_POINTS: Record<CallStatus, { target: number; caller: number }> = {
   open: { target: 0, caller: 0 },
@@ -36,25 +39,6 @@ export const CALL_POINTS: Record<CallStatus, { target: number; caller: number }>
   failed: { target: -5, caller: 5 },
   caught: { target: -10, caller: 10 },
 };
-
-/**
- * Estimated one-rep max, so more reps at the same weight counts as stronger.
- * Past 12 reps the estimate stops meaning much, so reps beyond that add nothing.
- */
-export function estimatedMax(weight: number, reps: number | null): number {
-  const counted = Math.min(Math.max(reps ?? 1, 1), 12);
-  return weight * (1 + (counted - 1) / 30);
-}
-
-/** The most reps any set of an entry reached. */
-export function topReps(entry: Pick<Entry, 'reps' | 'setReps'>): number | null {
-  return Math.max(entry.reps ?? 0, ...(entry.setReps ?? []).map((value) => value ?? 0)) || null;
-}
-
-/** The best set of an entry: its weight for its top reps. */
-export function entryMax(entry: Pick<Entry, 'weight' | 'reps' | 'setReps'>): number | null {
-  return entry.weight === null ? null : estimatedMax(entry.weight, topReps(entry));
-}
 
 export interface LiftResult {
   max: number;
@@ -82,4 +66,13 @@ export function judgeCall(targetMax: number, lift: LiftResult): 'cleared' | 'fai
 /** A watched miss followed by this much more was never a limit. */
 export function exposesSandbag(targetMax: number, lift: LiftResult): boolean {
   return lift.max >= targetMax * (1 + HONEST_MARGIN);
+}
+
+/** Someone's call points over a period, each Monday-to-Sunday week capped either way. */
+export function cappedCallPoints(settled: { monday: string; points: number }[]): number {
+  const weeks = new Map<string, number>();
+  for (const { monday, points } of settled) weeks.set(monday, (weeks.get(monday) ?? 0) + points);
+  let total = 0;
+  for (const points of weeks.values()) total += Math.max(-MAX_WEEKLY_CALL_POINTS, Math.min(MAX_WEEKLY_CALL_POINTS, points));
+  return total;
 }

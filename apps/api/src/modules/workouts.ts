@@ -1,4 +1,4 @@
-import type { LoggedWorkout, SavedWorkout } from '@sandbag/shared';
+import { exerciseKey, type Entry, type LoggedWorkout, type SavedWorkout } from '@sandbag/shared';
 import { and, eq, sql } from 'drizzle-orm';
 import type { Tx } from '../db/client';
 import { loggedWorkouts, savedWorkouts, syncSeq } from '../db/schema';
@@ -14,6 +14,11 @@ export const toSaved = (row: typeof savedWorkouts.$inferSelect): SavedWorkout =>
   id: row.id, name: row.name, position: row.position, exercises: row.exercises, savedFrom: row.savedFrom, updatedAt: row.updatedAt, deleted: row.deleted,
 });
 
+/** What scoring reads from a session. A changed note or title isn't a changed number. */
+const numbersOf = (entries: Entry[]) => JSON.stringify(entries.map((entry) => [
+  exerciseKey(entry.name), entry.kind, entry.weight, entry.reps, entry.setReps, entry.perSide, entry.includesEquipment, entry.minutes,
+]));
+
 /** Last write wins on updatedAt. Returns the server copies that beat what was sent. */
 export async function saveLogged(tx: Tx, user: { id: string; displayName: string }, docs: LoggedWorkout[]): Promise<{ rejected: LoggedWorkout[]; written: number }> {
   const rejected: LoggedWorkout[] = [];
@@ -26,7 +31,8 @@ export async function saveLogged(tx: Tx, user: { id: string; displayName: string
       if (existing.updatedAt > doc.updatedAt) rejected.push(toLogged(existing));
       continue;
     }
-    const values = { ...doc, ownerId: user.id, seq: nextSeq() };
+    const unchanged = existing && numbersOf(existing.entries) === numbersOf(doc.entries);
+    const values = { ...doc, ownerId: user.id, seq: nextSeq(), recordedAt: unchanged ? existing.recordedAt : new Date() };
     await tx.insert(loggedWorkouts).values(values).onConflictDoUpdate({ target: [loggedWorkouts.ownerId, loggedWorkouts.id], set: values });
     written += 1;
     await callsOnSave(tx, user, existing ? toLogged(existing) : null, doc);

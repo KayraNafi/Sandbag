@@ -51,6 +51,8 @@ export const loggedWorkouts = pgTable('logged_workouts', {
   updatedAt: bigint('updated_at', { mode: 'number' }).notNull(),
   deleted: boolean('deleted').notNull().default(false),
   seq: bigint('seq', { mode: 'number' }).notNull(),
+  // The server's clock, unlike updatedAt: when these numbers last changed. Written up long after its date, a session can't set a best.
+  recordedAt: timestamp('recorded_at', { withTimezone: true }).notNull().defaultNow(),
 }, (t) => [
   primaryKey({ columns: [t.ownerId, t.id] }),
   index('logged_workouts_seq').on(t.ownerId, t.seq),

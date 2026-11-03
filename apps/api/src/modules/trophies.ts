@@ -1,4 +1,4 @@
-import { beatABest, DAY_MS, TROPHIES, voice, weekStreak, type CallStatus, type TrophyFacts, type TrophyView } from '@sandbag/shared';
+import { beatABest, DAY_MS, hasWork, trainedDates, TROPHIES, voice, weekStreak, type CallStatus, type TrophyFacts, type TrophyView } from '@sandbag/shared';
 import { and, eq, or, sql } from 'drizzle-orm';
 import type { FastifyInstance } from 'fastify';
 import type { Db, DbOrTx } from '../db/client';
@@ -26,14 +26,15 @@ async function factsFor(db: DbOrTx, user: { id: string; weeklyTarget: number }):
   const table = longEnough ? await crewTable(db, user.id, 'month') : [];
 
   return {
-    workouts: workouts.length,
+    // An empty session is not a workout.
+    workouts: workouts.filter((workout) => workout.entries.some(hasWork)).length,
     beatABest: beatABest(workouts),
     callsBeaten: against.filter((call) => call.status === 'cleared').length,
     callsAgainst: against.length,
     callsFailed: against.filter((call) => lost(call.status)).length,
     callsWon: calls.filter((call) => call.callerId === user.id && lost(call.status)).length,
     joined,
-    bestStreak: weekStreak(workouts.map((workout) => workout.date), user.weeklyTarget, today).best,
+    bestStreak: weekStreak(trainedDates(workouts), user.weeklyTarget, today).best,
     ledTheMonth: table.length > 1 && table.find((row) => row.user.id === user.id)?.rank === 1,
   };
 }

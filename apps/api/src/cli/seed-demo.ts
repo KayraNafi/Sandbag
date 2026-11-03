@@ -1,7 +1,7 @@
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { PGlite } from '@electric-sql/pglite';
 import type { AuthResponse, Entry, LoggedWorkout, PostView, RankingRow, SavedExercise, SavedWorkout } from '@sandbag/shared';
-import { and, eq, inArray, like } from 'drizzle-orm';
+import { and, eq, inArray, like, or, sql } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/pglite';
 import { migrate } from 'drizzle-orm/pglite/migrator';
 import { fileURLToPath } from 'node:url';
@@ -77,7 +77,7 @@ const firstRun = existing.length === 0;
 if (!firstRun) {
   const ids = existing.map((user) => user.id);
   await db.delete(schema.posts).where(inArray(schema.posts.authorId, ids));
-  await db.delete(schema.sandbagCalls).where(inArray(schema.sandbagCalls.callerId, ids));
+  await db.delete(schema.sandbagCalls).where(or(inArray(schema.sandbagCalls.callerId, ids), inArray(schema.sandbagCalls.targetId, ids)));
   await db.delete(schema.loggedWorkouts).where(inArray(schema.loggedWorkouts.ownerId, ids));
   await db.update(schema.users).set({ sandbagUntil: null }).where(inArray(schema.users.id, ids));
   await db.delete(schema.notifications).where(and(eq(schema.notifications.userId, me.id), like(schema.notifications.title, 'Sandbag confirmed%')));
@@ -172,10 +172,14 @@ await post(chad.token, 'workout', 'Starting Monday', 'This time I mean it.', [li
 // Your call on Bruno, which he fails: the sandbag badge, and a notification for you.
 const brunoPost = await post(bruno.token, 'workout', 'Deadlifts', 'Easy day.', [lift('Deadlift', 100, { rpe: 6 })]);
 await callSandbag(myToken, brunoPost.id, 'Deadlift', 'RPE 6, sure.');
-await sync(bruno.token, [{ ...session('Deadlifts', 0, [lift('Deadlift', 100, { rpe: 10, note: 'tweaked something, allegedly' })]), updatedAt: Date.now() + 1000 }]);
+await sync(bruno.token, [{ ...session('Deadlifts', 0, [lift('Deadlift', 95, { rpe: 7, note: 'saving it for next week' })]), updatedAt: Date.now() + 1000 }]);
 
 // One open call for you to watch, and Rocco's other lifts are there for you to call.
 await callSandbag(dex.token, roccoPost.id, 'Cable curls', 'With that note? Do it clean.');
+
+// The crew's history arrived just now through sync, but in the story it was logged on the day.
+const crewIds = (await db.select({ id: schema.users.id }).from(schema.users).where(inArray(schema.users.username, CREW.map((person) => person.username)))).map((row) => row.id);
+await db.update(schema.loggedWorkouts).set({ recordedAt: sql`${schema.loggedWorkouts.date}::timestamptz` }).where(inArray(schema.loggedWorkouts.ownerId, crewIds));
 
 const table = await call<RankingRow[]>('GET', '/rankings?period=week', myToken);
 for (const row of table) console.log(row.rank, row.user.displayName, `${row.score} pts`, `progress ${row.progress}%`, `${row.workouts}/${row.target}`, `streak ${row.streak}`, row.wearingSandbag ? 'SANDBAG' : '');
