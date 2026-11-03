@@ -7,9 +7,29 @@ updates:
     groups:
       minor-and-patch:
         update-types: [minor, patch]
+    ignore:
+      # Expo SDK decides these; `npx expo install --check` is the source of truth.
+      - dependency-name: "expo*"
+      - dependency-name: "@expo/*"
+      - dependency-name: "react"
+      - dependency-name: "react-dom"
+      - dependency-name: "react-native"
+      - dependency-name: "react-native-*"
+      - dependency-name: "@react-native-async-storage/async-storage"
+      # Tracks the Node LTS in the Dockerfile.
+      - dependency-name: "@types/node"
+        update-types: ["version-update:semver-major"]
   - package-ecosystem: docker
     directory: /
     schedule: { interval: weekly }
+    ignore:
+      # Odd Node releases never become LTS; move LTS lines by hand.
+      - dependency-name: "node"
+        update-types: ["version-update:semver-major"]
   - package-ecosystem: docker-compose
     directory: /deploy
     schedule: { interval: weekly }
+    ignore:
+      # A Postgres major needs a data migration, not an image bump.
+      - dependency-name: "postgres"
+        update-types: ["version-update:semver-major"]

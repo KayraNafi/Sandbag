@@ -10,8 +10,8 @@
     "typecheck": "npm run typecheck --workspaces --if-present"
   },
   "devDependencies": {
-    "@types/node": "^22",
-    "typescript": "~6.0.3",
+    "@types/node": "^24.19.2",
+    "typescript": "~7.0.2",
     "vitest": "^5.0.5"
   },
   "license": "AGPL-3.0-only"
