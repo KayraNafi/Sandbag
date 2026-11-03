@@ -25,8 +25,11 @@ const tokenStore = Platform.OS === 'web'
 interface SessionState {
   status: 'loading' | 'signedOut' | 'signedIn';
   me: Me | null;
+  /** Just signed up, so the walkthrough comes before anything else. Never stored: a restart skips it. */
+  newAccount: boolean;
   restore: () => Promise<void>;
-  signIn: (auth: AuthResponse) => Promise<void>;
+  signIn: (auth: AuthResponse, options?: { newAccount?: boolean }) => Promise<void>;
+  welcomed: () => void;
   signOut: () => Promise<void>;
   setMe: (me: Me) => void;
 }
@@ -35,12 +38,13 @@ export const useSession = create<SessionState>((set, get) => {
   const endSession = async () => {
     await tokenStore.clear();
     configureApi({ token: null });
-    set({ status: 'signedOut', me: null });
+    set({ status: 'signedOut', me: null, newAccount: false });
   };
 
   return {
     status: 'loading',
     me: null,
+    newAccount: false,
     restore: async () => {
       const token = await tokenStore.get();
       configureApi({ token, onUnauthorized: () => void endSession() });
@@ -56,13 +60,14 @@ export const useSession = create<SessionState>((set, get) => {
         set({ me });
       }).catch(() => {});
     },
-    signIn: async ({ token, user }) => {
+    signIn: async ({ token, user }, { newAccount = false } = {}) => {
       await tokenStore.set(token);
       configureApi({ token: await tokenStore.get() });
       useData.getState().claim(user.id);
       useData.getState().setProfile(user);
-      set({ status: 'signedIn', me: user });
+      set({ status: 'signedIn', me: user, newAccount });
     },
+    welcomed: () => set({ newAccount: false }),
     signOut: async () => {
       await api.logout().catch(() => {});
       useData.getState().reset();
@@ -81,5 +86,5 @@ export async function forgetSession(): Promise<void> {
   await tokenStore.clear();
   configureApi({ token: null });
   useData.getState().reset();
-  useSession.setState({ status: 'signedOut', me: null });
+  useSession.setState({ status: 'signedOut', me: null, newAccount: false });
 }

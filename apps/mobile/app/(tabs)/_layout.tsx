@@ -1,7 +1,8 @@
-import { Tabs } from 'expo-router';
+import { Redirect, Tabs } from 'expo-router';
 import type { ColorValue } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Path } from 'react-native-svg';
+import { useSession } from '@/auth/session';
 import { colors, fonts } from '@/theme';
 
 const BAR_HEIGHT = 62;
@@ -23,6 +24,9 @@ const icon = (name: keyof typeof ICONS) => function TabIcon({ color }: { color: 
 
 export default function TabsLayout() {
   const insets = useSafeAreaInsets();
+  const newAccount = useSession((state) => state.newAccount);
+  // Before the tabs exist, so the navigator isn't built and torn down on the way to the walkthrough.
+  if (newAccount) return <Redirect href="/welcome" />;
   return (
     <Tabs
       screenOptions={{

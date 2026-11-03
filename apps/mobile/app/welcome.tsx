@@ -3,6 +3,7 @@ import { router } from 'expo-router';
 import { useEffect, useRef, useState, type ComponentRef } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View, type NativeScrollEvent, type NativeSyntheticEvent } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useSession } from '@/auth/session';
 import { AvatarArt } from '@/components/Avatar';
 import { BodyMap } from '@/components/BodyMap';
 import { Logo } from '@/components/Logo';
@@ -109,6 +110,7 @@ export default function Welcome() {
 
   const finish = () => {
     feel.win();
+    useSession.getState().welcomed();
     router.replace('/');
   };
 
