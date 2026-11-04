@@ -1,10 +1,11 @@
-import { addFriendSchema, nextInviteGoal, type InviteSummary, type PublicUser } from '@sandbag/shared';
-import { and, eq, inArray, or, sql } from 'drizzle-orm';
+import { addFriendSchema, DAY_MS, nextInviteGoal, voice, type InviteSummary, type PublicUser } from '@sandbag/shared';
+import { and, eq, inArray, lt, or, sql } from 'drizzle-orm';
 import type { FastifyInstance } from 'fastify';
 import type { Db, DbOrTx } from '../db/client';
-import { friendships, users } from '../db/schema';
-import { badRequest, notFound } from '../errors';
+import { friendships, nudges, users } from '../db/schema';
+import { badRequest, conflict, notFound } from '../errors';
 import { newInviteCode, requireUser, toPublic } from './auth';
+import { notify } from './notifications';
 
 const UUID = /^[0-9a-f-]{36}$/i;
 const ordered = (a: string, b: string) => (a < b ? { userA: a, userB: b } : { userA: b, userB: a });
@@ -51,6 +52,20 @@ export function friendRoutes(app: FastifyInstance, db: Db): void {
     if (!UUID.test(request.params.id)) throw notFound();
     const pair = ordered(user.id, request.params.id);
     await db.delete(friendships).where(and(eq(friendships.userA, pair.userA), eq(friendships.userB, pair.userB)));
+    reply.code(204);
+  });
+
+  // A nudge is a joke, and it stops being one the second time, so it's once a day per friend.
+  app.post<{ Params: { id: string } }>('/friends/:id/nudge', { config: { rateLimit: { max: 20, timeWindow: '1 minute' } } }, async (request, reply) => {
+    const user = await requireUser(db, request);
+    const friendId = request.params.id;
+    if (!UUID.test(friendId) || !(await areFriends(db, user.id, friendId))) throw notFound();
+    // One statement, so two taps at once can't both get through.
+    const [sent] = await db.insert(nudges).values({ senderId: user.id, receiverId: friendId })
+      .onConflictDoUpdate({ target: [nudges.senderId, nudges.receiverId], set: { sentAt: sql`now()` }, setWhere: lt(nudges.sentAt, new Date(Date.now() - DAY_MS)) })
+      .returning({ at: nudges.sentAt });
+    if (!sent) throw conflict('You already nudged them today. Let them live.');
+    await notify(db, friendId, { kind: 'nudge', title: 'Nudge', body: voice.nudged(user.displayName, sent.at.getTime()), route: 'train' });
     reply.code(204);
   });
 

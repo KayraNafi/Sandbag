@@ -77,6 +77,7 @@ export const api = {
   friends: () => request<PublicUser[]>('GET', '/friends'),
   addFriend: (inviteCode: string) => request<PublicUser>('POST', '/friends', { inviteCode }),
   removeFriend: (id: string) => request<void>('DELETE', `/friends/${id}`),
+  nudge: (id: string) => request<void>('POST', `/friends/${id}/nudge`),
   rotateInviteCode: () => request<{ code: string }>('POST', '/invites/rotate'),
   invites: () => request<InviteSummary>('GET', '/invites'),
   notifications: () => request<NotificationView[]>('GET', '/notifications'),

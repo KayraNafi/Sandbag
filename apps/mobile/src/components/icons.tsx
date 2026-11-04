@@ -11,6 +11,8 @@ const PATHS = {
   flame: 'M12 3c1 3.5 5.5 6 5.5 11a5.5 5.5 0 0 1-11 0c0-2 1-3.5 2-4.5.3 1.5 1 2.5 2 3 0-3.5.5-6.5 1.5-9.5',
   crown: 'M4 18h16M4 15l-1-9 5 4 4-6 4 6 5-4-1 9z',
   clock: 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18M12 7v5l3 2',
+  bell: 'M6 9a6 6 0 1 1 12 0c0 6 2.5 7.5 2.5 7.5h-17S6 15 6 9M10 20a2.2 2.2 0 0 0 4 0',
+  plus: 'M12 5v14M5 12h14',
 } as const;
 
 export type IconName = keyof typeof PATHS;

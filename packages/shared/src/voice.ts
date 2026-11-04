@@ -1,3 +1,6 @@
+/** One of a few lines, so the same joke doesn't land twice in a row. */
+const pick = (lines: string[], seed: number) => lines[Math.abs(Math.floor(seed)) % lines.length]!;
+
 /** The app's one voice: lightly sarcastic, about effort and excuses, never bodies. */
 export const voice = {
   weightUp: (gain: string) => `+${gain} kg. Alert the press.`,
@@ -24,4 +27,10 @@ export const voice = {
   trophy: (name: string) => `${name}. Put it on your CV.`,
   trophies: (count: number) => `${count} trophies at once. Somebody’s been busy, or lying.`,
   workoutSaved: (name: string, workout: string) => `${name} saved ${workout}. Now you have to actually be better at it.`,
+  nudged: (name: string, seed = 0) => pick([
+    `${name} noticed you haven’t posted today. Just saying.`,
+    `${name} checked on you. You weren’t there.`,
+    `${name} says your gym bag’s been asking about you.`,
+  ], seed),
+  nudgeSent: (name: string, seed = 0) => pick([`Nudged ${name}. They know you know.`, `Nudged ${name}. Very supportive. Very smug.`], seed),
 };

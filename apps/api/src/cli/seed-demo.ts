@@ -77,6 +77,7 @@ const firstRun = existing.length === 0;
 if (!firstRun) {
   const ids = existing.map((user) => user.id);
   await db.delete(schema.posts).where(inArray(schema.posts.authorId, ids));
+  await db.delete(schema.nudges).where(or(inArray(schema.nudges.senderId, ids), inArray(schema.nudges.receiverId, ids)));
   await db.delete(schema.sandbagCalls).where(or(inArray(schema.sandbagCalls.callerId, ids), inArray(schema.sandbagCalls.targetId, ids)));
   await db.delete(schema.loggedWorkouts).where(inArray(schema.loggedWorkouts.ownerId, ids));
   await db.update(schema.users).set({ sandbagUntil: null }).where(inArray(schema.users.id, ids));
@@ -167,7 +168,9 @@ await respect(tony.token, dexPost.id);
 await post(tony.token, 'share', 'Push Day', 'The one that actually fixed my shoulders.', [lift('Incline press', null, { sets: 4, reps: 10 }), lift('Lateral raises', null, { sets: 3, reps: 15 }), lift('Dips', null, { sets: 3, reps: 12 }), lift('Rope', null, { kind: 'time', sets: null, reps: null, minutes: 5 })]);
 await post(rocco.token, 'share', 'Leg Day From Hell', 'You won’t walk. You’re welcome.', [lift('Squat', null, { sets: 5, reps: 5 }), lift('Hip thrust', null, { sets: 4, reps: 8 }), lift('Walking lunges', null, { sets: 3, reps: 20 })]);
 await post(tony.token, 'workout', 'For your eyes only', 'Only sent this to you. Don’t tell Dex.', [lift('Squat', 72.5, { rpe: 10, note: 'never again' })], { recipientIds: [me.id] });
-await post(chad.token, 'workout', 'Starting Monday', 'This time I mean it.', [lift('Walking to the gym', null, { note: 'got as far as the car' })]);
+const chadPost = await post(chad.token, 'workout', 'Starting Monday', 'This time I mean it.', [lift('Walking to the gym', null, { note: 'got as far as the car' })]);
+// Chad posted yesterday and nothing since, so there's someone to nudge.
+await db.update(schema.posts).set({ createdAt: sql`now() - interval '1 day'` }).where(eq(schema.posts.id, chadPost.id));
 
 // Your call on Bruno, which he fails: the sandbag badge, and a notification for you.
 const brunoPost = await post(bruno.token, 'workout', 'Deadlifts', 'Easy day.', [lift('Deadlift', 100, { rpe: 6 })]);

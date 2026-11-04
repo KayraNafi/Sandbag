@@ -23,6 +23,7 @@ const LOOK: Record<NotificationKind, { icon: IconName; color: string }> = {
   recruit: { icon: 'people', color: colors.volt },
   reply: { icon: 'reply', color: colors.ink },
   saved: { icon: 'share', color: colors.ink },
+  nudge: { icon: 'bell', color: colors.warn },
 };
 
 /** Rows arrive one after another, but only the first few wait their turn. */

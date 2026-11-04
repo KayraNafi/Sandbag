@@ -7,17 +7,19 @@ interface ConfirmRequest {
   title: string;
   message: string;
   action: string;
+  /** Red only for what can't be taken back. */
+  danger: boolean;
   answer: (sure: boolean) => void;
 }
 
 const useConfirm = create<{ request: ConfirmRequest | null }>(() => ({ request: null }));
 
-/** Asks before something destructive. Anything but pressing the action counts as no. */
-export function confirm(title: string, message: string, action: string): Promise<boolean> {
+/** Asks before acting. Anything but pressing the action counts as no. */
+export function confirm(title: string, message: string, action: string, { danger = true } = {}): Promise<boolean> {
   Keyboard.dismiss();
   useConfirm.getState().request?.answer(false);
   return new Promise((resolve) => {
-    useConfirm.setState({ request: { title, message, action, answer: resolve } });
+    useConfirm.setState({ request: { title, message, action, danger, answer: resolve } });
   });
 }
 
@@ -36,7 +38,7 @@ export function ConfirmHost() {
           <Text accessibilityRole="header" style={styles.title}>{request.title}</Text>
           <Text style={styles.message}>{request.message}</Text>
           <View style={styles.buttons}>
-            <Button title={request.action} variant="danger" onPress={() => answer(true)} />
+            <Button title={request.action} variant={request.danger ? 'danger' : 'primary'} onPress={() => answer(true)} />
             <Button title="Cancel" variant="ghost" onPress={() => answer(false)} />
           </View>
         </View>

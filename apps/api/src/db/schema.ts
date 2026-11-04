@@ -140,6 +140,13 @@ export const sandbagCalls = pgTable('sandbag_calls', {
   index('sandbag_calls_due').on(t.deadlineAt).where(sql`${t.status} in ('open', 'watching')`),
 ]);
 
+/** The last nudge each person sent each friend, which is all the once-a-day rule needs. */
+export const nudges = pgTable('nudges', {
+  senderId: uuid('sender_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  receiverId: uuid('receiver_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  sentAt: timestamp('sent_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [primaryKey({ columns: [t.senderId, t.receiverId] })]);
+
 export const notifications = pgTable('notifications', {
   id: uuid('id').primaryKey().defaultRandom(),
   userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),

@@ -114,6 +114,23 @@ describe('invites', () => {
   });
 });
 
+describe('nudges', () => {
+  it('reaches a friend once a day, and nobody else', async () => {
+    const { founder, friend } = await crew();
+    const stranger = await register('stranger', founder.user.inviteCode);
+    await call('DELETE', `/friends/${stranger.user.id}`, founder.token);
+
+    expect((await call('POST', `/friends/${friend.user.id}/nudge`, founder.token)).status).toBe(204);
+    expect((await call('POST', `/friends/${friend.user.id}/nudge`, founder.token)).status).toBe(409);
+    // Each direction has its own day.
+    expect((await call('POST', `/friends/${founder.user.id}/nudge`, friend.token)).status).toBe(204);
+    expect((await call('POST', `/friends/${stranger.user.id}/nudge`, founder.token)).status).toBe(404);
+
+    const news = await call<NotificationView[]>('GET', '/notifications', friend.token);
+    expect(news.body.filter((item) => item.kind === 'nudge')).toHaveLength(1);
+  });
+});
+
 describe('sync', () => {
   it('round-trips and only returns what is new', async () => {
     const { founder } = await crew();
