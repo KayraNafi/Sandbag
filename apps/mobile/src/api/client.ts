@@ -65,7 +65,7 @@ export const api = {
   deleteAccount: (password: string) => request<void>('DELETE', '/me', { password }),
   sync: (input: SyncRequest) => request<SyncResponse>('POST', '/sync', input),
   feed: (before?: string) => request<PostView[]>('GET', before ? `/feed?before=${encodeURIComponent(before)}` : '/feed'),
-  post: (id: string) => request<PostView & { replies: ReplyView[] }>('GET', `/posts/${id}`),
+  post: (id: string) => request<PostView & { replies: ReplyView[]; calls: CallView[] }>('GET', `/posts/${id}`),
   createPost: (input: NewPost) => request<PostView>('POST', '/posts', input),
   deletePost: (id: string) => request<void>('DELETE', `/posts/${id}`),
   respect: (id: string, on: boolean) => request<void>(on ? 'PUT' : 'DELETE', `/posts/${id}/respect`),

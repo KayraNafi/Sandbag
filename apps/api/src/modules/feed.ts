@@ -3,7 +3,7 @@ import {
   type CallView, type Entry, type PostView, type ReplyView, type SavedWorkout,
 } from '@sandbag/shared';
 import { randomUUID } from 'node:crypto';
-import { and, desc, eq, inArray, lt, or, sql } from 'drizzle-orm';
+import { and, desc, eq, inArray, lt, or, sql, type SQL } from 'drizzle-orm';
 import { alias } from 'drizzle-orm/pg-core';
 import type { FastifyInstance } from 'fastify';
 import type { Db, DbOrTx } from '../db/client';
@@ -41,6 +41,34 @@ async function loadVisiblePost(db: DbOrTx, postId: string, viewerId: string): Pr
   return post;
 }
 
+/** Calls as the viewer may see them: the number stays hidden if the post hid it, except from the one called. */
+async function callViews(db: DbOrTx, where: SQL | undefined, viewerId: string, limit: number): Promise<CallView[]> {
+  const caller = alias(users, 'caller');
+  const target = alias(users, 'target');
+  const rows = await db.select({ call: sandbagCalls, caller, target }).from(sandbagCalls)
+    .innerJoin(caller, eq(caller.id, sandbagCalls.callerId))
+    .innerJoin(target, eq(target.id, sandbagCalls.targetId))
+    .where(where)
+    .orderBy(desc(sandbagCalls.createdAt))
+    .limit(limit);
+  return rows.map((row) => {
+    const side = row.call.callerId === viewerId ? 'caller' : row.call.targetId === viewerId ? 'target' : null;
+    return {
+      id: row.call.id,
+      caller: toPublic(row.caller),
+      target: toPublic(row.target),
+      exercise: row.call.exercise,
+      targetWeight: row.call.weightsHidden && row.call.targetId !== viewerId ? null : row.call.targetWeight,
+      targetReps: row.call.targetReps,
+      line: row.call.line,
+      status: row.call.status,
+      deadlineAt: LIVE_CALLS.includes(row.call.status) ? row.call.deadlineAt.toISOString() : null,
+      points: side ? CALL_POINTS[row.call.status][side] : 0,
+      createdAt: row.call.createdAt.toISOString(),
+    };
+  });
+}
+
 async function toViews(db: DbOrTx, rows: Post[], viewerId: string): Promise<PostView[]> {
   if (!rows.length) return [];
   const ids = rows.map((row) => row.id);
@@ -51,13 +79,17 @@ async function toViews(db: DbOrTx, rows: Post[], viewerId: string): Promise<Post
   const respects = await countBy(postRespects);
   const saves = await countBy(postSaves);
   const replyCounts = await db.select({ postId: postReplies.postId, total: sql<number>`count(*)::int` }).from(postReplies).where(inArray(postReplies.postId, ids)).groupBy(postReplies.postId);
-  const callCounts = await db.select({ postId: sandbagCalls.postId, total: sql<number>`count(*)::int` }).from(sandbagCalls).where(inArray(sandbagCalls.postId, ids)).groupBy(sandbagCalls.postId);
+  const callCounts = await db.select({
+    postId: sandbagCalls.postId,
+    total: sql<number>`count(*)::int`,
+    live: sql<number>`(count(*) filter (where ${inArray(sandbagCalls.status, LIVE_CALLS)}))::int`,
+  }).from(sandbagCalls).where(inArray(sandbagCalls.postId, ids)).groupBy(sandbagCalls.postId);
   const mine = await db.select({ postId: postRespects.postId }).from(postRespects).where(and(inArray(postRespects.postId, ids), eq(postRespects.userId, viewerId)));
   const mySaves = await db.select({ postId: postSaves.postId }).from(postSaves).where(and(inArray(postSaves.postId, ids), eq(postSaves.userId, viewerId)));
   const authors = await db.select().from(users).where(inArray(users.id, rows.map((row) => row.authorId)));
   const authorById = new Map(authors.map((author) => [author.id, author]));
   const replyMap = new Map(replyCounts.map((row) => [row.postId, row.total]));
-  const callMap = new Map(callCounts.map((row) => [row.postId, row.total]));
+  const callMap = new Map(callCounts.map((row) => [row.postId, row]));
   const mineSet = new Set(mine.map((row) => row.postId));
   const mySaveSet = new Set(mySaves.map((row) => row.postId));
   return rows.map((row) => ({
@@ -72,7 +104,8 @@ async function toViews(db: DbOrTx, rows: Post[], viewerId: string): Promise<Post
     respects: respects.get(row.id) ?? 0,
     respectedByMe: mineSet.has(row.id),
     replyCount: replyMap.get(row.id) ?? 0,
-    callCount: callMap.get(row.id) ?? 0,
+    callCount: callMap.get(row.id)?.total ?? 0,
+    liveCalls: callMap.get(row.id)?.live ?? 0,
     saveCount: saves.get(row.id) ?? 0,
     savedByMe: mySaveSet.has(row.id),
   }));
@@ -81,6 +114,8 @@ async function toViews(db: DbOrTx, rows: Post[], viewerId: string): Promise<Post
 export function feedRoutes(app: FastifyInstance, db: Db): void {
   app.get<{ Querystring: { before?: string } }>('/feed', async (request): Promise<PostView[]> => {
     const user = await requireUser(db, request);
+    // So a call that ran out doesn't keep its post marked.
+    await expireCalls(db);
     const friends = await friendIds(db, user.id);
     const before = request.query.before ? new Date(request.query.before) : null;
     if (before && Number.isNaN(before.getTime())) throw badRequest('Bad date');
@@ -121,16 +156,20 @@ export function feedRoutes(app: FastifyInstance, db: Db): void {
     return view!;
   });
 
-  app.get<{ Params: { id: string } }>('/posts/:id', async (request): Promise<PostView & { replies: ReplyView[] }> => {
+  app.get<{ Params: { id: string } }>('/posts/:id', async (request): Promise<PostView & { replies: ReplyView[]; calls: CallView[] }> => {
     const user = await requireUser(db, request);
     const post = await loadVisiblePost(db, request.params.id, user.id);
+    await expireCalls(db);
     const [view] = await toViews(db, [post], user.id);
+    // Anyone who can see the post sees its calls, the same as its replies.
+    const calls = await callViews(db, eq(sandbagCalls.postId, post.id), user.id, 50);
     const rows = await db.select({ reply: postReplies, author: users }).from(postReplies)
       .innerJoin(users, eq(users.id, postReplies.authorId))
       .where(eq(postReplies.postId, post.id))
       .orderBy(postReplies.createdAt);
     return {
       ...view!,
+      calls,
       replies: rows.map(({ reply, author }) => ({ id: reply.id, author: toPublic(author), text: reply.text, createdAt: reply.createdAt.toISOString() })),
     };
   });
@@ -249,26 +288,6 @@ export function feedRoutes(app: FastifyInstance, db: Db): void {
   app.get('/calls', async (request): Promise<CallView[]> => {
     const user = await requireUser(db, request);
     await expireCalls(db);
-    const caller = alias(users, 'caller');
-    const target = alias(users, 'target');
-    const rows = await db.select({ call: sandbagCalls, caller, target }).from(sandbagCalls)
-      .innerJoin(caller, eq(caller.id, sandbagCalls.callerId))
-      .innerJoin(target, eq(target.id, sandbagCalls.targetId))
-      .where(or(eq(sandbagCalls.targetId, user.id), eq(sandbagCalls.callerId, user.id)))
-      .orderBy(desc(sandbagCalls.createdAt))
-      .limit(50);
-    return rows.map((row) => ({
-      id: row.call.id,
-      caller: toPublic(row.caller),
-      target: toPublic(row.target),
-      exercise: row.call.exercise,
-      targetWeight: row.call.weightsHidden && row.call.targetId !== user.id ? null : row.call.targetWeight,
-      targetReps: row.call.targetReps,
-      line: row.call.line,
-      status: row.call.status,
-      deadlineAt: LIVE_CALLS.includes(row.call.status) ? row.call.deadlineAt.toISOString() : null,
-      points: CALL_POINTS[row.call.status][row.call.callerId === user.id ? 'caller' : 'target'],
-      createdAt: row.call.createdAt.toISOString(),
-    }));
+    return callViews(db, or(eq(sandbagCalls.targetId, user.id), eq(sandbagCalls.callerId, user.id)), user.id, 50);
   });
 }

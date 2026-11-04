@@ -162,6 +162,8 @@ export interface PostView {
   respectedByMe: boolean;
   replyCount: number;
   callCount: number;
+  /** Calls still waiting on a verdict, which is when a post stands out in the feed. */
+  liveCalls: number;
   saveCount: number;
   savedByMe: boolean;
 }
@@ -185,7 +187,7 @@ export interface CallView {
   status: CallStatus;
   /** When an open call fails, or a watched miss is believed. Null once it's settled. */
   deadlineAt: string | null;
-  /** What it did to your score, as whichever side you're on. */
+  /** What it did to your score, as whichever side you're on. 0 when it isn't yours. */
   points: number;
   createdAt: string;
 }

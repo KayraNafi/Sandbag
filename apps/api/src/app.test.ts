@@ -248,6 +248,18 @@ describe('sandbag calls', () => {
     expect(rows.find((row) => row.user.id === friend.user.id)?.wearingSandbag).toBe(true);
   });
 
+  it('shows the calls on the post to anyone who can see it, and marks the post while one is live', async () => {
+    const { friend, postId } = await called();
+    const third = await register('third', friend.user.inviteCode);
+    const seen = await call<PostView & { calls: CallView[] }>('GET', `/posts/${postId}`, third.token);
+    expect(seen.body.calls).toHaveLength(1);
+    expect(seen.body.calls[0]).toMatchObject({ exercise: 'Lat pulldown', status: 'open', points: 0, line: 'That looked easy.' });
+    expect((await call<PostView[]>('GET', '/feed', third.token)).body[0]?.liveCalls).toBe(1);
+
+    await sync(friend.token, 0, [logged('w2', [entry('Lat pulldown', 88.5)], later())]);
+    expect((await call<PostView[]>('GET', '/feed', third.token)).body[0]).toMatchObject({ callCount: 1, liveCalls: 0 });
+  });
+
   it('ignores workouts that do not include the lift, and older ones', async () => {
     const { friend } = await called();
     await sync(friend.token, 0, [logged('w2', [entry('Row', 200)], later()), logged('w3', [entry('Lat pulldown', 200)], { updatedAt: 1000 })]);

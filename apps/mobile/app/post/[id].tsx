@@ -1,4 +1,4 @@
-import { CALL_DAYS, CALLABLE_DAYS, DAY_MS } from '@sandbag/shared';
+import { CALL_DAYS, CALLABLE_DAYS, DAY_MS, type CallStatus, type CallView } from '@sandbag/shared';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
@@ -10,11 +10,35 @@ import { PostActions, PostEntries } from '@/components/PostCard';
 import { toast } from '@/components/Toast';
 import { Button, Card, Chip, Field, Heading, Loading, Muted, Row, Screen } from '@/components/ui';
 import { useData } from '@/data/store';
-import { agoLong, agoShort } from '@/domain/format';
+import { agoLong, agoShort, daysLeft } from '@/domain/format';
 import { Avatar } from '@/components/Avatar';
 import { colors, fonts, space } from '@/theme';
 
 const LINE_MAX = 140;
+
+/** Where a call on this post stands, told to anyone reading it. */
+const VERDICT: Record<CallStatus, (target: string) => string> = {
+  open: (target) => `Waiting on ${target}’s next session of it`,
+  watching: (target) => `${target} just missed, at their limit. Watching.`,
+  cleared: (target) => `${target} beat it`,
+  failed: () => 'Sandbag confirmed',
+  honest: () => 'An honest miss',
+  caught: () => 'Caught sandbagging',
+};
+
+function CallRow({ call }: { call: CallView }) {
+  const verdict = VERDICT[call.status](call.target.displayName);
+  return (
+    <Row style={styles.reply}>
+      <Avatar user={call.caller} size={30} />
+      <View style={styles.flex}>
+        <Text style={styles.author}>{call.caller.displayName} called {call.exercise} <Text style={styles.time}>{agoShort(call.createdAt)}</Text></Text>
+        <Text style={styles.caption}>“{call.line}”</Text>
+        <Muted style={call.deadlineAt ? styles.live : undefined}>{call.deadlineAt ? `${verdict} · ${daysLeft(call.deadlineAt)}` : verdict}</Muted>
+      </View>
+    </Row>
+  );
+}
 
 export default function PostScreen() {
   const { id = '' } = useLocalSearchParams<{ id: string }>();
@@ -87,7 +111,7 @@ export default function PostScreen() {
       <Card><PostEntries post={data} /></Card>
       <Row style={styles.wrap}>
         <PostActions post={data} />
-        <Muted>{data.saveCount} saved · {data.callCount} called</Muted>
+        {data.kind === 'share' ? <Muted>{data.saveCount} saved</Muted> : null}
       </Row>
 
       {data.kind === 'share' && !mine ? (
@@ -109,6 +133,9 @@ export default function PostScreen() {
           <Button title="Call sandbag" variant="ghost" onPress={() => setCalling(true)} />
         )
       ) : null}
+
+      {data.calls.length ? <Heading>Calls</Heading> : null}
+      {data.calls.map((item) => <CallRow key={item.id} call={item} />)}
 
       <Heading>Replies</Heading>
       {data.replies.length ? null : <Muted>Nobody’s said anything yet. Be the problem.</Muted>}
@@ -136,6 +163,7 @@ const styles = StyleSheet.create({
   flex: { flex: 1 },
   wrap: { flexWrap: 'wrap' },
   author: { fontFamily: fonts.bodyStrong, fontSize: 15, color: colors.ink },
+  live: { color: colors.warn },
   time: { fontFamily: fonts.body, fontSize: 13, color: colors.ink3 },
   caption: { fontFamily: fonts.body, fontSize: 15, lineHeight: 21, color: colors.ink },
   call: { backgroundColor: colors.warnBg, borderColor: colors.warnLine },
