@@ -2,7 +2,7 @@ import { voice, type PostView, type PublicUser } from '@sandbag/shared';
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import { router } from 'expo-router';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { api, errorText } from '@/api/client';
+import { api, ApiError, errorText } from '@/api/client';
 import { Avatar } from '@/components/Avatar';
 import { confirm } from '@/components/confirm';
 import { Icon } from '@/components/icons';
@@ -32,6 +32,8 @@ async function nudge(friend: PublicUser) {
     feel.win();
     toast(voice.nudgeSent(friend.displayName, Date.now()));
   } catch (error) {
+    // The server already has today's nudge, maybe from another device, so don't ask again.
+    if (error instanceof ApiError && error.status === 409) nudged.ids.add(friend.id);
     toast(errorText(error));
   }
 }
