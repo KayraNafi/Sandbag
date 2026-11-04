@@ -1,6 +1,6 @@
 import type { Entry, Period } from './schemas';
 import { entryMax, entrySetup, hasWork } from './strength';
-import { DAY_MS, daysBetween, dayOfWeek } from './time';
+import { addDays, DAY_MS, daysBetween, dayOfWeek, mondayOf } from './time';
 
 export const PERIOD_DAYS: Record<Period, number> = { week: 7, month: 30 };
 
@@ -15,6 +15,42 @@ const BASELINE_DAYS = 28;
 const MAX_BACKDATE_DAYS = 8;
 /** Consistency is measured against at least this many days a week, so a goal of 1 can't be full marks. */
 const MIN_GOAL = 3;
+
+/** A goal someone set, from the Monday it took effect. */
+export interface GoalChange {
+  from: string;
+  goal: number;
+}
+
+/** One goal for all time, or the goals someone has had, oldest first. */
+export type Goals = number | readonly GoalChange[];
+
+/** The goal for the week holding a date, so changing it can't rewrite the weeks behind you. */
+export function goalIn(goals: Goals, iso: string): number {
+  if (typeof goals === 'number') return goals;
+  let goal = goals[0]?.goal ?? MIN_GOAL;
+  for (const change of goals) if (change.from <= iso) goal = change.goal;
+  return goal;
+}
+
+/** Before anyone changed a goal: a Monday from before the app existed. */
+const SINCE_THE_START = '2000-01-03';
+
+/**
+ * A new goal starts next Monday: the week under way keeps the goal it began with, so it can't be
+ * lowered on a Sunday to save a streak, and the weeks behind you stay as they were. With nothing
+ * logged yet there's nothing to protect, so it applies straight away.
+ */
+export function changeGoal(user: { weeklyTarget: number; goalHistory: readonly GoalChange[] }, goal: number, today: string, trainedYet: boolean): GoalChange[] {
+  if (!trainedYet) return [];
+  if (goal === user.weeklyTarget) return [...user.goalHistory];
+  const from = addDays(mondayOf(today), 7);
+  const history = user.goalHistory.length ? user.goalHistory : [{ from: SINCE_THE_START, goal: user.weeklyTarget }];
+  return [...history.filter((change) => change.from < from), { from, goal }];
+}
+
+/** A profile cached by an older app has no history, which means the one goal all along. */
+export const goalsOf = (user: { weeklyTarget: number; goalHistory?: readonly GoalChange[] }): Goals => (user.goalHistory?.length ? user.goalHistory : user.weeklyTarget);
 
 /** Days a period has run so far, today included: this week since Monday, or the last 30 days. */
 export const periodDays = (period: Period, today: string) => (period === 'week' ? dayOfWeek(today) : PERIOD_DAYS[period]);
@@ -55,7 +91,7 @@ function backdated(workout: ScoringWorkout): boolean {
  * Each lift counts its best session of the period, so a light day costs nothing, and
  * only lifts done in the period count. The week is Monday to Sunday.
  */
-export function periodStats(workouts: ScoringWorkout[], period: Period, weeklyTarget: number, today: string): PeriodStats {
+export function periodStats(workouts: ScoringWorkout[], period: Period, goals: Goals, today: string): PeriodStats {
   const days = periodDays(period, today);
   const ordered = [...workouts].sort((a, b) => a.date.localeCompare(b.date));
   // Dates are the phone's local date, which can be a day ahead of the server's.
@@ -91,7 +127,7 @@ export function periodStats(workouts: ScoringWorkout[], period: Period, weeklyTa
 
   const progress = changes.length ? changes.reduce((sum, value) => sum + value, 0) / changes.length : 0;
   const count = trainedDates(ordered.filter((workout) => inPeriod(workout.date))).length;
-  const consistency = Math.min(MAX_POINTS, Math.round((count / ((Math.max(weeklyTarget, MIN_GOAL) * PERIOD_DAYS[period]) / 7)) * 100));
+  const consistency = Math.min(MAX_POINTS, Math.round((count / ((Math.max(goalIn(goals, today), MIN_GOAL) * PERIOD_DAYS[period]) / 7)) * 100));
   // A square root, so a real +2.5 kg counts for plenty and only a big jump reaches the top.
   const progressPoints = Math.min(MAX_POINTS, Math.sqrt(Math.max(0, progress) / MAX_LIFT_CHANGE) * MAX_POINTS);
   return { progress: roundOne(progress), workouts: count, consistency, score: Math.round((progressPoints + consistency) / 2) };
@@ -107,36 +143,114 @@ export function nextInviteGoal(joined: number): { count: number; name: string } 
   return INVITE_GOALS.find((goal) => goal.count > joined) ?? null;
 }
 
-const weekOf = (iso: string) => Math.floor((Date.parse(`${iso}T00:00:00Z`) / DAY_MS + 3) / 7);
-
 export interface Streak {
   current: number;
   best: number;
+  /** Missed weeks the streak can survive. */
+  shields: number;
 }
 
+/** Every fourth week on target earns a shield, and a few can be held. */
+const WEEKS_PER_SHIELD = 4;
+const MAX_SHIELDS = 2;
+
 /**
- * Weeks in a row, Monday to Sunday, that hit the weekly target. The week in
- * progress adds to a streak once it's met, and can't break one until it's over.
+ * Weeks in a row, Monday to Sunday, that hit the goal of their time. The week in progress
+ * adds to a streak once it's met, and can't break one until it's over. A missed week
+ * spends a shield if there is one, and otherwise ends the streak.
  */
-export function weekStreak(dates: string[], weeklyTarget: number, today: string): Streak {
-  const counts = new Map<number, number>();
-  // Two sessions on one day are one day trained.
-  for (const date of new Set(dates)) counts.set(weekOf(date), (counts.get(weekOf(date)) ?? 0) + 1);
-  const met = (week: number) => (counts.get(week) ?? 0) >= weeklyTarget;
+export function weekStreak(dates: string[], goals: Goals, today: string): Streak {
+  const days = new Map<string, number>();
+  for (const date of new Set(dates)) days.set(mondayOf(date), (days.get(mondayOf(date)) ?? 0) + 1);
+  const thisWeek = mondayOf(today);
+  const first = [...days.keys()].sort()[0];
 
-  const thisWeek = weekOf(today);
   let current = 0;
-  for (let week = met(thisWeek) ? thisWeek : thisWeek - 1; met(week); week -= 1) current += 1;
-
   let best = 0;
-  let run = 0;
-  let previous: number | null = null;
-  for (const week of [...counts.keys()].filter(met).sort((a, b) => a - b)) {
-    run = previous !== null && week === previous + 1 ? run + 1 : 1;
-    best = Math.max(best, run);
-    previous = week;
+  let shields = 0;
+  let earning = 0;
+  for (let week = first; week !== undefined && week <= thisWeek; week = addDays(week, 7)) {
+    if ((days.get(week) ?? 0) >= goalIn(goals, week)) {
+      current += 1;
+      best = Math.max(best, current);
+      earning += 1;
+      if (earning === WEEKS_PER_SHIELD) {
+        earning = 0;
+        shields = Math.min(MAX_SHIELDS, shields + 1);
+      }
+    } else if (week < thisWeek) {
+      if (shields) {
+        shields -= 1;
+      } else {
+        current = 0;
+        earning = 0;
+      }
+    }
   }
-  return { current, best };
+  return { current, best, shields };
+}
+
+/** All of a week's bonuses together can't add more than this, so habits never outweigh training. */
+export const MAX_WEEK_BONUS = 15;
+/** Streak lengths that pay, longest first, and what each pays by goal. Bigger goals earn a little more. */
+const STREAK_WEEKS = [12, 8, 4, 2];
+const STREAK_PAY: Record<number, number[]> = { 2: [4, 3, 2, 1], 3: [6, 4, 3, 1], 4: [8, 6, 4, 2] };
+const COMEBACK_BONUS = 3;
+const OVER_GOAL_BONUS = 2;
+const NEW_BEST_BONUS = 2;
+const MAX_NEW_BESTS = 3;
+/** One earlier session is a coincidence. Two make a number worth beating. */
+const NEW_BEST_HISTORY = 2;
+
+export function streakBonus(weeks: number, goal: number): number {
+  const tier = STREAK_WEEKS.findIndex((length) => weeks >= length);
+  return tier < 0 ? 0 : STREAK_PAY[Math.min(Math.max(goal, 2), 4)]![tier]!;
+}
+
+export interface WeekBonuses {
+  streak: number;
+  comeback: number;
+  overGoal: number;
+  newBests: number;
+  total: number;
+}
+
+/** Extra points this week for showing up: a streak, a comeback, more days than the goal, and new bests. */
+export function weekBonuses(workouts: ScoringWorkout[], goals: Goals, today: string): WeekBonuses {
+  const dates = trainedDates(workouts).filter((date) => date <= today);
+  const thisWeek = mondayOf(today);
+  const lastWeek = addDays(thisWeek, -7);
+  const daysIn = (monday: string) => dates.filter((date) => mondayOf(date) === monday).length;
+  const goal = goalIn(goals, thisWeek);
+  const days = daysIn(thisWeek);
+
+  const streak = streakBonus(weekStreak(dates, goals, today).current, goal);
+  // Only after a week really missed, by someone who trained before it.
+  const comeback = days >= goal && daysIn(lastWeek) < goalIn(goals, lastWeek) && dates.some((date) => date < lastWeek) ? COMEBACK_BONUS : 0;
+  const overGoal = days > goal ? OVER_GOAL_BONUS : 0;
+
+  // Lifts that beat everything before them this week, weighed the same way.
+  const bests = new Map<string, { max: number; sessions: number }>();
+  const beaten = new Set<string>();
+  for (const workout of [...workouts].sort((a, b) => a.date.localeCompare(b.date))) {
+    if (workout.date > today || backdated(workout)) continue;
+    // A lift logged twice in one session is still one session of history.
+    const session = new Map<string, { lift: string; max: number }>();
+    for (const entry of workout.entries) {
+      const max = entryMax(entry);
+      if (max === null) continue;
+      const lift = exerciseKey(entry.name);
+      const key = `${lift}|${entrySetup(entry)}`;
+      session.set(key, { lift, max: Math.max(session.get(key)?.max ?? 0, max) });
+    }
+    for (const [key, { lift, max }] of session) {
+      const best = bests.get(key) ?? { max: 0, sessions: 0 };
+      if (workout.date >= thisWeek && best.sessions >= NEW_BEST_HISTORY && max > best.max) beaten.add(lift);
+      bests.set(key, { max: Math.max(best.max, max), sessions: best.sessions + 1 });
+    }
+  }
+  const newBests = Math.min(MAX_NEW_BESTS, beaten.size) * NEW_BEST_BONUS;
+  return { streak, comeback, overGoal, newBests, total: Math.min(MAX_WEEK_BONUS, streak + comeback + overGoal + newBests) };
 }
 
 export interface TrophyFacts {

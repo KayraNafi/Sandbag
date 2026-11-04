@@ -1,4 +1,4 @@
-import type { AvatarId, CallStatus, Entry, NotificationKind, SavedExercise } from '@sandbag/shared';
+import type { AvatarId, CallStatus, Entry, GoalChange, NotificationKind, SavedExercise } from '@sandbag/shared';
 import { sql } from 'drizzle-orm';
 import {
   bigint, boolean, check, date, doublePrecision, index, integer, jsonb, pgSequence, pgTable, primaryKey, real, text, timestamp, uuid,
@@ -14,6 +14,10 @@ export const users = pgTable('users', {
   avatar: text('avatar').$type<AvatarId>(),
   passwordHash: text('password_hash').notNull(),
   weeklyTarget: integer('weekly_target').notNull().default(3),
+  // Empty means weeklyTarget has applied all along. Each change takes effect the Monday after it's made.
+  goalHistory: jsonb('goal_history').$type<GoalChange[]>().notNull().default([]),
+  // Set by the app. Null means UTC, which is how everyone was counted before.
+  timeZone: text('time_zone'),
   inviteCode: text('invite_code').notNull().unique(),
   // The invite count is derived from this column, so only real joins count.
   invitedBy: uuid('invited_by').references((): any => users.id, { onDelete: 'set null' }),

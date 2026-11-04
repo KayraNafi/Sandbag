@@ -1,6 +1,6 @@
 import { createHash, randomBytes } from 'node:crypto';
 import { hash, verify } from '@node-rs/argon2';
-import { changePasswordSchema, defaultAvatar, deleteAccountSchema, loginSchema, registerSchema, updateProfileSchema, voice, type AuthResponse, type AvatarId, type DataExport, type Me, type PublicUser } from '@sandbag/shared';
+import { changeGoal, changePasswordSchema, dateIn, defaultAvatar, deleteAccountSchema, loginSchema, registerSchema, updateProfileSchema, voice, type AuthResponse, type AvatarId, type DataExport, type Me, type PublicUser } from '@sandbag/shared';
 import { and, eq, lt, ne, sql } from 'drizzle-orm';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { lockUser, type Db, type DbOrTx, type Tx } from '../db/client';
@@ -51,7 +51,7 @@ export function toPublic(user: { id: string; username: string; displayName: stri
 }
 
 function toMe(user: typeof users.$inferSelect): Me {
-  return { ...toPublic(user), weeklyTarget: user.weeklyTarget, inviteCode: user.inviteCode };
+  return { ...toPublic(user), weeklyTarget: user.weeklyTarget, goalHistory: user.goalHistory, timeZone: user.timeZone, inviteCode: user.inviteCode };
 }
 
 async function createSession(db: DbOrTx, userId: string): Promise<string> {
@@ -164,7 +164,12 @@ export function authRoutes(app: FastifyInstance, db: Db, config: { bootstrapInvi
   app.patch('/me', async (request): Promise<Me> => {
     const user = await requireUser(db, request);
     const input = updateProfileSchema.parse(request.body);
-    const [updated] = await db.update(users).set(input).where(eq(users.id, user.id)).returning();
+    let goalHistory = user.goalHistory;
+    if (input.weeklyTarget !== undefined) {
+      const [trained] = await db.select({ id: loggedWorkouts.id }).from(loggedWorkouts).where(eq(loggedWorkouts.ownerId, user.id)).limit(1);
+      goalHistory = changeGoal(user, input.weeklyTarget, dateIn(input.timeZone ?? user.timeZone), Boolean(trained));
+    }
+    const [updated] = await db.update(users).set({ ...input, goalHistory }).where(eq(users.id, user.id)).returning();
     if (!updated) throw unauthorized();
     return toMe(updated);
   });

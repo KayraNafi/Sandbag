@@ -34,7 +34,22 @@ interface SessionState {
   setMe: (me: Me) => void;
 }
 
+/** The phone's time zone, or null when it can't say. */
+function deviceZone(): string | null {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone || null;
+  } catch {
+    return null;
+  }
+}
+
 export const useSession = create<SessionState>((set, get) => {
+  /** Your week ends at your own midnight, so the server is told where you are, and again after travelling. */
+  const keepTimeZone = (me: Me) => {
+    const timeZone = deviceZone();
+    if (timeZone && timeZone !== me.timeZone) void api.updateMe({ timeZone }).then((updated) => get().setMe(updated)).catch(() => {});
+  };
+
   const endSession = async () => {
     await tokenStore.clear();
     configureApi({ token: null });
@@ -58,6 +73,7 @@ export const useSession = create<SessionState>((set, get) => {
         useData.getState().claim(me.id);
         useData.getState().setProfile(me);
         set({ me });
+        keepTimeZone(me);
       }).catch(() => {});
     },
     signIn: async ({ token, user }, { newAccount = false } = {}) => {
@@ -66,6 +82,7 @@ export const useSession = create<SessionState>((set, get) => {
       useData.getState().claim(user.id);
       useData.getState().setProfile(user);
       set({ status: 'signedIn', me: user, newAccount });
+      keepTimeZone(user);
     },
     welcomed: () => set({ newAccount: false }),
     signOut: async () => {

@@ -1,5 +1,5 @@
 import {
-  CALL_DAYS, CALL_POINTS, cappedCallPoints, CORRECTION_MS, DAY_MS, exposesSandbag, judgeCall, liftIn, LIVE_CALLS, mondayOf, SANDBAG_BADGE_DAYS, voice, WATCH_DAYS,
+  CALL_DAYS, CALL_POINTS, CORRECTION_MS, DAY_MS, exposesSandbag, judgeCall, liftIn, LIVE_CALLS, SANDBAG_BADGE_DAYS, voice, WATCH_DAYS,
   type CallStatus, type LiftResult, type LoggedWorkout, type NotificationKind,
 } from '@sandbag/shared';
 import { and, desc, eq, gte, inArray, lte, ne, or, sql } from 'drizzle-orm';
@@ -177,18 +177,17 @@ export async function callsOnSave(db: DbOrTx, user: Person, before: LoggedWorkou
   await revisitCalls(db, user, before, after);
 }
 
-/** Points from calls settled since a moment, for each of these people on either side, capped week by week. */
-export async function callPointsSince(db: DbOrTx, userIds: string[], since: Date): Promise<Map<string, number>> {
-  if (!userIds.length) return new Map();
+/** Points from calls settled since a moment, and when, for each of these people on either side. */
+export async function settledCallPoints(db: DbOrTx, userIds: string[], since: Date): Promise<Map<string, { at: Date; points: number }[]>> {
+  const settled = new Map<string, { at: Date; points: number }[]>();
+  if (!userIds.length) return settled;
   const rows = await db.select({ callerId: sandbagCalls.callerId, targetId: sandbagCalls.targetId, status: sandbagCalls.status, resolvedAt: sandbagCalls.resolvedAt })
     .from(sandbagCalls)
     .where(and(gte(sandbagCalls.resolvedAt, since), or(inArray(sandbagCalls.callerId, userIds), inArray(sandbagCalls.targetId, userIds))));
-  const settled = new Map<string, { monday: string; points: number }[]>();
-  const add = (userId: string, monday: string, points: number) => settled.set(userId, [...(settled.get(userId) ?? []), { monday, points }]);
+  const add = (userId: string, at: Date, points: number) => settled.set(userId, [...(settled.get(userId) ?? []), { at, points }]);
   for (const row of rows) {
-    const monday = mondayOf(row.resolvedAt!.toISOString().slice(0, 10));
-    add(row.callerId, monday, CALL_POINTS[row.status].caller);
-    add(row.targetId, monday, CALL_POINTS[row.status].target);
+    add(row.callerId, row.resolvedAt!, CALL_POINTS[row.status].caller);
+    add(row.targetId, row.resolvedAt!, CALL_POINTS[row.status].target);
   }
-  return new Map([...settled].map(([userId, points]) => [userId, cappedCallPoints(points)]));
+  return settled;
 }

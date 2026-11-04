@@ -1,5 +1,7 @@
 import { z } from 'zod';
 import type { CallStatus } from './calls';
+import type { GoalChange, WeekBonuses } from './scoring';
+import { canonicalZone } from './time';
 import { cleanText } from './text';
 
 const clientId = z.string().regex(/^[A-Za-z0-9_-]{1,64}$/);
@@ -98,10 +100,14 @@ export const registerSchema = z.object({
   inviteCode: z.string().trim().min(1).max(32),
 });
 export const loginSchema = z.object({ username, password: z.string().min(1).max(200) });
+/** Stored as the runtime spells it, so every copy of a zone is the same string. */
+const timeZone = z.string().max(64).transform((zone, context) => canonicalZone(zone) ?? (context.addIssue({ code: 'custom', message: 'Unknown time zone' }), z.NEVER));
+
 export const updateProfileSchema = z.object({
   displayName: cleaned(40).optional(),
   weeklyTarget: z.number().int().min(1).max(14).optional(),
   avatar: z.enum(AVATARS).optional(),
+  timeZone: timeZone.optional(),
 });
 export const changePasswordSchema = z.object({ currentPassword: z.string().min(1).max(200), newPassword: password });
 export const deleteAccountSchema = z.object({ password: z.string().min(1).max(200) });
@@ -131,7 +137,10 @@ export interface PublicUser {
 }
 
 export interface Me extends PublicUser {
+  /** The goal you chose. A change waits for next Monday, so this week may still run on the last one. */
   weeklyTarget: number;
+  goalHistory: GoalChange[];
+  timeZone: string | null;
   inviteCode: string;
 }
 
@@ -183,6 +192,7 @@ export interface CallView {
 
 export interface RankingRow {
   streak: number;
+  shields: number;
   user: PublicUser;
   rank: number;
   progress: number;
@@ -191,6 +201,8 @@ export interface RankingRow {
   consistency: number;
   /** Points from calls settled in the period, already part of score. */
   calls: number;
+  /** This week's bonuses, already part of score. Null for the month. */
+  bonuses: WeekBonuses | null;
   score: number;
   wearingSandbag: boolean;
 }

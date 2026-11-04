@@ -1,4 +1,4 @@
-import type { Period, RankingRow } from '@sandbag/shared';
+import type { Period, RankingRow, WeekBonuses } from '@sandbag/shared';
 import { useQuery } from '@tanstack/react-query';
 import { router } from 'expo-router';
 import { useState } from 'react';
@@ -45,7 +45,8 @@ export default function Rankings() {
               <Text style={styles.name}>{row.user.displayName}{row.wearingSandbag ? '  ' : ''}{row.wearingSandbag ? <Text style={styles.badge}>SANDBAG</Text> : null}</Text>
               <Muted>Progress {signed(row.progress)}</Muted>
               <Muted>{row.workouts} of {row.target} workouts</Muted>
-              {row.streak ? <Muted>{row.streak} {row.streak === 1 ? 'week' : 'weeks'} on target</Muted> : null}
+              {row.streak ? <Muted>{row.streak} {row.streak === 1 ? 'week' : 'weeks'} on target{row.shields ? ` · ${row.shields} ${row.shields === 1 ? 'shield' : 'shields'}` : ''}</Muted> : null}
+              {row.bonuses?.total ? <Muted>Bonus {signedPoints(row.bonuses.total)}: {bonusText(row.bonuses)}</Muted> : null}
               {row.calls ? <Muted>Calls {signedPoints(row.calls)}</Muted> : null}
             </View>
             <View style={styles.scoreBox} accessibilityLabel={`${row.score} points`}>
@@ -64,11 +65,18 @@ export default function Rankings() {
       <Muted>
         Your points are the average of two scores out of 100. Progress: how much stronger you got on the lifts you did, using weight and reps, against your best of the four weeks before. Small gains count for plenty, and +25% is full marks.
         Consistency: days trained against your weekly goal, counted as at least 3. The week runs Monday to Sunday. Heavier friends get no head start.
+        This week also pays bonuses, up to 15: for a streak of 2 weeks or more, for coming back after a missed week, for a day more than your goal, and +2 for each lift past its best (up to 3). Every 4 weeks on target earns a shield that saves a streak from one missed week.
         Calls settled in the period add or take points on top: +5 for beating one, −5 for failing it, double for getting caught, and −3 for calling wrong, up to 10 either way a week.
       </Muted>
       <Button title="What’s sandbagging?" variant="ghost" onPress={() => router.push('/about')} />
     </Screen>
   );
+}
+
+/** What a week's bonus is made of, e.g. "streak +3, new bests +4". */
+function bonusText(bonuses: WeekBonuses): string {
+  const parts: [string, number][] = [['streak', bonuses.streak], ['comeback', bonuses.comeback], ['over goal', bonuses.overGoal], ['new bests', bonuses.newBests]];
+  return parts.filter(([, points]) => points).map(([name, points]) => `${name} +${points}`).join(', ');
 }
 
 const styles = StyleSheet.create({

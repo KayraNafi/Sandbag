@@ -1,4 +1,4 @@
-import { trainedDates, weekStreak } from '@sandbag/shared';
+import { goalIn, goalsOf, mondayOf, trainedDates, weekStreak } from '@sandbag/shared';
 import { useQuery } from '@tanstack/react-query';
 import { router, type Href } from 'expo-router';
 import { useMemo } from 'react';
@@ -46,12 +46,13 @@ export default function You() {
   const index = useMemo(() => buildHistory(workouts), [workouts]);
   const lifts = index.size;
   const progress = useMemo(() => liftProgress(index), [index]);
-  const weekAgo = toIsoDate(new Date(Date.now() - 6 * 86_400_000));
-  const thisWeek = workouts.filter((workout) => workout.date >= weekAgo).length;
-  const streak = useMemo(
-    () => weekStreak(trainedDates(workouts), me?.weeklyTarget ?? 3, toIsoDate(new Date())),
-    [workouts, me?.weeklyTarget],
-  );
+  const today = toIsoDate(new Date());
+  const dates = useMemo(() => trainedDates(workouts), [workouts]);
+  const thisWeek = dates.filter((date) => date >= mondayOf(today) && date <= today).length;
+  const goals = me ? goalsOf(me) : 3;
+  // A new goal can wait for next Monday, so this week's may not be the one in settings.
+  const goal = goalIn(goals, today);
+  const streak = useMemo(() => weekStreak(dates, goals, today), [dates, goals, today]);
 
   return (
     <Screen>
@@ -66,14 +67,17 @@ export default function You() {
         </View>
       </Row>
       <Row style={styles.stats}>
-        <Stat value={`${thisWeek}/${me?.weeklyTarget ?? '–'}`} label="Last 7 days" />
+        <Stat value={`${thisWeek}/${goal}`} label="This week" />
         <Stat value={workouts.length} label="Workouts" />
         <Stat value={streak.current} label="Streak" />
         <Stat value={invites.data?.joined ?? '–'} label="Recruits" />
       </Row>
       <Muted>
-        {streak.current ? `${streak.current} ${streak.current === 1 ? 'week' : 'weeks'} in a row at ${me?.weeklyTarget ?? 3}+ workouts. ` : `Hit ${me?.weeklyTarget ?? 3} workouts in a week to start a streak. `}
-        Best: {streak.best}.
+        {streak.current ? `${streak.current} ${streak.current === 1 ? 'week' : 'weeks'} in a row on your goal. ` : `Hit ${goal} workouts in a week to start a streak. `}
+        Best: {streak.best}.{' '}
+        {streak.shields
+          ? `${streak.shields} ${streak.shields === 1 ? 'shield' : 'shields'}: a missed week uses one instead of ending your streak.`
+          : 'Every 4 weeks on goal earns a shield that saves your streak from one missed week.'}
       </Muted>
       <Card label="Trophies" onPress={() => router.push('/trophies')}>
         <Row style={styles.section}>

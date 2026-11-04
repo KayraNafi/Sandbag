@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Entry } from './schemas';
-import { beatABest, nextInviteGoal, periodStats, weekStreak, type ScoringWorkout } from './scoring';
+import { beatABest, changeGoal, goalIn, nextInviteGoal, periodStats, streakBonus, weekBonuses, weekStreak, type GoalChange, type ScoringWorkout } from './scoring';
 
 // A Friday. Its week began on Monday 2026-10-26.
 const TODAY = '2026-10-30';
@@ -104,7 +104,7 @@ describe('weekStreak', () => {
 
   it('counts finished weeks, and an unfinished week doesn’t break them', () => {
     const dates = [...week('2026-10-12', 3), ...week('2026-10-19', 3), ...week('2026-10-26', 1)];
-    expect(weekStreak(dates, 3, '2026-10-30')).toEqual({ current: 2, best: 2 });
+    expect(weekStreak(dates, 3, '2026-10-30')).toMatchObject({ current: 2, best: 2 });
   });
 
   it('adds this week as soon as the target is met', () => {
@@ -114,7 +114,7 @@ describe('weekStreak', () => {
 
   it('breaks on a missed week, and remembers the best run', () => {
     const dates = [...week('2026-09-28', 3), ...week('2026-10-05', 3), ...week('2026-10-12', 3), ...week('2026-10-26', 3)];
-    expect(weekStreak(dates, 3, '2026-10-30')).toEqual({ current: 1, best: 3 });
+    expect(weekStreak(dates, 3, '2026-10-30')).toMatchObject({ current: 1, best: 3 });
   });
 
   it('ends a streak once a whole week goes by', () => {
@@ -122,11 +122,104 @@ describe('weekStreak', () => {
   });
 
   it('copes with nothing', () => {
-    expect(weekStreak([], 3, '2026-10-30')).toEqual({ current: 0, best: 0 });
+    expect(weekStreak([], 3, '2026-10-30')).toEqual({ current: 0, best: 0, shields: 0 });
+  });
+
+  it('earns a shield every four weeks, which saves the streak from one missed week', () => {
+    const fourWeeks = ['2026-09-28', '2026-10-05', '2026-10-12', '2026-10-19'].flatMap((monday) => week(monday, 3));
+    // 2026-10-26 missed, and today is in the week after it.
+    expect(weekStreak(fourWeeks, 3, '2026-11-03')).toEqual({ current: 4, best: 4, shields: 0 });
+    expect(weekStreak(week('2026-09-28', 3), 3, '2026-10-13').current).toBe(0);
+  });
+
+  it('judges each week by the goal it had', () => {
+    // Ali trained 2 days a week on a goal of 4, then lowered it to 2 from 2026-10-26.
+    const goals: GoalChange[] = [{ from: '2000-01-03', goal: 4 }, { from: '2026-10-26', goal: 2 }];
+    const dates = [...week('2026-10-12', 2), ...week('2026-10-19', 2), ...week('2026-10-26', 2)];
+    expect(weekStreak(dates, goals, '2026-10-30')).toMatchObject({ current: 1, best: 1 });
   });
 
   it('counts two sessions on one day once', () => {
     expect(weekStreak(['2026-10-26', '2026-10-26', '2026-10-27'], 3, '2026-10-30').current).toBe(0);
+  });
+});
+
+describe('goalIn', () => {
+  it('uses the goal a week started with', () => {
+    const goals: GoalChange[] = [{ from: '2000-01-03', goal: 4 }, { from: '2026-11-02', goal: 2 }];
+    expect(goalIn(goals, '2026-11-01')).toBe(4);
+    expect(goalIn(goals, '2026-11-02')).toBe(2);
+    expect(goalIn(3, '2026-11-02')).toBe(3);
+  });
+});
+
+describe('changeGoal', () => {
+  // Sunday 2026-11-01. Next Monday is 2026-11-02.
+  const SUNDAY = '2026-11-01';
+
+  it('starts a new goal next Monday, keeping the old one until then', () => {
+    const goals = changeGoal({ weeklyTarget: 4, goalHistory: [] }, 2, SUNDAY, true);
+    expect(goals).toEqual([{ from: '2000-01-03', goal: 4 }, { from: '2026-11-02', goal: 2 }]);
+    expect(goalIn(goals, SUNDAY)).toBe(4);
+    expect(goalIn(goals, '2026-11-02')).toBe(2);
+  });
+
+  it('replaces a change that hasn’t started yet', () => {
+    const once = changeGoal({ weeklyTarget: 4, goalHistory: [] }, 2, SUNDAY, true);
+    expect(changeGoal({ weeklyTarget: 2, goalHistory: once }, 5, SUNDAY, true).map((change) => change.goal)).toEqual([4, 5]);
+  });
+
+  it('applies straight away for someone who hasn’t trained yet', () => {
+    expect(changeGoal({ weeklyTarget: 4, goalHistory: [] }, 2, SUNDAY, false)).toEqual([]);
+  });
+});
+
+describe('weekBonuses', () => {
+  const lift = (weight: number): Entry => ({ id: 'b', name: 'Bench', kind: 'strength', sets: 3, reps: 8, weight, perSide: false, rpe: null, minutes: null, note: '' });
+  const trained = (dates: string[], weight = 50) => dates.map((date) => ({ date, entries: [lift(weight)] }));
+  const week = (monday: string, count: number) => Array.from({ length: count }, (_, day) => {
+    const date = new Date(`${monday}T00:00:00Z`);
+    date.setUTCDate(date.getUTCDate() + day);
+    return date.toISOString().slice(0, 10);
+  });
+  const TODAY = '2026-10-30';
+
+  it('pays a streak more the longer it runs and the bigger the goal', () => {
+    expect(streakBonus(1, 3)).toBe(0);
+    expect(streakBonus(2, 3)).toBe(1);
+    expect(streakBonus(4, 3)).toBe(3);
+    expect(streakBonus(12, 3)).toBe(6);
+    expect(streakBonus(4, 4)).toBe(4);
+  });
+
+  it('pays a comeback after a missed week, but not to someone brand new', () => {
+    const comeback = trained([...week('2026-10-12', 3), ...week('2026-10-26', 3)]);
+    expect(weekBonuses(comeback, 3, TODAY).comeback).toBe(3);
+    expect(weekBonuses(trained(week('2026-10-26', 3)), 3, TODAY).comeback).toBe(0);
+  });
+
+  it('pays for more days than the goal', () => {
+    expect(weekBonuses(trained(week('2026-10-26', 4)), 3, TODAY).overGoal).toBe(2);
+    expect(weekBonuses(trained(week('2026-10-26', 3)), 3, TODAY).overGoal).toBe(0);
+  });
+
+  it('pays for beating an all-time best with some history behind it', () => {
+    const history = trained(['2026-10-13', '2026-10-20']);
+    expect(weekBonuses([...history, ...trained(['2026-10-27'], 55)], 3, TODAY).newBests).toBe(2);
+    expect(weekBonuses([...trained(['2026-10-20']), ...trained(['2026-10-27'], 55)], 3, TODAY).newBests).toBe(0);
+    // Bench twice in one session is still one session behind it.
+    const twice = { date: '2026-10-20', entries: [lift(50), lift(50)] };
+    expect(weekBonuses([twice, ...trained(['2026-10-27'], 55)], 3, TODAY).newBests).toBe(0);
+  });
+
+  it('caps the total', () => {
+    const long = trained(['2026-08-03', '2026-08-10', '2026-08-17', '2026-08-24', '2026-08-31', '2026-09-07', '2026-09-14', '2026-09-21', '2026-09-28', '2026-10-05', '2026-10-12', '2026-10-19']
+      .flatMap((monday) => week(monday, 4)));
+    const threeLifts = (date: string, weight: number) => ({ date, entries: ['Bench', 'Squat', 'Row'].map((name) => ({ ...lift(weight), id: name, name })) });
+    const history = long.map((workout) => threeLifts(workout.date, 50));
+    const bonuses = weekBonuses([...history, ...week('2026-10-26', 5).map((date) => threeLifts(date, 60))], 4, TODAY);
+    expect(bonuses.streak + bonuses.overGoal + bonuses.newBests).toBeGreaterThan(15);
+    expect(bonuses.total).toBe(15);
   });
 });
 

@@ -9,6 +9,7 @@ import { toast } from '@/components/Toast';
 import { Button, Card, Field, Heading, Muted, NumberField, Screen } from '@/components/ui';
 import { useData } from '@/data/store';
 import { syncNow } from '@/data/sync';
+import { formatDate, today } from '@/domain/format';
 
 async function exportData(): Promise<void> {
   const text = JSON.stringify(await api.exportData(), null, 2);
@@ -54,7 +55,9 @@ export default function Settings() {
     const updated = await api.updateMe({ displayName: displayName.trim() || (me?.displayName ?? ''), weeklyTarget });
     useSession.getState().setMe(updated);
     setTarget(weeklyTarget);
-    toast('Saved.');
+    // A goal changed mid-week waits for Monday, so nobody lowers it on Sunday to save a streak.
+    const waiting = updated.goalHistory.at(-1)?.from;
+    toast(waiting && waiting > today() ? `Saved. Your new goal starts Monday ${formatDate(waiting)}.` : 'Saved.');
   });
 
   const changePassword = () => {

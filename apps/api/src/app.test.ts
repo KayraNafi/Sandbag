@@ -1,5 +1,5 @@
 import { PGlite } from '@electric-sql/pglite';
-import { addDays, mondayOf, type ApiKeyView, type AuthResponse, type CallView, type NotificationView, type TrophyView, type Entry, type InviteSummary, type LoggedWorkout, type PostView, type RankingRow, type SyncResponse } from '@sandbag/shared';
+import { addDays, mondayOf, type ApiKeyView, type AuthResponse, type CallView, type NotificationView, type TrophyView, type Entry, type InviteSummary, type LoggedWorkout, type Me, type PostView, type RankingRow, type SyncResponse } from '@sandbag/shared';
 import { eq } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/pglite';
 import { migrate } from 'drizzle-orm/pglite/migrator';
@@ -471,6 +471,35 @@ describe('overtaking', () => {
     await sync(founder.token, 0, [logged('m1', [entry('Curl', 10)])]);
     const notes = await call<NotificationView[]>('GET', '/notifications', friend.token);
     expect(notes.body.filter((note) => note.title === 'Overtaken')).toHaveLength(0);
+  });
+});
+
+describe('goals and time zones', () => {
+  it('starts a new goal next Monday once you’ve trained, and straight away before', async () => {
+    const founder = await register('founder', BOOTSTRAP);
+    const fresh = await call<Me>('PATCH', '/me', founder.token, { weeklyTarget: 4 });
+    expect(fresh.body.goalHistory).toEqual([]);
+    await sync(founder.token, 0, [logged('w1', [entry('Row', 50)])]);
+    const changed = (await call<Me>('PATCH', '/me', founder.token, { weeklyTarget: 2 })).body;
+    expect(changed.weeklyTarget).toBe(2);
+    expect(changed.goalHistory).toEqual([{ from: '2000-01-03', goal: 4 }, { from: addDays(mondayOf(todayIso()), 7), goal: 2 }]);
+    const [row] = (await call<RankingRow[]>('GET', '/rankings', founder.token)).body;
+    expect(row?.target).toBe(4);
+  });
+
+  it('stores a real time zone, and refuses a made-up one', async () => {
+    const founder = await register('founder', BOOTSTRAP);
+    expect((await call<Me>('PATCH', '/me', founder.token, { timeZone: 'Asia/Dubai' })).body.timeZone).toBe('Asia/Dubai');
+    expect((await call('PATCH', '/me', founder.token, { timeZone: 'Mars/Olympus_Mons' })).status).toBe(400);
+  });
+
+  it('adds this week’s bonuses to the week, not the month', async () => {
+    const founder = await register('founder', BOOTSTRAP);
+    await sync(founder.token, 0, [logged('w1', [entry('Row', 50)])]);
+    const [week] = (await call<RankingRow[]>('GET', '/rankings?period=week', founder.token)).body;
+    const [month] = (await call<RankingRow[]>('GET', '/rankings?period=month', founder.token)).body;
+    expect(week?.bonuses).toMatchObject({ total: expect.any(Number) });
+    expect(month?.bonuses).toBeNull();
   });
 });
 

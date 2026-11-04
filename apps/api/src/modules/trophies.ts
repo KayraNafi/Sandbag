@@ -1,4 +1,4 @@
-import { beatABest, DAY_MS, hasWork, trainedDates, TROPHIES, voice, weekStreak, type CallStatus, type TrophyFacts, type TrophyView } from '@sandbag/shared';
+import { beatABest, dateIn, DAY_MS, goalsOf, hasWork, trainedDates, TROPHIES, voice, weekStreak, type CallStatus, type GoalChange, type TrophyFacts, type TrophyView } from '@sandbag/shared';
 import { and, eq, or, sql } from 'drizzle-orm';
 import type { FastifyInstance } from 'fastify';
 import type { Db, DbOrTx } from '../db/client';
@@ -11,7 +11,9 @@ const MONTH_MS = 30 * DAY_MS;
 /** The target lost: failed outright, or caught after a watched miss. */
 const lost = (status: CallStatus) => status === 'failed' || status === 'caught';
 
-async function factsFor(db: DbOrTx, user: { id: string; weeklyTarget: number }): Promise<TrophyFacts> {
+type TrophyPerson = { id: string; weeklyTarget: number; goalHistory: GoalChange[]; timeZone: string | null };
+
+async function factsFor(db: DbOrTx, user: TrophyPerson): Promise<TrophyFacts> {
   const workouts = await db.select({ date: loggedWorkouts.date, entries: loggedWorkouts.entries }).from(loggedWorkouts)
     .where(and(eq(loggedWorkouts.ownerId, user.id), eq(loggedWorkouts.deleted, false)));
   const calls = await db.select({ callerId: sandbagCalls.callerId, targetId: sandbagCalls.targetId, status: sandbagCalls.status }).from(sandbagCalls)
@@ -20,7 +22,7 @@ async function factsFor(db: DbOrTx, user: { id: string; weeklyTarget: number }):
   const [{ joined } = { joined: 0 }] = await db.select({ joined: sql<number>`count(*)::int` }).from(users).where(eq(users.invitedBy, user.id));
 
   // Thirty days of real history, so nobody leads a month on their first afternoon.
-  const today = new Date().toISOString().slice(0, 10);
+  const today = dateIn(user.timeZone);
   const earliest = workouts.reduce<string | null>((first, workout) => (first === null || workout.date < first ? workout.date : first), null);
   const longEnough = earliest !== null && Date.parse(`${today}T00:00:00Z`) - Date.parse(`${earliest}T00:00:00Z`) >= MONTH_MS;
   const table = longEnough ? await crewTable(db, user.id, 'month') : [];
@@ -34,13 +36,13 @@ async function factsFor(db: DbOrTx, user: { id: string; weeklyTarget: number }):
     callsFailed: against.filter((call) => lost(call.status)).length,
     callsWon: calls.filter((call) => call.callerId === user.id && lost(call.status)).length,
     joined,
-    bestStreak: weekStreak(trainedDates(workouts), user.weeklyTarget, today).best,
+    bestStreak: weekStreak(trainedDates(workouts), goalsOf(user), today).best,
     ledTheMonth: table.length > 1 && table.find((row) => row.user.id === user.id)?.rank === 1,
   };
 }
 
 /** Awards anything newly earned, as one notification however many arrive together. */
-export async function awardTrophies(db: DbOrTx, user: { id: string; weeklyTarget: number }): Promise<TrophyFacts> {
+export async function awardTrophies(db: DbOrTx, user: TrophyPerson): Promise<TrophyFacts> {
   const facts = await factsFor(db, user);
   const earned = TROPHIES.filter((trophy) => trophy.value(facts) >= trophy.goal);
   const fresh = [];

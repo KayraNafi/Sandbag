@@ -1,16 +1,23 @@
-import { addDays, periodDays, periodSchema, periodStats, trainedDates, voice, weekStreak, type Period, type RankingRow } from '@sandbag/shared';
+import {
+  addDays, cappedCallPoints, dateIn, DAY_MS, goalIn, goalsOf, mondayOf, periodDays, periodSchema, periodStats, trainedDates, voice, weekBonuses, weekStreak,
+  type Period, type RankingRow,
+} from '@sandbag/shared';
 import { and, eq, gt, inArray } from 'drizzle-orm';
 import type { FastifyInstance } from 'fastify';
 import type { Db, DbOrTx } from '../db/client';
 import { loggedWorkouts, notifications, users } from '../db/schema';
 import { requireUser, toPublic } from './auth';
-import { callPointsSince, expireCalls } from './calls';
+import { expireCalls, settledCallPoints } from './calls';
 import { friendIds } from './friends';
 import { notify } from './notifications';
 
-const today = () => new Date().toISOString().slice(0, 10);
+/** Longer than any period, in any time zone, so every call a period could hold is fetched. */
+const CALL_LOOKBACK_DAYS = 32;
 
-/** Only percentages and counts come out of here, so hidden weights stay hidden. */
+/**
+ * Only points, percentages and counts come out of here, so hidden weights stay hidden.
+ * Everyone is scored on their own calendar: their week ends at their own midnight.
+ */
 export async function crewTable(db: DbOrTx, userId: string, period: Period): Promise<RankingRow[]> {
   const crew = [userId, ...(await friendIds(db, userId))];
   const people = await db.select().from(users).where(inArray(users.id, crew));
@@ -18,23 +25,32 @@ export async function crewTable(db: DbOrTx, userId: string, period: Period): Pro
     .from(loggedWorkouts)
     .where(and(inArray(loggedWorkouts.ownerId, crew), eq(loggedWorkouts.deleted, false)));
   const now = new Date();
-  const day = today();
-  const calls = await callPointsSince(db, crew, new Date(`${addDays(day, 1 - periodDays(period, day))}T00:00:00Z`));
+  const settled = await settledCallPoints(db, crew, new Date(now.getTime() - CALL_LOOKBACK_DAYS * DAY_MS));
 
   const rows = people.map((person) => {
+    const day = dateIn(person.timeZone, now);
+    const start = addDays(day, 1 - periodDays(period, day));
+    const goals = goalsOf(person);
     const own = workouts.filter((workout) => workout.ownerId === person.id);
-    const stats = periodStats(own, period, person.weeklyTarget, day);
-    const fromCalls = calls.get(person.id) ?? 0;
+    const stats = periodStats(own, period, goals, day);
+    const streak = weekStreak(trainedDates(own), goals, day);
+    const bonuses = period === 'week' ? weekBonuses(own, goals, day) : null;
+    const calls = cappedCallPoints((settled.get(person.id) ?? [])
+      .map(({ at, points }) => ({ day: dateIn(person.timeZone, at), points }))
+      .filter((call) => call.day >= start && call.day <= day)
+      .map((call) => ({ monday: mondayOf(call.day), points: call.points })));
     return {
       user: toPublic(person),
       rank: 0,
-      target: person.weeklyTarget,
+      target: goalIn(goals, day),
       wearingSandbag: person.sandbagUntil !== null && person.sandbagUntil > now,
-      streak: weekStreak(trainedDates(own), person.weeklyTarget, day).current,
+      streak: streak.current,
+      shields: streak.shields,
       ...stats,
-      calls: fromCalls,
+      bonuses,
+      calls,
       // Calls can cost points, but never below nothing.
-      score: Math.max(0, stats.score + fromCalls),
+      score: Math.max(0, stats.score + (bonuses?.total ?? 0) + calls),
     };
   });
   rows.sort((a, b) => b.score - a.score || a.user.displayName.localeCompare(b.user.displayName));

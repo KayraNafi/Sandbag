@@ -1,4 +1,4 @@
-import { trainedDates, voice, weekStreak } from '@sandbag/shared';
+import { goalsOf, trainedDates, voice, weekStreak } from '@sandbag/shared';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useMemo, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
@@ -17,10 +17,10 @@ export default function Finished() {
   const saved = useData((state) => state.saved);
   const workout = id ? logged[id] : undefined;
   const [handled, setHandled] = useState(false);
-  const target = useSession((state) => state.me?.weeklyTarget ?? 3);
+  const me = useSession((state) => state.me);
   const streak = useMemo(
-    () => weekStreak(trainedDates(activeLogged(logged)), target, toIsoDate(new Date())).current,
-    [logged, target],
+    () => weekStreak(trainedDates(activeLogged(logged)), me ? goalsOf(me) : 3, toIsoDate(new Date())).current,
+    [logged, me],
   );
 
   const bests = useMemo(() => {
