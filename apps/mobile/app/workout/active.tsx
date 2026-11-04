@@ -4,6 +4,7 @@ import { router } from 'expo-router';
 import { useMemo, useState } from 'react';
 import { Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { toast } from '@/components/Toast';
+import { leave } from '@/nav';
 import { confirm } from '@/components/confirm';
 import { Button, Card, Chip, Field, Heading, Label, MoveButtons, Muted, NumberField, Row, Screen, Segments } from '@/components/ui';
 import { addExerciseToDraft, finishDraft, reactionTo } from '@/data/actions';
@@ -114,7 +115,7 @@ export default function ActiveWorkout() {
     return (
       <Screen padTop={false}>
         <Heading>Nothing in progress</Heading>
-        <Button title="Back" variant="ghost" onPress={() => router.back()} />
+        <Button title="Back" variant="ghost" onPress={leave} />
       </Screen>
     );
   }
@@ -154,7 +155,7 @@ export default function ActiveWorkout() {
     const message = draft.editing ? 'Your changes will be lost. The logged session stays.' : 'None of this will be logged.';
     if (await confirm('Discard this workout?', message, 'Discard')) {
       setDraft(null);
-      router.back();
+      leave();
     }
   };
 

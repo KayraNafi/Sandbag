@@ -1,4 +1,4 @@
-import { HONEST_MARGIN, voice, type CallStatus, type CallView, type SavedWorkout } from '@sandbag/shared';
+import { HONEST_MARGIN, voice, type CallStatus, type CallView } from '@sandbag/shared';
 import { useQuery } from '@tanstack/react-query';
 import { router } from 'expo-router';
 import { useMemo } from 'react';
@@ -6,7 +6,8 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { api } from '@/api/client';
 import { useSession } from '@/auth/session';
 import { Button, Card, Heading, Label, MoveButtons, Muted, Row, Screen, Title } from '@/components/ui';
-import { moveSaved, startBlank, startFromSaved } from '@/data/actions';
+import { moveSaved, startBlank } from '@/data/actions';
+import { begin, beginSaved } from '@/data/begin';
 import { useData } from '@/data/store';
 import { syncNow } from '@/data/sync';
 import { agoLong, agoText, daysLeft, formatDate, num, plural, signedPoints, today } from '@/domain/format';
@@ -36,10 +37,6 @@ function standing(call: CallView): string {
   return call.points ? `${VERDICT[call.status]} · ${signedPoints(call.points)}` : VERDICT[call.status];
 }
 
-function start(workout: SavedWorkout) {
-  startFromSaved(workout);
-  router.push('/workout/active');
-}
 
 export default function Train() {
   const logged = useData((state) => state.logged);
@@ -79,7 +76,7 @@ export default function Train() {
           <Label style={styles.heroLabel}>Up next</Label>
           <Text style={styles.heroTitle}>{upNext.name.toUpperCase()}</Text>
           <Text style={styles.heroBody}>{plural(upNext.exercises.length, 'exercise')}. Your numbers are loaded.</Text>
-          <Button title="Start" variant="ghost" style={styles.heroButton} onPress={() => start(upNext)} />
+          <Button title="Start" variant="ghost" style={styles.heroButton} onPress={() => void beginSaved(upNext)} />
         </Card>
       ) : (
         <Card style={styles.hero}>
@@ -136,10 +133,7 @@ export default function Train() {
           </Row>
         </Card>
       ))}
-      <Button title="Start empty" variant="ghost" onPress={() => {
-        startBlank();
-        router.push('/workout/active');
-      }} />
+      <Button title="Start empty" variant="ghost" onPress={() => void begin(startBlank)} />
 
       {workouts.length ? (
         <>
@@ -165,7 +159,7 @@ const styles = StyleSheet.create({
   flex: { flex: 1 },
   top: { justifyContent: 'space-between' },
   brand: { color: colors.volt, fontSize: 36, lineHeight: 40 },
-  bell: { paddingHorizontal: space.md, minHeight: 40, justifyContent: 'center', borderWidth: 1, borderColor: colors.line, borderRadius: 20 },
+  bell: { paddingHorizontal: space.md, minHeight: 44, justifyContent: 'center', borderWidth: 1, borderColor: colors.line, borderRadius: 22 },
   bellText: { fontFamily: fonts.label, fontSize: 13, letterSpacing: 1, color: colors.ink },
   hero: { backgroundColor: colors.volt, borderColor: colors.volt },
   heroLabel: { color: colors.voltInk },

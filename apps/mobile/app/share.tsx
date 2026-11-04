@@ -1,7 +1,8 @@
 import { useQuery } from '@tanstack/react-query';
-import { router, useLocalSearchParams } from 'expo-router';
+import { useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
 import { api } from '@/api/client';
+import { leave } from '@/nav';
 import { toast } from '@/components/Toast';
 import { Button, Chip, Field, Heading, Label, Muted, Row, Screen } from '@/components/ui';
 import { newId } from '@/data/actions';
@@ -35,7 +36,7 @@ export default function Share() {
     });
     void syncNow();
     toast(isTemplate ? 'Shared. Your numbers stay with you.' : 'Posted. Now it’s on the record.');
-    router.back();
+    leave();
   };
 
   return (

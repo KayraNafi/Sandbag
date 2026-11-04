@@ -2,8 +2,10 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { useMemo } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { toast } from '@/components/Toast';
+import { leave } from '@/nav';
 import { Button, Card, Heading, Muted, Row, Screen, Title } from '@/components/ui';
-import { deleteSaved, startFromSaved } from '@/data/actions';
+import { deleteSaved } from '@/data/actions';
+import { beginSaved } from '@/data/begin';
 import { useData } from '@/data/store';
 import { agoText, formatDate, setsReps, summary } from '@/domain/format';
 import { activeLogged, buildHistory, lastLogged } from '@/domain/history';
@@ -19,10 +21,7 @@ export default function SavedWorkoutScreen() {
   const sessions = workouts.filter((item) => item.savedWorkoutId === workout.id);
 
   return (
-    <Screen padTop={false} footer={<Button title="Start" onPress={() => {
-      startFromSaved(workout);
-      router.push('/workout/active');
-    }} />}>
+    <Screen padTop={false} footer={<Button title="Start" onPress={() => void beginSaved(workout)} />}>
       <Title>{workout.name}</Title>
       {workout.savedFrom ? <Muted>From {workout.savedFrom}. The numbers are all yours.</Muted> : null}
       {workout.exercises.map((exercise, position) => {
@@ -47,7 +46,7 @@ export default function SavedWorkoutScreen() {
       ))}
       <Button title="Delete workout" variant="danger" onPress={() => {
         const undo = deleteSaved(workout);
-        router.back();
+        leave();
         toast(`${workout.name} deleted. Your sessions stay.`, undo);
       }} />
     </Screen>

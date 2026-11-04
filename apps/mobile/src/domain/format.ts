@@ -10,6 +10,7 @@ function parseIso(iso: string): Date {
   return new Date(year, month - 1, day);
 }
 
+export const formatMonth = (iso: string) => parseIso(iso).toLocaleDateString('en-GB', { month: 'long', year: 'numeric' });
 export const formatDate = (iso: string) => parseIso(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
 export const formatLongDate = (iso: string) =>
   parseIso(iso).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' });

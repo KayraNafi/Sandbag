@@ -190,6 +190,17 @@ export function Empty({ title, body }: { title: string; body: string }) {
   );
 }
 
+/** Long lists arrive a page at a time, so a year of sessions doesn't all draw at once. */
+export function useShowMore(total: number, page = 30) {
+  const [shown, setShown] = useState(page);
+  return { shown, left: Math.max(0, total - shown), more: () => setShown((current) => current + page), page };
+}
+
+export function ShowMore({ left, page, onPress }: { left: number; page: number; onPress: () => void }) {
+  if (left <= 0) return null;
+  return <Button title={`Show ${Math.min(left, page)} more`} variant="ghost" onPress={onPress} />;
+}
+
 export const Loading = () => <ActivityIndicator color={colors.volt} style={styles.loading} />;
 
 /** One skewed segment per exercise, like plates on a bar. */
@@ -210,8 +221,8 @@ const styles = StyleSheet.create({
   title: { fontFamily: fonts.display, fontSize: 40, lineHeight: 42, color: colors.ink },
   heading: { fontFamily: fonts.display, fontSize: 24, lineHeight: 28, color: colors.ink },
   label: { fontFamily: fonts.label, fontSize: 13, letterSpacing: 1, color: colors.ink3 },
-  body: { fontFamily: fonts.body, fontSize: 16, lineHeight: 22, color: colors.ink },
-  muted: { fontFamily: fonts.body, fontSize: 14, lineHeight: 20, color: colors.ink2 },
+  body: { fontFamily: fonts.body, fontSize: 17, lineHeight: 24, color: colors.ink },
+  muted: { fontFamily: fonts.body, fontSize: 15, lineHeight: 21, color: colors.ink2 },
   button: { minHeight: 52, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center', paddingHorizontal: space.lg },
   primary: { backgroundColor: colors.volt },
   ghost: { backgroundColor: colors.surface2, borderWidth: 1, borderColor: colors.line },
@@ -227,7 +238,7 @@ const styles = StyleSheet.create({
   error: { fontFamily: fonts.body, fontSize: 13, color: colors.danger },
   numberField: { flex: 1, gap: space.xs },
   numberInput: { minHeight: 50, backgroundColor: colors.surface2, borderWidth: 1, borderColor: colors.line, borderRadius: radius.md, color: colors.ink, fontFamily: fonts.display, fontSize: 24, textAlign: 'center' },
-  chip: { minHeight: 40, paddingHorizontal: space.md, borderRadius: 20, justifyContent: 'center', backgroundColor: colors.surface2, borderWidth: 1, borderColor: colors.line },
+  chip: { minHeight: 44, paddingHorizontal: space.md, borderRadius: 22, justifyContent: 'center', backgroundColor: colors.surface2, borderWidth: 1, borderColor: colors.line },
   chipActive: { backgroundColor: colors.volt, borderColor: colors.volt },
   chipText: { fontFamily: fonts.label, fontSize: 15, color: colors.ink2 },
   chipTextActive: { color: colors.voltInk },

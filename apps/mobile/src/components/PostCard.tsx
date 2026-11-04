@@ -116,7 +116,7 @@ const styles = StyleSheet.create({
   stamp: { paddingHorizontal: space.sm, borderWidth: 2, borderColor: colors.warn, borderRadius: 4, fontFamily: fonts.display, fontSize: 17, lineHeight: 22, color: colors.warn },
   stat: { flexDirection: 'row', alignItems: 'center', gap: space.xs },
   statText: { fontFamily: fonts.label, fontSize: 15, color: colors.ink2 },
-  action: { minHeight: 40, paddingHorizontal: space.md, borderRadius: 20, justifyContent: 'center', backgroundColor: colors.surface2, borderWidth: 1, borderColor: colors.line },
+  action: { minHeight: 44, paddingHorizontal: space.md, borderRadius: 22, justifyContent: 'center', backgroundColor: colors.surface2, borderWidth: 1, borderColor: colors.line },
   actionOn: { backgroundColor: colors.volt, borderColor: colors.volt },
   actionText: { fontFamily: fonts.label, fontSize: 14, color: colors.ink },
   actionTextOn: { color: colors.voltInk },

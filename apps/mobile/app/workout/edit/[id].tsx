@@ -1,8 +1,9 @@
 import type { SavedExercise } from '@sandbag/shared';
-import { router, useLocalSearchParams } from 'expo-router';
+import { useLocalSearchParams } from 'expo-router';
 import { useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { Button, Card, Chip, Field, Label, MoveButtons, Muted, NumberField, Row, Screen } from '@/components/ui';
+import { leave } from '@/nav';
 import { createSaved, updateSaved } from '@/data/actions';
 import { useData } from '@/data/store';
 import { activeLogged, buildHistory, moveItem } from '@/domain/history';
@@ -37,7 +38,7 @@ export default function EditSavedWorkout() {
     }
     if (existing) updateSaved(existing, { name, exercises });
     else createSaved(name, exercises);
-    router.back();
+    leave();
   };
 
   const query = exerciseKey(newName);
@@ -93,7 +94,7 @@ export default function EditSavedWorkout() {
 
 const styles = StyleSheet.create({
   name: { flex: 1, fontFamily: fonts.bodyStrong, fontSize: 16, color: colors.ink },
-  icon: { width: 40, height: 40, borderRadius: 10, backgroundColor: colors.surface2, alignItems: 'center', justifyContent: 'center' },
+  icon: { width: 44, height: 44, borderRadius: 10, backgroundColor: colors.surface2, alignItems: 'center', justifyContent: 'center' },
   remove: { color: colors.danger, fontSize: 22 },
   addRow: { flexDirection: 'row', gap: space.sm },
   input: { flex: 1, minHeight: 52, backgroundColor: colors.surface2, borderWidth: 1, borderColor: colors.line, borderRadius: radius.md, paddingHorizontal: space.md, color: colors.ink, fontFamily: fonts.body, fontSize: 16 },

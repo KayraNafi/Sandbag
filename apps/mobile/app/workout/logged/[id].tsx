@@ -2,8 +2,10 @@ import { exerciseKey } from '@sandbag/shared';
 import { router, useLocalSearchParams } from 'expo-router';
 import { StyleSheet, Text, View } from 'react-native';
 import { toast } from '@/components/Toast';
+import { leave } from '@/nav';
 import { Button, Card, Muted, Row, Screen, Title } from '@/components/ui';
 import { deleteLogged, startEdit, startRepeat } from '@/data/actions';
+import { begin } from '@/data/begin';
 import { useData } from '@/data/store';
 import { formatLongDate, summary } from '@/domain/format';
 import { colors, fonts } from '@/theme';
@@ -14,10 +16,7 @@ export default function LoggedWorkoutScreen() {
   if (!workout || workout.deleted) return null;
 
   return (
-    <Screen padTop={false} footer={<Button title="Do this again" onPress={() => {
-      startRepeat(workout);
-      router.push('/workout/active');
-    }} />}>
+    <Screen padTop={false} footer={<Button title="Do this again" onPress={() => void begin(() => startRepeat(workout))} />}>
       <Title>{workout.title}</Title>
       <Muted>{formatLongDate(workout.date)}</Muted>
       {workout.entries.map((entry) => (
@@ -28,15 +27,12 @@ export default function LoggedWorkoutScreen() {
         </Card>
       ))}
       <Row>
-        <View style={styles.flex}><Button title="Edit" variant="ghost" onPress={() => {
-          startEdit(workout);
-          router.push('/workout/active');
-        }} /></View>
+        <View style={styles.flex}><Button title="Edit" variant="ghost" onPress={() => void begin(() => startEdit(workout))} /></View>
         <View style={styles.flex}><Button title="Share" variant="ghost" onPress={() => router.push(`/share?loggedId=${workout.id}`)} /></View>
       </Row>
       <Button title="Delete session" variant="danger" onPress={() => {
         const undo = deleteLogged(workout);
-        router.back();
+        leave();
         toast('Session deleted.', undo);
       }} />
     </Screen>

@@ -1,9 +1,10 @@
 import { CALL_DAYS, CALLABLE_DAYS, DAY_MS, type CallStatus, type CallView } from '@sandbag/shared';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { router, useLocalSearchParams } from 'expo-router';
+import { useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { api, errorText } from '@/api/client';
+import { leave } from '@/nav';
 import { useSession } from '@/auth/session';
 import { confirm } from '@/components/confirm';
 import { PostActions, PostEntries } from '@/components/PostCard';
@@ -84,7 +85,7 @@ export default function PostScreen() {
     mutationFn: () => api.deletePost(id),
     onSuccess: async () => {
       await client.invalidateQueries({ queryKey: ['feed'] });
-      router.back();
+      leave();
     },
     onError: (error) => toast(errorText(error)),
   });

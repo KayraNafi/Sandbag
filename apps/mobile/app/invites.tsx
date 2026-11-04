@@ -119,5 +119,5 @@ const styles = StyleSheet.create({
   name: { fontFamily: fonts.bodyStrong, fontSize: 15, color: colors.ink },
   recruited: { fontFamily: fonts.display, fontSize: 22, color: colors.ink },
   section: { marginTop: space.md },
-  remove: { minHeight: 36, paddingHorizontal: space.sm },
+  remove: { minHeight: 44, paddingHorizontal: space.sm, justifyContent: 'center' },
 });
