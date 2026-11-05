@@ -12,6 +12,8 @@ export interface ChartPoint {
 
 const HEIGHT = 200;
 const PAD = { top: 16, right: 16, bottom: 26, left: 40 };
+/** Past this many sessions the dots crowd into a chain, so only the line and the chosen point show. */
+const DOTS_MAX = 30;
 
 function niceTicks(min: number, max: number): number[] {
   const span = max - min || Math.max(max, 1);
@@ -79,7 +81,7 @@ export function LineChart({ points, unit }: { points: ChartPoint[]; unit: string
               <SvgText x={width - PAD.right} y={HEIGHT - 6} fill={colors.ink3} fontSize={12} fontFamily={fonts.body} textAnchor="end">{formatDate(last.date)}</SvgText>
             ) : null}
             <Path d={path} stroke={colors.chart} strokeWidth={2} fill="none" strokeLinejoin="round" strokeLinecap="round" />
-            {points.map((point) => (
+            {points.length > DOTS_MAX ? null : points.map((point) => (
               <Circle key={point.date} cx={x(point)} cy={y(point.value)} r={4} fill={colors.chart} stroke={colors.surface} strokeWidth={2} />
             ))}
             <Line x1={x(active)} x2={x(active)} y1={PAD.top} y2={PAD.top + plotHeight} stroke={colors.ink3} strokeWidth={1} strokeDasharray="3 3" />

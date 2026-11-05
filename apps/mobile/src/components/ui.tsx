@@ -45,10 +45,11 @@ export function Screen({ children, onRefresh, footer, padTop = true }: {
     setRefreshing(false);
   });
   return (
-    <View style={[styles.screen, { paddingBottom: keyboard }]}>
+    // The list starts below the status bar, so nothing scrolls up underneath the clock.
+    <View style={[styles.screen, { paddingTop: padTop ? insets.top : 0, paddingBottom: keyboard }]}>
       <ScrollView
         keyboardShouldPersistTaps="handled"
-        contentContainerStyle={[styles.scroll, { paddingTop: padTop ? insets.top + space.md : space.md }]}
+        contentContainerStyle={[styles.scroll, { paddingTop: space.md }]}
         {...(refresh ? { refreshControl: <RefreshControl refreshing={refreshing} onRefresh={refresh} tintColor={colors.volt} /> } : {})}
       >
         {children}
