@@ -37,6 +37,13 @@ async function register(username: string, inviteCode: string): Promise<AuthRespo
   return result.body;
 }
 
+/** Joined through the crew, then left it: everyone who joins starts inside. */
+async function outsider(inviteCode: string): Promise<AuthResponse> {
+  const user = await register('outsider', inviteCode);
+  for (const friend of (await call<{ id: string }[]>('GET', '/friends', user.token)).body) await call('DELETE', `/friends/${friend.id}`, user.token);
+  return user;
+}
+
 async function crew(): Promise<{ founder: AuthResponse; friend: AuthResponse }> {
   const founder = await register('founder', BOOTSTRAP);
   const friend = await register('friend', founder.user.inviteCode);
@@ -112,6 +119,17 @@ describe('invites', () => {
     const friends = await call<unknown[]>('GET', '/friends', founder.token);
     expect(friends.body).toHaveLength(3);
   });
+
+  it('puts someone who joins with a code in the whole crew of whoever invited them', async () => {
+    const { founder, friend } = await crew();
+    const third = await register('third', founder.user.inviteCode);
+    const fourth = await register('fourth', third.user.inviteCode);
+
+    const names = async (token: string) => (await call<{ username: string }[]>('GET', '/friends', token)).body.map((user) => user.username).sort();
+    expect(await names(third.token)).toEqual(['founder', 'fourth', 'friend']);
+    expect(await names(fourth.token)).toEqual(['founder', 'friend', 'third']);
+    expect(await names(friend.token)).toEqual(['founder', 'fourth', 'third']);
+  });
 });
 
 describe('nudges', () => {
@@ -165,10 +183,10 @@ describe('feed privacy', () => {
   it('hides posts from people outside the crew', async () => {
     const { founder } = await crew();
     const created = await post(founder.token);
-    const outsider = await register('outsider', (await register('other', founder.user.inviteCode)).user.inviteCode);
-    expect((await call<PostView[]>('GET', '/feed', outsider.token)).body).toEqual([]);
-    expect((await call('GET', `/posts/${created.body.id}`, outsider.token)).status).toBe(404);
-    expect((await call('PUT', `/posts/${created.body.id}/respect`, outsider.token)).status).toBe(404);
+    const stranger = await outsider(founder.user.inviteCode);
+    expect((await call<PostView[]>('GET', '/feed', stranger.token)).body).toEqual([]);
+    expect((await call('GET', `/posts/${created.body.id}`, stranger.token)).status).toBe(404);
+    expect((await call('PUT', `/posts/${created.body.id}/respect`, stranger.token)).status).toBe(404);
   });
 
   it('strips hidden weights and notes on the server', async () => {
@@ -419,7 +437,7 @@ describe('sandbag calls', () => {
 describe('rankings', () => {
   it('ranks the crew only, by score', async () => {
     const { founder, friend } = await crew();
-    await register('outsider', friend.user.inviteCode);
+    await outsider(friend.user.inviteCode);
     await sync(founder.token, 0, [logged('w1', [entry('Row', 90)])]);
     const rows = (await call<RankingRow[]>('GET', '/rankings?period=week', founder.token)).body;
     expect(rows.map((row) => row.user.username)).toEqual(['founder', 'friend']);

@@ -14,6 +14,12 @@ export async function befriend(db: DbOrTx, a: string, b: string): Promise<void> 
   await db.insert(friendships).values(ordered(a, b)).onConflictDoNothing();
 }
 
+/** Someone who joins with a code joins the inviter's whole crew, not just the inviter. */
+export async function joinCrew(db: DbOrTx, inviterId: string, userId: string): Promise<void> {
+  const crew = [inviterId, ...(await friendIds(db, inviterId))];
+  await db.insert(friendships).values(crew.map((id) => ordered(id, userId))).onConflictDoNothing();
+}
+
 export async function friendIds(db: DbOrTx, userId: string): Promise<string[]> {
   const rows = await db.select().from(friendships).where(or(eq(friendships.userA, userId), eq(friendships.userB, userId)));
   return rows.map((row) => (row.userA === userId ? row.userB : row.userA));

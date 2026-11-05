@@ -59,6 +59,9 @@ async function world() {
   const bob = await signUp('bob', alice.user.inviteCode);
   const carol = await signUp('carol', alice.user.inviteCode);
   const mallory = await signUp('mallory', founder.user.inviteCode);
+  // Joining puts her in the whole crew, so she leaves it: a stranger with an account.
+  const crew = await call<{ id: string }[]>('GET', '/friends', { token: mallory.token });
+  for (const friend of crew.body) await call('DELETE', `/friends/${friend.id}`, { token: mallory.token });
   return { founder, alice, bob, carol, mallory };
 }
 

@@ -6,7 +6,7 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { lockUser, type Db, type DbOrTx, type Tx } from '../db/client';
 import { apiKeys, authSessions, loggedWorkouts, posts, savedWorkouts, users } from '../db/schema';
 import { conflict, HttpError, unauthorized } from '../errors';
-import { befriend } from './friends';
+import { joinCrew } from './friends';
 import { notify } from './notifications';
 
 const SESSION_DAYS = 90;
@@ -130,7 +130,7 @@ export function authRoutes(app: FastifyInstance, db: Db, config: { bootstrapInvi
       }).onConflictDoNothing({ target: users.username }).returning();
       if (!user) throw conflict('That username is taken');
       if (inviter) {
-        await befriend(tx, inviter.id, user.id);
+        await joinCrew(tx, inviter.id, user.id);
         await notify(tx, inviter.id, { kind: 'recruit', title: 'New recruit', body: voice.friendJoined(user.displayName), route: 'invites' });
       }
       return { token: await createSession(tx, user.id), user: toMe(user) };
