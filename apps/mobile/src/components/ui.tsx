@@ -1,7 +1,7 @@
 import { Children, useEffect, useRef, useState, type ReactNode } from 'react';
 import {
   ActivityIndicator, Animated, Keyboard, Platform, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, View,
-  type PressableProps, type StyleProp, type TextInputProps, type TextProps, type ViewStyle,
+  type PressableProps, type StyleProp, type TextInputProps, type TextProps, type TextStyle, type ViewStyle,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { voice } from '@sandbag/shared';
@@ -16,7 +16,7 @@ import { colors, fonts, radius, space } from '@/theme';
  * window doesn't shrink for the keyboard, and its reported height leaves out the
  * navigation bar that the keyboard also covers.
  */
-function useKeyboardHeight(bottomInset: number): number {
+export function useKeyboardHeight(bottomInset: number): number {
   const [height, setHeight] = useState(0);
   useEffect(() => {
     const ios = Platform.OS === 'ios';
@@ -117,15 +117,17 @@ export function Field({ label, error, style, ...props }: TextInputProps & { labe
 }
 
 /** Keeps "12." while typing, and reports a number or null. */
-export function NumberField({ label, value, onChange, max, unit, decimals = true, style }: {
+type NumberProps = {
   label: string;
   value: number | null;
   onChange: (value: number | null) => void;
   max: number;
   unit?: string;
   decimals?: boolean;
-  style?: StyleProp<ViewStyle>;
-}) {
+};
+
+/** A number being typed. Blank is nothing, and past the limit it's capped and said so. Changes from outside rewrite it; typing doesn't. */
+export function NumberInput({ label, value, onChange, max, unit, decimals = true, style }: NumberProps & { style?: StyleProp<TextStyle> }) {
   const [text, setText] = useState(value === null ? '' : String(value));
   useEffect(() => {
     if (parseNumber(text, max) !== value) setText(value === null ? '' : String(value));
@@ -133,27 +135,33 @@ export function NumberField({ label, value, onChange, max, unit, decimals = true
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [value]);
   return (
+    <TextInput
+      accessibilityLabel={label}
+      keyboardType={decimals ? 'decimal-pad' : 'number-pad'}
+      placeholder="–"
+      placeholderTextColor={colors.ink3}
+      selectTextOnFocus
+      value={text}
+      onChangeText={(next) => {
+        if (isOverMax(next, max)) {
+          setText(String(max));
+          onChange(max);
+          toast(voice.overLimit(unit ? `${max} ${unit}` : String(max)));
+          return;
+        }
+        setText(next);
+        onChange(parseNumber(next, max));
+      }}
+      style={style}
+    />
+  );
+}
+
+export function NumberField({ style, ...props }: NumberProps & { style?: StyleProp<ViewStyle> }) {
+  return (
     <View style={[styles.numberField, style]}>
-      <Label>{label}</Label>
-      <TextInput
-        accessibilityLabel={label}
-        keyboardType={decimals ? 'decimal-pad' : 'number-pad'}
-        placeholder="–"
-        placeholderTextColor={colors.ink3}
-        selectTextOnFocus
-        value={text}
-        onChangeText={(next) => {
-          if (isOverMax(next, max)) {
-            setText(String(max));
-            onChange(max);
-            toast(voice.overLimit(unit ? `${max} ${unit}` : String(max)));
-            return;
-          }
-          setText(next);
-          onChange(parseNumber(next, max));
-        }}
-        style={styles.numberInput}
-      />
+      <Label>{props.label}</Label>
+      <NumberInput {...props} style={styles.numberInput} />
     </View>
   );
 }

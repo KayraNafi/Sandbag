@@ -1,4 +1,5 @@
-import { entryMax, exerciseKey, setsOf, type Entry, type LoggedWorkout, type SavedExercise, type SavedWorkout } from '@sandbag/shared';
+import { entryMax, entrySetup, estimatedMax, exerciseKey, setsOf, type Entry, type LoggedWorkout, type SavedExercise, type SavedWorkout } from '@sandbag/shared';
+import { nudge } from './format';
 
 export interface LogItem extends Entry {
   date: string;
@@ -13,6 +14,8 @@ export interface ExerciseHistory {
 
 export interface DraftEntry extends Entry {
   done: boolean;
+  /** One per set, for sets ticked one at a time. Absent when the lift is ticked as a whole. See domain/sets. */
+  ticks?: boolean[];
 }
 
 export interface Draft {
@@ -23,6 +26,8 @@ export interface Draft {
   /** True when changing a workout that was already logged. */
   editing: boolean;
   entries: DraftEntry[];
+  /** When it began, for the clock on the step-by-step screen. Not logged. */
+  startedAt?: number;
 }
 
 export function activeLogged(logged: Record<string, LoggedWorkout>): LoggedWorkout[] {
@@ -67,6 +72,35 @@ export function bestBefore(index: Map<string, ExerciseHistory>, name: string, da
     .map(metricOf)
     .filter((value): value is number => value !== null);
   return values.length ? Math.max(...values) : null;
+}
+
+/** The best set before a date, weighed the same way, by the measure the rankings use. So beating it here is a new best there. */
+export function bestSetBefore(index: Map<string, ExerciseHistory>, entry: Pick<Entry, 'name' | 'perSide' | 'includesEquipment'>, date: string): number | null {
+  const setup = entrySetup(entry);
+  const values = (index.get(exerciseKey(entry.name))?.log ?? [])
+    .filter((item) => item.date < date && entrySetup(item) === setup)
+    .map(entryMax)
+    .filter((value): value is number => value !== null);
+  return values.length ? Math.max(...values) : null;
+}
+
+/** Further than this and it isn't a nudge, it's a different day's training. */
+const BEST_WITHIN_JUMPS = 3;
+
+/** The nearest weight, at these reps, that would be a new best. Null when it's out of reach today. */
+export function weightToBeat(weight: number, reps: number | null, jump: number, best: number): number | null {
+  let next = weight;
+  for (let step = 0; step < BEST_WITHIN_JUMPS; step += 1) {
+    next = nudge(next, jump);
+    if (estimatedMax(next, reps) > best) return next;
+  }
+  return null;
+}
+
+/** The last session of the same workout: the same saved one, or the same name when it wasn't saved. */
+export function lastSessionOf(workouts: LoggedWorkout[], draft: Pick<Draft, 'id' | 'date' | 'title' | 'savedWorkoutId'>): LoggedWorkout | null {
+  return workouts.find((workout) => workout.id !== draft.id && workout.date <= draft.date
+    && (draft.savedWorkoutId ? workout.savedWorkoutId === draft.savedWorkoutId : workout.title === draft.title)) ?? null;
 }
 
 /** Past weights for this lift, for one-tap entry of odd machine-stack numbers. */
@@ -121,9 +155,13 @@ export function sameExercises(a: { name: string }[], b: { name: string }[]): boo
   return key(a) === key(b);
 }
 
-/** Keeps what's typed for the sets that remain, and new sets start at the usual number. */
-export function fitPerSet(current: (number | null)[], sets: number, usual: number | null): (number | null)[] {
-  return Array.from({ length: sets }, (_, set) => (set < current.length ? current[set] ?? null : usual));
+/** Moves one item to another place in the list, the way a drag does. */
+export function moveTo<T>(list: T[], from: number, to: number): T[] {
+  const item = list[from];
+  if (item === undefined || to < 0 || to >= list.length || from === to) return list;
+  const next = list.filter((_, position) => position !== from);
+  next.splice(to, 0, item);
+  return next;
 }
 
 export function moveItem<T>(list: T[], index: number, delta: -1 | 1): T[] {

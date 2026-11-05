@@ -15,6 +15,9 @@ export const colors = {
   doneBg: '#171b0c',
   doneLine: '#3f4d14',
   danger: '#ff8a70',
+  /** The ends of the effort scale, easy to max. The middle steps are chart, warn and danger. */
+  effortEasy: '#7fd1c0',
+  effortMax: '#ff5f4d',
 } as const;
 
 export const fonts = {

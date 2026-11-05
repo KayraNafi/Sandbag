@@ -7,7 +7,7 @@ const BELIEVABLE_MAX = 1500;
 /** 500 kg for 40 reps, in one set. */
 const BELIEVABLE_SET_KG = 20_000;
 
-type SetFields = Pick<Entry, 'sets' | 'weight' | 'reps'> & Partial<Pick<Entry, 'setReps' | 'setWeights'>>;
+type SetFields = Pick<Entry, 'sets' | 'weight' | 'reps'> & Partial<Pick<Entry, 'setReps' | 'setWeights' | 'setDrops'>>;
 type StrengthEntry = Pick<Entry, 'kind'> & SetFields & Partial<Pick<Entry, 'perSide' | 'includesEquipment' | 'minutes'>>;
 
 export interface LiftSet {
@@ -60,9 +60,10 @@ export const entryMax = (entry: StrengthEntry): number | null => bestSet(entry)?
 /**
  * Per-set lists kept only when they say something: one value for every set, and not all the same.
  * `weight` becomes the heaviest set, so anything that reads one weight still reads a true one.
+ * Drop-set marks stay when at least one set has one.
  */
 export function tidySets<T extends SetFields>(entry: T): T {
-  const { setReps, setWeights, ...rest } = entry;
+  const { setReps, setWeights, setDrops, ...rest } = entry;
   const sets = entry.sets ?? 0;
   const varies = <V>(list: V[] | undefined): list is V[] => perSet(list, sets) && new Set(list).size > 1;
   const tidy = { ...rest } as T;
@@ -75,6 +76,7 @@ export function tidySets<T extends SetFields>(entry: T): T {
   } else if (perSet(setWeights, sets) && sets) {
     tidy.weight = setWeights[0] ?? null;
   }
+  if (perSet(setDrops, sets) && setDrops.some(Boolean)) tidy.setDrops = setDrops;
   return tidy;
 }
 

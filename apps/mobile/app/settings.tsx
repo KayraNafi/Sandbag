@@ -9,7 +9,8 @@ import { confirm } from '@/components/confirm';
 import { feel, Pop } from '@/components/motion';
 import { Sheet } from '@/components/Sheet';
 import { toast } from '@/components/Toast';
-import { Button, Field, ListGroup, ListRow, Muted, Screen } from '@/components/ui';
+import { Button, Field, ListGroup, ListRow, Muted, Screen, Segmented } from '@/components/ui';
+import { usePrefs, type LoggingStyle } from '@/data/prefs';
 import { useData } from '@/data/store';
 import { syncNow } from '@/data/sync';
 import { formatDate, plural, today } from '@/domain/format';
@@ -55,7 +56,12 @@ async function exportData(): Promise<void> {
   await Share.share({ title: 'sandbag-export.json', message: text });
 }
 
-type Panel = 'name' | 'goal' | 'password' | 'delete' | null;
+type Panel = 'name' | 'goal' | 'password' | 'logging' | 'delete' | null;
+
+const LOGGING: { key: LoggingStyle; label: string; body: string }[] = [
+  { key: 'list', label: 'List', body: 'Every lift on one list. Tick each one when it’s done.' },
+  { key: 'steps', label: 'Step by step', body: 'One lift at a time, one set at a time, with a rest timer between sets.' },
+];
 
 export default function Settings() {
   const me = useSession((state) => state.me);
@@ -71,6 +77,8 @@ export default function Settings() {
   const waiting = me?.goalHistory.at(-1)?.from;
   const goalWaits = Boolean(waiting && waiting > today());
   const close = () => setPanel(null);
+  const logging = usePrefs((state) => state.logging);
+  const setLogging = usePrefs((state) => state.setLogging);
 
   const run = async (name: string, action: () => Promise<void>) => {
     setBusy(name);
@@ -162,6 +170,9 @@ export default function Settings() {
         <ListRow icon="lock" title="Change password" onPress={() => setPanel('password')} />
       </ListGroup>
       <ListGroup>
+        <ListRow icon="bag" title="Logging style" body={LOGGING.find((option) => option.key === logging)?.label ?? ''} onPress={() => setPanel('logging')} />
+      </ListGroup>
+      <ListGroup>
         <ListRow icon="download" title="Export your data" body={busy === 'export' ? 'Getting it ready' : 'Workouts and posts, as one JSON file'} onPress={() => run('export', exportData)} />
         <ListRow icon="key" title="API keys" body="For your own scripts and tools" onPress={() => router.push('/api-keys')} />
       </ListGroup>
@@ -180,6 +191,10 @@ export default function Settings() {
         <Muted>Consistency in the rankings is measured against this, counted as at least 3. Setting it low is noted. A change starts next Monday once you’ve trained this week.</Muted>
       </Sheet>
 
+      <Sheet visible={panel === 'logging'} onClose={close} title="Logging style" footer={<Button title="Done" onPress={close} />}>
+        <Segmented options={LOGGING} value={logging} onChange={setLogging} />
+        <Muted>{LOGGING.find((option) => option.key === logging)?.body} Switch any time, even halfway through a workout.</Muted>
+      </Sheet>
       <Sheet visible={panel === 'password'} onClose={close} title="Change password" footer={<Button title="Change password" busy={busy === 'password'} onPress={changePassword} />}>
         <Field label="Current password" secureTextEntry autoComplete="current-password" value={current} onChangeText={setCurrent} />
         <Field label="New password" secureTextEntry autoComplete="new-password" value={next} onChangeText={setNext} error={passwordError} />

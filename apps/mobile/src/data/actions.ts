@@ -1,8 +1,9 @@
-import { loggedWorkoutSchema, savedWorkoutSchema, tidySets, voice, type Entry, type LoggedWorkout, type SavedExercise, type SavedWorkout } from '@sandbag/shared';
+import { loggedWorkoutSchema, savedWorkoutSchema, voice, type Entry, type LoggedWorkout, type SavedExercise, type SavedWorkout } from '@sandbag/shared';
 import { randomUUID } from 'expo-crypto';
 import { today } from '@/domain/format';
 import { activeLogged, buildHistory, draftEntryFor, lastLogged, type Draft, type DraftEntry } from '@/domain/history';
 import { num, round2 } from '@/domain/format';
+import { toEntry } from '@/domain/sets';
 import { nextPosition, useData } from './store';
 
 export const newId = () => randomUUID();
@@ -14,18 +15,18 @@ function history() {
 export function startFromSaved(workout: SavedWorkout): void {
   const index = history();
   useData.getState().setDraft({
-    id: newId(), date: today(), title: workout.name, savedWorkoutId: workout.id, editing: false,
+    id: newId(), date: today(), title: workout.name, savedWorkoutId: workout.id, editing: false, startedAt: Date.now(),
     entries: workout.exercises.map((exercise) => draftEntryFor(index, exercise, newId)),
   });
 }
 
 export function startBlank(): void {
-  useData.getState().setDraft({ id: newId(), date: today(), title: 'Workout', savedWorkoutId: null, editing: false, entries: [] });
+  useData.getState().setDraft({ id: newId(), date: today(), title: 'Workout', savedWorkoutId: null, editing: false, startedAt: Date.now(), entries: [] });
 }
 
 export function startRepeat(workout: LoggedWorkout): void {
   useData.getState().setDraft({
-    id: newId(), date: today(), title: workout.title, savedWorkoutId: workout.savedWorkoutId, editing: false,
+    id: newId(), date: today(), title: workout.title, savedWorkoutId: workout.savedWorkoutId, editing: false, startedAt: Date.now(),
     entries: workout.entries.map((entry) => ({ ...entry, id: newId(), done: false })),
   });
 }
@@ -57,7 +58,7 @@ export function reactionTo(entry: DraftEntry, date: string): string | null {
 export function finishDraft(draft: Draft): LoggedWorkout {
   const entries: Entry[] = draft.entries
     .filter((entry) => entry.done)
-    .map(({ done: _done, ...entry }) => tidySets(entry));
+    .map(toEntry);
   const doc = loggedWorkoutSchema.parse({
     id: draft.id, date: draft.date, title: draft.title.trim() || 'Workout', savedWorkoutId: draft.savedWorkoutId,
     entries, updatedAt: Date.now(), deleted: false,

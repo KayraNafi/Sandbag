@@ -32,6 +32,24 @@ export const feel = {
   },
 };
 
+/** A quick swell and settle whenever `value` changes, so a number that moved is noticed. Not on first show. */
+export function usePulse(value: unknown, by = 1.12): Animated.Value {
+  const scale = useRef(new Animated.Value(1)).current;
+  const first = useRef(true);
+  useEffect(() => {
+    if (first.current) {
+      first.current = false;
+      return;
+    }
+    if (prefersLessMotion()) return;
+    Animated.sequence([
+      Animated.timing(scale, { toValue: by, duration: 70, useNativeDriver: NATIVE }),
+      Animated.timing(scale, { toValue: 1, duration: 150, easing: EASE_OUT, useNativeDriver: NATIVE }),
+    ]).start();
+  }, [value, scale, by]);
+  return scale;
+}
+
 /** Arrives once: a short rise and fade, with no bounce. */
 export function FadeIn({ children, delay = 0, style }: { children: ReactNode; delay?: number; style?: StyleProp<ViewStyle> }) {
   const progress = useRef(new Animated.Value(prefersLessMotion() ? 1 : 0)).current;

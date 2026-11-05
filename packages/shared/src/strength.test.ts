@@ -62,6 +62,12 @@ describe('tidySets', () => {
     expect(tidy.setWeights).toBeUndefined();
     expect(tidy.weight).toBe(60);
   });
+
+  it('keeps drop-set marks only when a set has one', () => {
+    expect(tidySets(entry('Curl', 20, 10, { setDrops: [false, false, true] })).setDrops).toEqual([false, false, true]);
+    expect('setDrops' in tidySets(entry('Curl', 20, 10, { setDrops: [false, false, false] }))).toBe(false);
+    expect('setDrops' in tidySets(entry('Curl', 20, 10, { setDrops: [true, true] }))).toBe(false);
+  });
 });
 
 describe('believable sets', () => {

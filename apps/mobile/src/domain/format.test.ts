@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Entry } from '@sandbag/shared';
-import { backfillDates, dayLabel, isOverMax, parseNumber, setsReps, summary } from './format';
+import { backfillDates, clock, nudge, dayLabel, isOverMax, parseNumber, setsReps, summary } from './format';
 
 describe('typed numbers', () => {
   it('reads decimals with either separator, and nothing from blanks', () => {
@@ -32,12 +32,34 @@ describe('setsReps', () => {
   });
 });
 
+describe('nudge', () => {
+  it('steps onto the grid of the jump', () => {
+    expect(nudge(60, 2.5)).toBe(62.5);
+    expect(nudge(61, 2.5)).toBe(62.5);
+    expect(nudge(61, -2.5)).toBe(60);
+    expect(nudge(1, -2.5)).toBe(0);
+  });
+});
+
+describe('clock', () => {
+  it('shows minutes and seconds, rounding up so it never shows 0:00 early', () => {
+    expect(clock(65)).toBe('1:05');
+    expect(clock(0.2)).toBe('0:01');
+    expect(clock(-3)).toBe('0:00');
+  });
+});
+
 describe('summary', () => {
   const bench: Entry = { id: 'b', name: 'Bench', kind: 'strength', sets: 3, reps: 8, weight: 70, perSide: false, rpe: null, minutes: null, note: '' };
 
   it('pairs each weight with its reps when the weights differ', () => {
     expect(summary({ ...bench, setWeights: [60, 65, 70], setReps: [10, 8, 5] })).toBe('60×10, 65×8, 70×5 kg');
     expect(summary({ ...bench, setWeights: [60, 65, 70], perSide: true })).toBe('60×8, 65×8, 70×8 kg each side');
+  });
+
+  it('says which sets were drop sets', () => {
+    expect(summary({ ...bench, rpe: 10, setDrops: [false, false, true] })).toBe('70 kg · 3 × 8 · drop set · RPE 10');
+    expect(summary({ ...bench, setDrops: [false, true, true] })).toBe('70 kg · 3 × 8 · 2 drop sets');
   });
 
   it('keeps one weight and sets × reps otherwise', () => {

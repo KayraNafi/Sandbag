@@ -1,6 +1,6 @@
 import type { Entry, LoggedWorkout, SavedWorkout } from '@sandbag/shared';
 import { describe, expect, it } from 'vitest';
-import { activeLogged, bestBefore, buildHistory, draftEntryFor, fitPerSet, lastLogged, moveItem, nextWorkout, recentWeights, sameExercises, volumeOf } from './history';
+import { activeLogged, bestBefore, bestSetBefore, buildHistory, draftEntryFor, lastLogged, lastSessionOf, moveTo, weightToBeat, moveItem, nextWorkout, recentWeights, sameExercises, volumeOf } from './history';
 
 const entry = (name: string, weight: number | null, extra: Partial<Entry> = {}): Entry => ({
   id: `${name}-${weight}`, name, kind: 'strength', sets: 3, reps: 8, weight, perSide: false, rpe: 8, minutes: null, note: '', ...extra,
@@ -92,15 +92,6 @@ describe('a backfilled session', () => {
   });
 });
 
-describe('fitPerSet', () => {
-  it('fills from the usual number, and keeps typed values when the sets change', () => {
-    expect(fitPerSet([], 3, 8)).toEqual([8, 8, 8]);
-    expect(fitPerSet([8, 6], 4, 8)).toEqual([8, 6, 8, 8]);
-    expect(fitPerSet([8, 6, 5], 2, 8)).toEqual([8, 6]);
-    expect(fitPerSet([null, 6], 2, 8)).toEqual([null, 6]);
-  });
-});
-
 describe('per-set reps on the next session', () => {
   it('starts from the usual number, not last time’s breakdown', () => {
     const index = buildHistory([logged('w', '2026-01-01', [entry('Squat', 100, { sets: 3, reps: 8, setReps: [8, 8, 6] })])]);
@@ -148,5 +139,43 @@ describe('volumeOf', () => {
 
   it('counts nothing for timed work or a joke weight', () => {
     expect(volumeOf({ entries: [entry('Run', null, { kind: 'time', minutes: 30 }), entry('Bench', 9000, { sets: 1, reps: 1 })] })).toBe(0);
+  });
+});
+
+describe('new bests', () => {
+  const index = buildHistory([
+    logged('a', '2026-01-01', [entry('Bench', 80, { reps: 5 })]),
+    logged('b', '2026-01-08', [entry('Bench', 100, { reps: 5, perSide: true })]),
+  ]);
+
+  it('only compares sets weighed the same way, before the day', () => {
+    expect(bestSetBefore(index, { name: 'bench', perSide: false }, '2026-02-01')).toBeCloseTo(80 * (1 + 4 / 30));
+    expect(bestSetBefore(index, { name: 'Bench', perSide: false }, '2026-01-01')).toBeNull();
+  });
+
+  it('offers the nearest weight that beats it, within three jumps', () => {
+    const best = 80 * (1 + 4 / 30);
+    expect(weightToBeat(77.5, 5, 2.5, best)).toBe(82.5);
+    expect(weightToBeat(60, 5, 2.5, best)).toBeNull();
+  });
+});
+
+describe('lastSessionOf', () => {
+  it('finds the last session of the same saved workout, or the same name', () => {
+    const all = activeLogged({
+      new: logged('new', '2026-01-09', [], 'upper'),
+      old: logged('old', '2026-01-02', [], 'upper'),
+      other: logged('other', '2026-01-08', [], 'lower'),
+    });
+    expect(lastSessionOf(all, { id: 'draft', date: '2026-01-10', title: 'x', savedWorkoutId: 'upper' })?.id).toBe('new');
+    expect(lastSessionOf(all, { id: 'draft', date: '2026-01-10', title: 'other', savedWorkoutId: null })?.id).toBe('other');
+  });
+});
+
+describe('moveTo', () => {
+  it('moves an item any distance, and ignores a move off the end', () => {
+    expect(moveTo(['a', 'b', 'c', 'd'], 0, 2)).toEqual(['b', 'c', 'a', 'd']);
+    expect(moveTo(['a', 'b', 'c', 'd'], 3, 0)).toEqual(['d', 'a', 'b', 'c']);
+    expect(moveTo(['a', 'b'], 0, 5)).toEqual(['a', 'b']);
   });
 });

@@ -17,6 +17,7 @@ export const MAX_WEIGHT = 2000;
 const weight = z.number().min(0).max(MAX_WEIGHT).nullable();
 const setReps = z.array(count).max(MAX_VARIED_SETS).optional();
 const setWeights = z.array(weight).max(MAX_VARIED_SETS).optional();
+const setDrops = z.array(z.boolean()).max(MAX_VARIED_SETS).optional();
 
 export const entrySchema = z.object({
   id: clientId,
@@ -28,6 +29,8 @@ export const entrySchema = z.object({
   setReps,
   // One value per set when they differ. `weight` stays the heaviest, which is what older apps show.
   setWeights,
+  // Which sets were drop sets: taken to failure, then on at lighter weights without a rest. Only the mark is kept.
+  setDrops,
   weight,
   perSide: z.boolean(),
   // Whether the weight counts the bar or machine. Absent means it wasn't said, as on every older entry.
@@ -255,6 +258,7 @@ const apiEntrySchema = z.object({
   reps: optionalCount,
   setReps,
   setWeights,
+  setDrops,
   weight: weight.default(null),
   perSide: z.boolean().default(false),
   includesEquipment: z.boolean().optional(),

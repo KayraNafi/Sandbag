@@ -61,6 +61,21 @@ export function parseNumber(text: string, max: number): number | null {
 
 export const isOverMax = (text: string, max: number) => typedNumber(text) > max;
 
+/** One step up or down, landing on the step's own grid: 61 + 2.5 is 62.5, not 63.5. */
+export function nudge(value: number, delta: number): number {
+  const step = Math.abs(delta);
+  const stops = value / step;
+  const near = Math.round(stops);
+  const from = Math.abs(stops - near) < 1e-6 ? near : delta > 0 ? Math.floor(stops) : Math.ceil(stops);
+  return Math.max(0, round2((from + Math.sign(delta)) * step));
+}
+
+/** Minutes and seconds, as a timer shows them: 1:05. */
+export function clock(seconds: number): string {
+  const whole = Math.max(0, Math.ceil(seconds));
+  return `${Math.floor(whole / 60)}:${pad(whole % 60)}`;
+}
+
 export const round2 = (value: number) => Math.round(value * 100) / 100;
 export const num = (value: number) => String(round2(value));
 export const plural = (count: number, word: string) => `${count} ${word}${count === 1 ? '' : 's'}`;
@@ -98,6 +113,8 @@ export function summary(entry: Entry): string {
     const sr = setsReps(entry);
     if (sr) parts.push(sr);
   }
+  const drops = entry.setDrops?.length === entry.sets ? entry.setDrops.filter(Boolean).length : 0;
+  if (drops) parts.push(drops === 1 ? 'drop set' : `${drops} drop sets`);
   if (entry.rpe) parts.push(`RPE ${num(entry.rpe)}`);
   return parts.join(' · ') || 'No numbers logged';
 }

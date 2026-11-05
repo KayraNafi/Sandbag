@@ -1,3 +1,17 @@
+const REST_LINES = [
+  'Breathe. The bar isn’t going anywhere.',
+  'Drink some water. Look busy.',
+  'This is the bit where you check your phone. Oh, look.',
+  'Rest. Not a nap.',
+  'Someone’s watching your form. Probably not.',
+  'Shake it out like that does anything.',
+  'Pretend to adjust the bench.',
+  'Walk to the water fountain like it’s important.',
+  'If anyone asks, this is part of the programme.',
+  'The next one won’t lift itself. We checked.',
+];
+
+
 /** One of a few lines, so the same joke doesn't land twice in a row. */
 const pick = (lines: string[], seed: number) => lines[Math.abs(Math.floor(seed)) % lines.length]!;
 
@@ -33,7 +47,7 @@ export const voice = {
   weightUp: (gain: string) => `+${gain} kg. Alert the press.`,
   weightDown: () => 'Deload. That’s what we’re calling it.',
   sameWeight: (weight: string) => `${weight} kg again. Consistency, or fear?`,
-  rpeTen: () => 'RPE 10 again. Sure.',
+  rpeTen: (seed = 0) => pick(['RPE 10 again. Sure.', 'RPE 10. And yet here you are, typing.', 'Absolute limit, was it? We’ll remember that.'], seed),
   overLimit: (limit: string) => `Capped at ${limit}. We still don’t believe you.`,
   finished: () => 'Logged. Screenshots or it didn’t happen, except we have the data.',
   noBest: () => 'No new bests. A very safe day at the office.',
@@ -60,4 +74,27 @@ export const voice = {
     `${name} says your gym bag’s been asking about you.`,
   ], seed),
   nudgeSent: (name: string, seed = 0) => pick([`Nudged ${name}. They know you know.`, `Nudged ${name}. Very supportive. Very smug.`], seed),
+  rest: (turn: number) => pick(REST_LINES, turn),
+  shortRest: (seed = 0) => pick(['That was quick. Sure about that?', 'Barely sat down. Showing off?', 'No rest? Bold. We’ll see about the next one.'], seed),
+  longRest: (seed = 0) => pick(['Still resting? The bar’s filed a missing person report.', 'This rest has its own postcode now.', 'At this point it counts as a second session.'], seed),
+  /** A drop set that's run out of weight to drop. */
+  dropFloor: (seed = 0) => pick([
+    'Next drop is the empty handle. Then your dignity.',
+    'Nothing left to drop but your ego.',
+    'Any lighter and it’s a stretch.',
+    'You’re lifting the idea of a weight now.',
+    'Drop again and you’re holding air. Bold.',
+    'The pin’s at the top. The machine is embarrassed for you.',
+  ], seed),
+  noNap: (seed = 0) => pick(['That’s not rest, that’s a nap.', 'Thirty minutes is plenty. Get up.'], seed),
+  allDone: (seed = 0) => pick(['Nothing left on the list. Suspicious, but we’ll allow it.', 'All ticked. Either you’re done or you’re done pretending.', 'That’s the list. Go home, or don’t.'], seed),
+  undoSet: (seed = 0) => pick(['Un-lifted. Physics disagrees.', 'Taken back. It still happened, though.'], seed),
+  needWeight: (seed = 0) => pick(['Put a weight in first. Even a guess beats nothing.', 'Lifted what, exactly? Put a number in.', 'No weight, no set. We have standards. Low ones, but still.'], seed),
+  zeroReps: (seed = 0) => pick(['Zero reps is called standing there.', 'Zero reps. You looked at it, at least.', 'Holding your phone doesn’t count as a set.'], seed),
+  noWay: (weight: string, seed = 0) => pick([`${weight} kg. Sure. That one doesn’t count.`, `${weight} kg. Did you bring witnesses? Not counted.`, `${weight} kg. Put that on your CV, not here. Not counted.`], seed),
+  tinyWeight: (weight: string, seed = 0) => pick([`${weight} kg. Careful, you’ll pull something.`, `${weight} kg. We’ve seen heavier sandwiches.`], seed),
+  manyReps: (reps: number, seed = 0) => pick([`${reps} reps. Is this cardio now?`, `${reps} reps. Someone’s avoiding adding weight.`], seed),
+  rpeLow: (seed = 0) => pick(['That easy? So why are we here?', 'That easy? Someone should call that.', 'Barely an effort, and you put it in writing.'], seed),
+  discard: () => 'None of this gets logged. We’ll say you were never here.',
+  restOver: 'Rest’s over. That bar isn’t going to lift itself.',
 };
