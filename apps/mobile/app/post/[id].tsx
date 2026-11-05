@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
-import { api, errorText } from '@/api/client';
+import { api, ApiError, errorText } from '@/api/client';
 import { leave } from '@/nav';
 import { useSession } from '@/auth/session';
 import { confirm } from '@/components/confirm';
@@ -91,7 +91,16 @@ export default function PostScreen() {
   });
 
   if (post.isPending) return <Screen padTop={false}><Loading /></Screen>;
-  if (!post.data) return <Screen padTop={false}><Muted>This post is gone, or isn’t for you.</Muted></Screen>;
+  if (!post.data) {
+    // Only the server saying so means the post is gone. Anything else is a bad connection, worth another try.
+    const gone = post.error instanceof ApiError && post.error.status === 404;
+    return (
+      <Screen padTop={false}>
+        <Muted>{gone ? 'This post is gone, or isn’t for you.' : errorText(post.error)}</Muted>
+        {gone ? null : <Button title="Try again" variant="ghost" busy={post.isFetching} onPress={() => post.refetch()} />}
+      </Screen>
+    );
+  }
   const data = post.data;
   const mine = data.author.id === me?.id;
   // Only recent posts can be called, so nobody is held to a number from months ago.
