@@ -1,6 +1,6 @@
 import { Platform } from 'react-native';
 import type {
-  ApiKeyView, TrophyView, AuthResponse, AvatarId, CallView, InviteSummary, Me, NotificationView, Period, PostView, PublicUser, RankingRow,
+  ApiKeyView, TrophyView, AuthResponse, AvatarId, CallView, InviteSummary, Me, NotificationView, PostView, PublicUser, RankingPeriod, RankingRow,
   DataExport, ReplyView, SavedWorkout, SyncRequest, SyncResponse, Entry,
 } from '@sandbag/shared';
 
@@ -73,7 +73,7 @@ export const api = {
   saveFromPost: (id: string) => request<SavedWorkout>('POST', `/posts/${id}/save`),
   callSandbag: (id: string, exercise: string, line: string) => request<unknown>('POST', `/posts/${id}/calls`, { exercise, line }),
   calls: () => request<CallView[]>('GET', '/calls'),
-  rankings: (period: Period) => request<RankingRow[]>('GET', `/rankings?period=${period}`),
+  rankings: (period: RankingPeriod) => request<RankingRow[]>('GET', `/rankings?period=${period}`),
   friends: () => request<PublicUser[]>('GET', '/friends'),
   addFriend: (inviteCode: string) => request<PublicUser>('POST', '/friends', { inviteCode }),
   removeFriend: (id: string) => request<void>('DELETE', `/friends/${id}`),

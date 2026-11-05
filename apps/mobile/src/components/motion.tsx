@@ -1,6 +1,6 @@
 import * as Haptics from 'expo-haptics';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { AccessibilityInfo, Animated, Easing, Platform, StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
+import { AccessibilityInfo, Animated, Easing, Platform, StyleSheet, View, type StyleProp, type TextStyle, type ViewStyle } from 'react-native';
 import { colors } from '@/theme';
 
 export const NATIVE = Platform.OS !== 'web';
@@ -109,3 +109,49 @@ export function Stamp({ children, delay = 0, style }: { children: ReactNode; del
   const scale = progress.interpolate({ inputRange: [0, 1], outputRange: [1.8, 1] });
   return <Animated.View style={[{ opacity: progress, transform: [{ scale }, { rotate: '-4deg' }] }, style]}>{children}</Animated.View>;
 }
+
+/** A bar that grows to its share of the track, from 0 to 1. */
+export function GrowBar({ ratio, color, delay = 0, height = 8 }: { ratio: number; color: string; delay?: number; height?: number }) {
+  const share = Math.max(0, Math.min(1, ratio));
+  const grown = useRef(new Animated.Value(prefersLessMotion() ? share : 0)).current;
+  useEffect(() => {
+    if (prefersLessMotion()) grown.setValue(share);
+    else Animated.timing(grown, { toValue: share, duration: 700, delay, easing: EASE_OUT, useNativeDriver: false }).start();
+  }, [grown, share, delay]);
+  const width = grown.interpolate({ inputRange: [0, 1], outputRange: ['0%', '100%'] });
+  return (
+    <View style={[bar.track, { height }]}>
+      <Animated.View style={{ height, width, backgroundColor: color }} />
+    </View>
+  );
+}
+
+/** A number that counts up to where it belongs. */
+export function CountUp({ value, style, delay = 0 }: { value: number; style?: StyleProp<TextStyle>; delay?: number }) {
+  const [shown, setShown] = useState(prefersLessMotion() ? value : 0);
+  const animated = useRef(new Animated.Value(shown)).current;
+  useEffect(() => {
+    if (prefersLessMotion()) {
+      setShown(value);
+      return undefined;
+    }
+    const listener = animated.addListener(({ value: next }) => setShown(Math.round(next)));
+    Animated.timing(animated, { toValue: value, duration: 700, delay, easing: EASE_OUT, useNativeDriver: false }).start();
+    return () => animated.removeListener(listener);
+  }, [animated, value, delay]);
+  return <Animated.Text accessibilityLabel={String(value)} style={style}>{shown.toLocaleString('en-US')}</Animated.Text>;
+}
+
+/** Grows up from nothing to its height, like a podium step. */
+export function GrowUp({ height, delay = 0, style, children }: { height: number; delay?: number; style?: StyleProp<ViewStyle>; children?: ReactNode }) {
+  const animated = useRef(new Animated.Value(prefersLessMotion() ? height : 0)).current;
+  useEffect(() => {
+    if (prefersLessMotion()) animated.setValue(height);
+    else Animated.timing(animated, { toValue: height, duration: 520, delay, easing: EASE_OUT, useNativeDriver: false }).start();
+  }, [animated, height, delay]);
+  return <Animated.View style={[{ height: animated, overflow: 'hidden' }, style]}>{children}</Animated.View>;
+}
+
+const bar = StyleSheet.create({
+  track: { backgroundColor: colors.surface2, transform: [{ skewX: '-18deg' }] },
+});

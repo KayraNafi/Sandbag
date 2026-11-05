@@ -530,6 +530,17 @@ describe('goals and time zones', () => {
     expect(week?.bonuses).toMatchObject({ total: expect.any(Number) });
     expect(month?.bonuses).toBeNull();
   });
+
+  it('adds up every week for all time', async () => {
+    const founder = await register('founder', BOOTSTRAP);
+    const weeksAgo = addDays(todayIso(), -21);
+    await sync(founder.token, 0, [logged('old', [entry('Row', 50)], { date: weeksAgo }), logged('new', [entry('Row', 50)])]);
+    const [week] = (await call<RankingRow[]>('GET', '/rankings?period=week', founder.token)).body;
+    const [all] = (await call<RankingRow[]>('GET', '/rankings?period=all', founder.token)).body;
+    expect(all?.workouts).toBe(2);
+    expect(all?.bonuses).toBeNull();
+    expect(all?.score).toBeGreaterThan(week?.score ?? 0);
+  });
 });
 
 describe('recorded time', () => {

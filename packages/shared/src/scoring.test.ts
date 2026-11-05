@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Entry } from './schemas';
-import { beatABest, changeGoal, goalIn, nextInviteGoal, periodStats, streakBonus, weekBonuses, weekStreak, type GoalChange, type ScoringWorkout } from './scoring';
+import { allTimeScore, beatABest, changeGoal, goalIn, nextInviteGoal, periodStats, streakBonus, weekBonuses, weekScore, weekStreak, type GoalChange, type ScoringWorkout } from './scoring';
 
 // A Friday. Its week began on Monday 2026-10-26.
 const TODAY = '2026-10-30';
@@ -236,5 +236,30 @@ describe('beatABest', () => {
 
   it('counts more reps at the same weight as a best', () => {
     expect(beatABest([workout('2026-10-01', 50, 8), workout('2026-10-02', 50, 10)])).toBe(true);
+  });
+});
+
+describe('allTimeScore', () => {
+  const squat = (weight: number): Entry => ({ id: 's', name: 'Squat', kind: 'strength', sets: 3, reps: 5, weight, perSide: false, rpe: null, minutes: null, note: '' });
+  const days = (dates: string[], weight = 100): ScoringWorkout[] => dates.map((date) => ({ date, entries: [squat(weight)] }));
+  const lastWeek = days(['2026-10-19', '2026-10-21', '2026-10-23']);
+  const thisWeek = days(['2026-10-26', '2026-10-28'], 105);
+  const none = new Map<string, number>();
+
+  it('adds up each week as it stood on its Sunday', () => {
+    const both = [...lastWeek, ...thisWeek];
+    expect(allTimeScore(both, 3, TODAY, none)).toBe(weekScore(lastWeek, 3, '2026-10-25', 0) + weekScore(both, 3, TODAY, 0));
+  });
+
+  it('is nothing without a workout or a call', () => {
+    expect(allTimeScore([], 3, TODAY, none)).toBe(0);
+  });
+
+  it('counts a week of calls before the first workout', () => {
+    expect(allTimeScore([], 3, TODAY, new Map([['2026-10-19', 5]]))).toBe(5);
+  });
+
+  it('never lets a bad week take points away', () => {
+    expect(allTimeScore(lastWeek, 3, TODAY, new Map([['2026-10-26', -10]]))).toBe(weekScore(lastWeek, 3, '2026-10-25', 0));
   });
 });

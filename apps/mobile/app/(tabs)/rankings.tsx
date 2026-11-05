@@ -1,75 +1,92 @@
-import type { Period, RankingRow, WeekBonuses } from '@sandbag/shared';
+import type { RankingPeriod, RankingRow, WeekBonuses } from '@sandbag/shared';
 import { useQuery } from '@tanstack/react-query';
 import { router } from 'expo-router';
 import { useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { api } from '@/api/client';
 import { useSession } from '@/auth/session';
-import { Button, Card, Chip, Empty, Label, Loading, Muted, Row, Screen, Title } from '@/components/ui';
-import { signed, signedPoints } from '@/domain/format';
 import { Avatar } from '@/components/Avatar';
-import { colors, fonts, space } from '@/theme';
+import { CountUp, feel, GrowBar, GrowUp, Stamp } from '@/components/motion';
+import { Button, Card, Empty, Loading, Muted, Row, Screen, Segmented, Title } from '@/components/ui';
+import { plural, signed, signedPoints } from '@/domain/format';
+import { colors, fonts, radius, space } from '@/theme';
 
-function gapLine(rows: RankingRow[], myId: string | undefined): string | null {
-  const mine = rows.find((row) => row.user.id === myId);
-  if (!mine || rows.length < 2) return null;
-  const above = rows[rows.indexOf(mine) - 1];
-  if (!above) return 'You’re in front. Enjoy it, they can see this too.';
-  const gap = above.score - mine.score;
-  return gap ? `${gap} ${gap === 1 ? 'point' : 'points'} behind ${above.user.displayName}. Not that anyone’s counting.` : `Level with ${above.user.displayName}. Awkward.`;
+const PERIODS: { key: RankingPeriod; label: string }[] = [
+  { key: 'week', label: 'This week' },
+  { key: 'month', label: '30 days' },
+  { key: 'all', label: 'All time' },
+];
+
+/** The one person to catch, on one track. A gap you can see says more than a rank. */
+function Chase({ rows, myId }: { rows: RankingRow[]; myId: string | undefined }) {
+  const at = rows.findIndex((row) => row.user.id === myId);
+  const mine = rows[at];
+  const above = rows[at - 1];
+  const rival = above ?? rows[at + 1];
+  if (!mine || !rival) return null;
+  const gap = Math.abs(rival.score - mine.score);
+  const name = rival.user.displayName.toUpperCase();
+  return (
+    <Card>
+      <Row style={styles.chaseTop}>
+        <CountUp value={gap} style={styles.chaseNumber} />
+        <Text style={styles.chaseText}>{above ? (gap ? `TO CATCH ${name}` : `LEVEL WITH ${name}`) : `AHEAD OF ${name}`}</Text>
+      </Row>
+      <Row>
+        <Avatar user={mine.user} size={36} />
+        <View style={styles.flex}><GrowBar ratio={above ? mine.score / Math.max(1, above.score) : 1} color={colors.volt} delay={200} height={12} /></View>
+        <Avatar user={rival.user} size={36} />
+      </Row>
+      <Muted>{above ? (gap ? 'Not that anyone’s counting.' : 'Awkward.') : 'Enjoy it, they can see this too.'}</Muted>
+    </Card>
+  );
 }
 
-export default function Rankings() {
-  const [period, setPeriod] = useState<Period>('week');
-  const me = useSession((state) => state.me);
-  const rankings = useQuery({ queryKey: ['rankings', period], queryFn: () => api.rankings(period) });
-  const rows = rankings.data ?? [];
-  const gap = gapLine(rows, me?.id);
+// Tallest in the middle, the way a real podium stands.
+const PODIUM_ORDER = [1, 0, 2];
+const PODIUM_HEIGHT = [120, 88, 64];
 
+function Podium({ rows, onPick }: { rows: RankingRow[]; onPick: (row: RankingRow) => void }) {
   return (
-    <Screen onRefresh={() => rankings.refetch()}>
-      <Title>Rankings</Title>
-      <Row>
-        <Chip title="This week" active={period === 'week'} onPress={() => setPeriod('week')} />
-        <Chip title="This month" active={period === 'month'} onPress={() => setPeriod('month')} />
+    <View style={styles.podium}>
+      {PODIUM_ORDER.map((place) => {
+        const row = rows[place];
+        if (!row) return <View key={place} style={styles.step} />;
+        return (
+          <Pressable key={row.user.id} accessibilityRole="button" accessibilityLabel={`${row.rank}. ${row.user.displayName}, ${row.score} points`} onPress={() => onPick(row)} style={styles.step}>
+            <Avatar user={row.user} size={place === 0 ? 64 : 52} />
+            <Text numberOfLines={1} style={styles.podiumName}>{row.user.displayName}</Text>
+            {row.wearingSandbag ? <Stamp delay={500}><Text style={styles.badge}>SANDBAG</Text></Stamp> : null}
+            <GrowUp height={PODIUM_HEIGHT[place]!} delay={place * 90} style={[styles.block, place === 0 && styles.blockFirst]}>
+              <View style={styles.blockInner}>
+                <CountUp value={row.score} delay={place * 90} style={[styles.podiumScore, place === 0 && styles.podiumScoreFirst]} />
+                <Text style={[styles.podiumRank, place === 0 && styles.podiumRankFirst]}>{row.rank}</Text>
+              </View>
+            </GrowUp>
+          </Pressable>
+        );
+      })}
+    </View>
+  );
+}
+
+/** How one person's score was made, for the period on screen. */
+function Breakdown({ row, period }: { row: RankingRow; period: RankingPeriod }) {
+  const lines = period === 'all'
+    ? [`${plural(row.workouts, 'day')} trained`]
+    : [`Got stronger ${signed(row.progress)}`, period === 'week' ? `${row.workouts} of ${row.target} days trained` : `${plural(row.workouts, 'day')} trained`];
+  if (row.streak) lines.push(`${plural(row.streak, 'week')} on target${row.shields ? ` · ${plural(row.shields, 'shield')}` : ''}`);
+  if (row.bonuses?.total) lines.push(`Bonus ${signedPoints(row.bonuses.total)}: ${bonusText(row.bonuses)}`);
+  if (row.calls) lines.push(`Calls ${signedPoints(row.calls)}`);
+  return (
+    <Card>
+      <Row style={styles.breakdownTop}>
+        <Avatar user={row.user} size={36} />
+        <Text style={[styles.name, styles.flex]}>{row.user.displayName}</Text>
+        <Text style={styles.breakdownScore}>{row.score.toLocaleString('en-US')}</Text>
       </Row>
-      {gap ? <Muted>{gap}</Muted> : null}
-      {rankings.isPending ? <Loading /> : null}
-      {rankings.isError ? <Muted>Can’t load rankings right now.</Muted> : null}
-      {rows.map((row) => (
-        <Card key={row.user.id} style={row.user.id === me?.id ? styles.mine : undefined}>
-          <Row>
-            <Text style={styles.rank}>{row.rank}</Text>
-            <Avatar user={row.user} />
-            <View style={styles.flex}>
-              <Text style={styles.name}>{row.user.displayName}{row.wearingSandbag ? '  ' : ''}{row.wearingSandbag ? <Text style={styles.badge}>SANDBAG</Text> : null}</Text>
-              <Muted>Progress {signed(row.progress)}</Muted>
-              <Muted>{row.workouts} of {row.target} workouts</Muted>
-              {row.streak ? <Muted>{row.streak} {row.streak === 1 ? 'week' : 'weeks'} on target{row.shields ? ` · ${row.shields} ${row.shields === 1 ? 'shield' : 'shields'}` : ''}</Muted> : null}
-              {row.bonuses?.total ? <Muted>Bonus {signedPoints(row.bonuses.total)}: {bonusText(row.bonuses)}</Muted> : null}
-              {row.calls ? <Muted>Calls {signedPoints(row.calls)}</Muted> : null}
-            </View>
-            <View style={styles.scoreBox} accessibilityLabel={`${row.score} points`}>
-              <Text style={styles.score}>{row.score}</Text>
-              <Label style={styles.points}>pts</Label>
-            </View>
-          </Row>
-        </Card>
-      ))}
-      {rankings.isSuccess && rows.length < 2 ? (
-        <>
-          <Empty title="You’re winning" body="Out of one. Add someone before this gets sad." />
-          <Button title="Bring witnesses" onPress={() => router.push('/invites')} />
-        </>
-      ) : null}
-      <Muted>
-        Your points are the average of two scores out of 100. Progress: how much stronger you got on the lifts you did, using weight and reps, against your best of the four weeks before. Small gains count for plenty, and +25% is full marks.
-        Consistency: days trained against your weekly goal, counted as at least 3. The week runs Monday to Sunday. Heavier friends get no head start.
-        This week also pays bonuses, up to 15: for a streak of 2 weeks or more, for coming back after a missed week, for a day more than your goal, and +2 for each lift past its best (up to 3). Every 4 weeks on target earns a shield that saves a streak from one missed week.
-        Calls settled in the period add or take points on top: +5 for beating one, −5 for failing it, double for getting caught, and −3 for calling wrong, up to 10 either way a week.
-      </Muted>
-      <Button title="What’s sandbagging?" variant="ghost" onPress={() => router.push('/about')} />
-    </Screen>
+      {lines.map((line) => <Muted key={line}>{line}</Muted>)}
+    </Card>
   );
 }
 
@@ -79,13 +96,85 @@ function bonusText(bonuses: WeekBonuses): string {
   return parts.filter(([, points]) => points).map(([name, points]) => `${name} +${points}`).join(', ');
 }
 
+export default function Rankings() {
+  const [period, setPeriod] = useState<RankingPeriod>('week');
+  const [picked, setPicked] = useState<string | null>(null);
+  const me = useSession((state) => state.me);
+  const rankings = useQuery({ queryKey: ['rankings', period], queryFn: () => api.rankings(period) });
+  const rows = rankings.data ?? [];
+  const top = Math.max(1, rows[0]?.score ?? 1);
+  const rest = rows.length >= 2 ? rows.slice(3) : rows;
+  const shown = rows.find((row) => row.user.id === (picked ?? me?.id));
+  const pick = (row: RankingRow) => {
+    feel.tap();
+    setPicked(row.user.id);
+  };
+
+  return (
+    <Screen onRefresh={() => rankings.refetch()}>
+      <Title>Rankings</Title>
+      <Segmented options={PERIODS} value={period} onChange={setPeriod} />
+      {rankings.isPending ? <Loading /> : null}
+      {rankings.isError ? <Muted>Can’t load rankings right now.</Muted> : null}
+      <Chase rows={rows} myId={me?.id} />
+      {rows.length >= 2 ? <Podium rows={rows} onPick={pick} /> : null}
+      {rest.map((row, index) => (
+        <Pressable key={row.user.id} accessibilityRole="button" accessibilityLabel={`${row.rank}. ${row.user.displayName}, ${row.score} points`} onPress={() => pick(row)} style={styles.racer}>
+          <Text style={styles.rank}>{row.rank}</Text>
+          <Avatar user={row.user} size={40} />
+          <View style={styles.racerMiddle}>
+            <Row style={styles.racerName}>
+              <Text numberOfLines={1} style={[styles.name, styles.flex]}>{row.user.displayName}</Text>
+              {row.wearingSandbag ? <Text style={styles.badge}>SANDBAG</Text> : null}
+            </Row>
+            <GrowBar ratio={row.score / top} color={row.user.id === me?.id ? colors.volt : colors.ink3} delay={120 + index * 70} />
+          </View>
+          <CountUp value={row.score} delay={120 + index * 70} style={[styles.score, row.user.id === me?.id && styles.scoreMine]} />
+        </Pressable>
+      ))}
+      {shown ? <Breakdown row={shown} period={period} /> : null}
+      {rankings.isSuccess && rows.length < 2 ? (
+        <>
+          <Empty title="You’re winning" body="Out of one. Add someone before this gets sad." />
+          <Button title="Bring witnesses" onPress={() => router.push('/invites')} />
+        </>
+      ) : null}
+      <Muted>
+        Tap anyone to see how their score was made.
+        Your points are the average of two scores out of 100. Progress: how much stronger you got on the lifts you did, using weight and reps, against your best of the four weeks before. Small gains count for plenty, and +25% is full marks.
+        Consistency: days trained against your weekly goal, counted as at least 3. The week runs Monday to Sunday. Heavier friends get no head start.
+        This week also pays bonuses, up to 15: for a streak of 2 weeks or more, for coming back after a missed week, for a day more than your goal, and +2 for each lift past its best (up to 3). Every 4 weeks on target earns a shield that saves a streak from one missed week.
+        Calls settled in the period add or take points on top: +5 for beating one, −5 for failing it, double for getting caught, and −3 for calling wrong, up to 10 either way a week.
+        All time adds up every week’s score, bonuses and calls included, since your first workout.
+      </Muted>
+      <Button title="What’s sandbagging?" variant="ghost" onPress={() => router.push('/about')} />
+    </Screen>
+  );
+}
+
 const styles = StyleSheet.create({
   flex: { flex: 1 },
-  mine: { borderColor: colors.volt },
-  rank: { fontFamily: fonts.display, fontSize: 28, color: colors.ink3, width: 28, textAlign: 'center' },
-  name: { fontFamily: fonts.bodyStrong, fontSize: 16, color: colors.ink },
-  badge: { fontFamily: fonts.label, fontSize: 12, letterSpacing: 1, color: colors.warn },
-  scoreBox: { alignItems: 'flex-end', minWidth: 48, marginLeft: space.sm },
-  score: { fontFamily: fonts.display, fontSize: 36, lineHeight: 38, color: colors.volt },
-  points: { fontSize: 11 },
+  chaseTop: { alignItems: 'flex-end', gap: space.sm },
+  chaseNumber: { fontFamily: fonts.display, fontSize: 56, lineHeight: 60, color: colors.volt },
+  chaseText: { flex: 1, fontFamily: fonts.label, fontSize: 15, letterSpacing: 1, color: colors.ink, marginBottom: space.sm },
+  podium: { flexDirection: 'row', alignItems: 'flex-end', gap: space.sm, marginTop: space.md },
+  step: { flex: 1, alignItems: 'center', gap: space.xs },
+  podiumName: { fontFamily: fonts.bodyStrong, fontSize: 15, color: colors.ink, maxWidth: '100%' },
+  block: { alignSelf: 'stretch', backgroundColor: colors.surface2, borderTopLeftRadius: radius.md, borderTopRightRadius: radius.md },
+  blockFirst: { backgroundColor: colors.volt },
+  blockInner: { alignItems: 'center', paddingTop: space.sm },
+  podiumScore: { fontFamily: fonts.display, fontSize: 34, lineHeight: 38, color: colors.ink },
+  podiumScoreFirst: { color: colors.voltInk, fontSize: 40, lineHeight: 48 },
+  podiumRank: { fontFamily: fonts.label, fontSize: 13, color: colors.ink3 },
+  podiumRankFirst: { color: colors.voltInk },
+  racer: { flexDirection: 'row', alignItems: 'center', gap: space.sm, minHeight: 60 },
+  racerMiddle: { flex: 1, gap: 6 },
+  racerName: { gap: space.xs },
+  rank: { fontFamily: fonts.display, fontSize: 24, color: colors.ink3, width: 24, textAlign: 'center' },
+  name: { fontFamily: fonts.bodyStrong, fontSize: 17, color: colors.ink },
+  badge: { fontFamily: fonts.display, fontSize: 13, letterSpacing: 1, color: colors.warn },
+  score: { fontFamily: fonts.display, fontSize: 28, lineHeight: 34, color: colors.ink, minWidth: 44, textAlign: 'right' },
+  scoreMine: { color: colors.volt },
+  breakdownTop: { gap: space.sm, marginBottom: space.xs },
+  breakdownScore: { fontFamily: fonts.display, fontSize: 28, color: colors.volt },
 });

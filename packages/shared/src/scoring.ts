@@ -133,6 +133,28 @@ export function periodStats(workouts: ScoringWorkout[], period: Period, goals: G
   return { progress: roundOne(progress), workouts: count, consistency, score: Math.round((progressPoints + consistency) / 2) };
 }
 
+/** A week's points as the This week ranking shows them: the score, its bonuses and its call points, never below nothing. */
+export function weekScore(workouts: ScoringWorkout[], goals: Goals, today: string, callPoints: number): number {
+  return Math.max(0, periodStats(workouts, 'week', goals, today).score + weekBonuses(workouts, goals, today).total + callPoints);
+}
+
+/**
+ * Every week since the first workout, each scored as it stood on its Sunday, added up.
+ * Call points come capped, by Monday. The week still running counts what it has so far.
+ */
+export function allTimeScore(workouts: ScoringWorkout[], goals: Goals, today: string, callsByWeek: ReadonlyMap<string, number>): number {
+  // A call can count before someone's first workout: callers don't have to lift.
+  const first = [...workouts.map((workout) => workout.date), ...callsByWeek.keys()].sort()[0];
+  if (!first) return 0;
+  let total = 0;
+  for (let monday = mondayOf(first); monday <= today; monday = addDays(monday, 7)) {
+    const sunday = addDays(monday, 6);
+    const end = sunday < today ? sunday : today;
+    total += weekScore(workouts.filter((workout) => workout.date <= end), goals, end, callsByWeek.get(monday) ?? 0);
+  }
+  return total;
+}
+
 export const INVITE_GOALS = [
   { count: 3, name: 'Recruiter' },
   { count: 10, name: 'Crew boss' },

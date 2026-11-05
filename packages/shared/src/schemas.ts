@@ -128,6 +128,9 @@ export const createReplySchema = z.object({ text: cleaned(140) });
 export const createCallSchema = z.object({ exercise: exerciseName, line: cleaned(140) });
 export const periodSchema = z.enum(['week', 'month']);
 export type Period = z.infer<typeof periodSchema>;
+/** What the rankings can show: a scored period, or every week added up. */
+export const rankingPeriodSchema = z.enum(['week', 'month', 'all']);
+export type RankingPeriod = z.infer<typeof rankingPeriodSchema>;
 
 export interface PublicUser {
   id: string;
@@ -203,7 +206,7 @@ export interface RankingRow {
   consistency: number;
   /** Points from calls settled in the period, already part of score. */
   calls: number;
-  /** This week's bonuses, already part of score. Null for the month. */
+  /** This week's bonuses, already part of score. Null for the month and all time. */
   bonuses: WeekBonuses | null;
   score: number;
   wearingSandbag: boolean;

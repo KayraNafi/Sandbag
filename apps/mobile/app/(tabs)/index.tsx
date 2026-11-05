@@ -5,13 +5,16 @@ import { useMemo } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { api } from '@/api/client';
 import { useSession } from '@/auth/session';
+import { Icon } from '@/components/icons';
 import { Button, Card, Heading, Label, MoveButtons, Muted, Row, Screen, Title } from '@/components/ui';
+import { WeekStrip } from '@/components/WeekStrip';
 import { moveSaved, startBlank } from '@/data/actions';
 import { useData } from '@/data/store';
 import { begin, beginSaved } from '@/nav';
 import { syncNow } from '@/data/sync';
-import { agoLong, agoText, daysLeft, formatDate, num, plural, signedPoints, today } from '@/domain/format';
+import { agoLong, agoText, daysLeft, formatDate, num, plural, signedPoints } from '@/domain/format';
 import { activeLogged, activeSaved, nextWorkout } from '@/domain/history';
+import { useWeek } from '@/domain/week';
 import { colors, fonts, space } from '@/theme';
 
 const QUIET_DAYS = 5;
@@ -37,6 +40,13 @@ function standing(call: CallView): string {
   return call.points ? `${VERDICT[call.status]} · ${signedPoints(call.points)}` : VERDICT[call.status];
 }
 
+/** Where this week stands against the goal, in one line. */
+function goalLine(days: number, goal: number, streak: number): string {
+  const left = goal - days;
+  if (left <= 0) return streak > 1 ? `Goal hit. ${streak} weeks running.` : 'Goal hit. That’s a week on the board.';
+  return streak ? `${plural(left, 'more day')} keeps your ${streak}-week streak.` : `${plural(left, 'more day')} to hit your goal of ${goal}.`;
+}
+
 
 export default function Train() {
   const logged = useData((state) => state.logged);
@@ -51,18 +61,19 @@ export default function Train() {
   const unread = notifications.data?.filter((item) => !item.read).length ?? 0;
   const onMe = calls.data?.filter((call) => call.deadlineAt && call.target.id === me?.id) ?? [];
   const byMe = calls.data?.filter((call) => call.caller.id === me?.id).slice(0, MY_CALLS_SHOWN) ?? [];
+  const week = useWeek(workouts);
   const last = workouts[0];
-  const quietDays = last ? Math.round((Date.parse(today()) - Date.parse(last.date)) / 86_400_000) : 0;
+  const quietDays = last ? Math.round((Date.parse(week.today) - Date.parse(last.date)) / 86_400_000) : 0;
 
   return (
     <Screen onRefresh={() => Promise.all([syncNow(), calls.refetch(), notifications.refetch()])}>
       <Row style={styles.top}>
         <Title style={styles.brand}>Sandbag</Title>
         <Pressable accessibilityRole="button" accessibilityLabel={`Notifications, ${unread} unread`} hitSlop={8} onPress={() => router.push('/notifications')} style={styles.bell}>
-          <Text style={styles.bellText}>{unread ? `${unread} NEW` : 'INBOX'}</Text>
+          <Icon name="bell" size={24} />
+          {unread ? <View style={styles.badge}><Text style={styles.badgeText}>{unread > 9 ? '9+' : unread}</Text></View> : null}
         </Pressable>
       </Row>
-      {quietDays >= QUIET_DAYS ? <Muted>{voice.quiet(quietDays)}</Muted> : null}
 
       {draft ? (
         <Card style={styles.hero}>
@@ -86,6 +97,12 @@ export default function Train() {
           <Button title="Create workout" variant="ghost" style={styles.heroButton} onPress={() => router.push('/workout/edit/new')} />
         </Card>
       )}
+
+      <View style={styles.week}>
+        <WeekStrip dates={week.dates} today={week.today} />
+        <Text style={styles.goal}>{goalLine(week.days, week.goal, week.streak.current)}</Text>
+        {quietDays >= QUIET_DAYS ? <Muted>{voice.quiet(quietDays)}</Muted> : null}
+      </View>
 
       {onMe.map((call) => (
         <Card key={call.id} style={styles.call}>
@@ -159,8 +176,11 @@ const styles = StyleSheet.create({
   flex: { flex: 1 },
   top: { justifyContent: 'space-between' },
   brand: { color: colors.volt, fontSize: 36, lineHeight: 40 },
-  bell: { paddingHorizontal: space.md, minHeight: 44, justifyContent: 'center', borderWidth: 1, borderColor: colors.line, borderRadius: 22 },
-  bellText: { fontFamily: fonts.label, fontSize: 13, letterSpacing: 1, color: colors.ink },
+  bell: { width: 48, height: 48, alignItems: 'center', justifyContent: 'center' },
+  badge: { position: 'absolute', top: 4, right: 2, minWidth: 18, height: 18, paddingHorizontal: 4, borderRadius: 9, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.volt },
+  badgeText: { fontFamily: fonts.bodyStrong, fontSize: 11, color: colors.voltInk },
+  week: { gap: space.sm, marginTop: space.xs },
+  goal: { fontFamily: fonts.bodyStrong, fontSize: 15, color: colors.ink },
   hero: { backgroundColor: colors.volt, borderColor: colors.volt },
   heroLabel: { color: colors.voltInk },
   heroTitle: { fontFamily: fonts.display, fontSize: 44, lineHeight: 46, color: colors.voltInk },

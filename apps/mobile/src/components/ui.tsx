@@ -1,10 +1,11 @@
-import { Children, useEffect, useState, type ReactNode } from 'react';
+import { Children, useEffect, useRef, useState, type ReactNode } from 'react';
 import {
-  ActivityIndicator, Keyboard, Platform, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, View,
+  ActivityIndicator, Animated, Keyboard, Platform, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, View,
   type PressableProps, type StyleProp, type TextInputProps, type TextProps, type ViewStyle,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { voice } from '@sandbag/shared';
+import { EASE_OUT, feel, NATIVE, prefersLessMotion } from '@/components/motion';
 import { toast } from '@/components/Toast';
 import { isOverMax, parseNumber } from '@/domain/format';
 import { colors, fonts, radius, space } from '@/theme';
@@ -169,6 +170,37 @@ export function Chip({ title, active, onPress }: { title: string; active?: boole
   );
 }
 
+/** One choice of a few, with the highlight sliding to it. */
+export function Segmented<T extends string>({ options, value, onChange }: { options: { key: T; label: string }[]; value: T; onChange: (key: T) => void }) {
+  const [width, setWidth] = useState(0);
+  const at = Math.max(0, options.findIndex((option) => option.key === value));
+  const cell = width / options.length;
+  const x = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    if (prefersLessMotion()) x.setValue(at * cell);
+    else Animated.timing(x, { toValue: at * cell, duration: 240, easing: EASE_OUT, useNativeDriver: NATIVE }).start();
+  }, [at, cell, x]);
+  return (
+    <View accessibilityRole="tablist" onLayout={(event) => setWidth(event.nativeEvent.layout.width)} style={styles.segmented}>
+      {width ? <Animated.View style={[styles.thumb, { width: cell, transform: [{ translateX: x }] }]} /> : null}
+      {options.map((option) => (
+        <Pressable
+          key={option.key}
+          accessibilityRole="tab"
+          accessibilityState={{ selected: option.key === value }}
+          onPress={() => {
+            feel.tap();
+            onChange(option.key);
+          }}
+          style={styles.segmentedItem}
+        >
+          <Text numberOfLines={1} style={[styles.segmentedText, option.key === value && styles.segmentedTextOn]}>{option.label}</Text>
+        </Pressable>
+      ))}
+    </View>
+  );
+}
+
 export const Row = ({ children, style }: { children: ReactNode; style?: StyleProp<ViewStyle> }) => <View style={[styles.row, style]}>{children}</View>;
 
 export function MoveButtons({ name, index, total, onMove }: { name: string; index: number; total: number; onMove: (delta: -1 | 1) => void }) {
@@ -216,6 +248,11 @@ export function Segments({ total, done }: { total: number; done: number }) {
 }
 
 const styles = StyleSheet.create({
+  segmented: { flexDirection: 'row', height: 48, borderRadius: 24, backgroundColor: colors.surface2, overflow: 'hidden' },
+  thumb: { position: 'absolute', top: 0, bottom: 0, left: 0, borderRadius: 24, backgroundColor: colors.volt },
+  segmentedItem: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  segmentedText: { fontFamily: fonts.label, fontSize: 15, color: colors.ink2 },
+  segmentedTextOn: { color: colors.voltInk },
   screen: { flex: 1, backgroundColor: colors.bg },
   scroll: { padding: space.lg, paddingBottom: 48, gap: space.md, width: '100%', maxWidth: 640, alignSelf: 'center' },
   footer: { paddingHorizontal: space.lg, paddingTop: space.md, backgroundColor: colors.bg, borderTopWidth: 1, borderTopColor: colors.line, gap: space.sm },

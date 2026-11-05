@@ -1,6 +1,6 @@
 import {
-  addDays, cappedCallPoints, dateIn, DAY_MS, goalIn, goalsOf, mondayOf, periodDays, periodSchema, periodStats, trainedDates, voice, weekBonuses, weekStreak,
-  type Period, type RankingRow,
+  addDays, allTimeScore, cappedCallPoints, dateIn, DAY_MS, goalIn, goalsOf, mondayOf, periodDays, periodStats, rankingPeriodSchema, trainedDates, voice,
+  weekBonuses, weekStreak, type RankingPeriod, type RankingRow,
 } from '@sandbag/shared';
 import { and, eq, gt, inArray } from 'drizzle-orm';
 import type { FastifyInstance } from 'fastify';
@@ -18,39 +18,57 @@ const CALL_LOOKBACK_DAYS = 32;
  * Only points, percentages and counts come out of here, so hidden weights stay hidden.
  * Everyone is scored on their own calendar: their week ends at their own midnight.
  */
-export async function crewTable(db: DbOrTx, userId: string, period: Period): Promise<RankingRow[]> {
+export async function crewTable(db: DbOrTx, userId: string, period: RankingPeriod): Promise<RankingRow[]> {
   const crew = [userId, ...(await friendIds(db, userId))];
   const people = await db.select().from(users).where(inArray(users.id, crew));
   const workouts = await db.select({ ownerId: loggedWorkouts.ownerId, date: loggedWorkouts.date, entries: loggedWorkouts.entries, recordedAt: loggedWorkouts.recordedAt })
     .from(loggedWorkouts)
     .where(and(inArray(loggedWorkouts.ownerId, crew), eq(loggedWorkouts.deleted, false)));
   const now = new Date();
-  const settled = await settledCallPoints(db, crew, new Date(now.getTime() - CALL_LOOKBACK_DAYS * DAY_MS));
+  const settled = await settledCallPoints(db, crew, period === 'all' ? new Date(0) : new Date(now.getTime() - CALL_LOOKBACK_DAYS * DAY_MS));
 
   const rows = people.map((person) => {
     const day = dateIn(person.timeZone, now);
-    const start = addDays(day, 1 - periodDays(period, day));
     const goals = goalsOf(person);
     const own = workouts.filter((workout) => workout.ownerId === person.id);
-    const stats = periodStats(own, period, goals, day);
     const streak = weekStreak(trainedDates(own), goals, day);
-    const bonuses = period === 'week' ? weekBonuses(own, goals, day) : null;
-    const calls = cappedCallPoints((settled.get(person.id) ?? [])
+    const calls = (settled.get(person.id) ?? [])
       .map(({ at, points }) => ({ day: dateIn(person.timeZone, at), points }))
-      .filter((call) => call.day >= start && call.day <= day)
-      .map((call) => ({ monday: mondayOf(call.day), points: call.points })));
-    return {
+      .filter((call) => call.day <= day)
+      .map((call) => ({ day: call.day, monday: mondayOf(call.day), points: call.points }));
+    const shared = {
       user: toPublic(person),
       rank: 0,
       target: goalIn(goals, day),
       wearingSandbag: person.sandbagUntil !== null && person.sandbagUntil > now,
       streak: streak.current,
       shields: streak.shields,
+    };
+    if (period === 'all') {
+      const callsByWeek = new Map([...new Set(calls.map((call) => call.monday))]
+        .map((monday) => [monday, cappedCallPoints(calls.filter((call) => call.monday === monday))]));
+      return {
+        ...shared,
+        // Getting stronger needs a before to compare with, and all time has none.
+        progress: 0,
+        workouts: trainedDates(own).length,
+        consistency: 0,
+        bonuses: null,
+        calls: [...callsByWeek.values()].reduce((sum, points) => sum + points, 0),
+        score: allTimeScore(own, goals, day, callsByWeek),
+      };
+    }
+    const start = addDays(day, 1 - periodDays(period, day));
+    const stats = periodStats(own, period, goals, day);
+    const bonuses = period === 'week' ? weekBonuses(own, goals, day) : null;
+    const callPoints = cappedCallPoints(calls.filter((call) => call.day >= start));
+    return {
+      ...shared,
       ...stats,
       bonuses,
-      calls,
+      calls: callPoints,
       // Calls can cost points, but never below nothing.
-      score: Math.max(0, stats.score + (bonuses?.total ?? 0) + calls),
+      score: Math.max(0, stats.score + (bonuses?.total ?? 0) + callPoints),
     };
   });
   rows.sort((a, b) => b.score - a.score || a.user.displayName.localeCompare(b.user.displayName));
@@ -83,6 +101,6 @@ export function rankingRoutes(app: FastifyInstance, db: Db): void {
   app.get<{ Querystring: { period?: string } }>('/rankings', async (request): Promise<RankingRow[]> => {
     const user = await requireUser(db, request);
     await expireCalls(db);
-    return crewTable(db, user.id, periodSchema.parse(request.query.period ?? 'week'));
+    return crewTable(db, user.id, rankingPeriodSchema.parse(request.query.period ?? 'week'));
   });
 }

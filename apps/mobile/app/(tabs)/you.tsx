@@ -1,4 +1,3 @@
-import { goalIn, goalsOf, mondayOf, trainedDates, weekStreak } from '@sandbag/shared';
 import { useQuery } from '@tanstack/react-query';
 import { router, type Href } from 'expo-router';
 import { useMemo } from 'react';
@@ -8,8 +7,8 @@ import { useSession } from '@/auth/session';
 import { Card, Heading, Muted, Row, Screen } from '@/components/ui';
 import { useData } from '@/data/store';
 import { useSyncStatus } from '@/data/sync';
-import { toIsoDate } from '@/domain/format';
 import { activeLogged, buildHistory } from '@/domain/history';
+import { useWeek } from '@/domain/week';
 import { liftProgress } from '@/domain/progress';
 import { Sparkline } from '@/components/Sparkline';
 import { num, signed } from '@/domain/format';
@@ -46,13 +45,7 @@ export default function You() {
   const index = useMemo(() => buildHistory(workouts), [workouts]);
   const lifts = index.size;
   const progress = useMemo(() => liftProgress(index), [index]);
-  const today = toIsoDate(new Date());
-  const dates = useMemo(() => trainedDates(workouts), [workouts]);
-  const thisWeek = dates.filter((date) => date >= mondayOf(today) && date <= today).length;
-  const goals = me ? goalsOf(me) : 3;
-  // A new goal can wait for next Monday, so this week's may not be the one in settings.
-  const goal = goalIn(goals, today);
-  const streak = useMemo(() => weekStreak(dates, goals, today), [dates, goals, today]);
+  const { days: thisWeek, goal, streak } = useWeek(workouts);
 
   return (
     <Screen>
