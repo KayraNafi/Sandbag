@@ -1,14 +1,16 @@
 import type { NotificationKind, NotificationView } from '@sandbag/shared';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { router } from 'expo-router';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { api } from '@/api/client';
 import { Icon, type IconName } from '@/components/icons';
 import { FadeIn, feel, Pop } from '@/components/motion';
-import { Card, Empty, Label, Loading, Muted, Screen } from '@/components/ui';
+import { toast } from '@/components/Toast';
+import { Button, Card, Empty, Label, Loading, Muted, Screen } from '@/components/ui';
 import { agoShort } from '@/domain/format';
 import { hrefFor } from '@/domain/routes';
+import { useWebPush } from '@/push/webPush';
 import { colors, fonts, space } from '@/theme';
 
 /** Volt is good news for you, warn is a challenge, ink is just news. */
@@ -49,6 +51,45 @@ function Row({ item, index }: { item: NotificationView; index: number }) {
   );
 }
 
+/** The web app can't ask by itself, so it asks here, where you see what you'd be getting. */
+function WebPushCard() {
+  const { state, enable } = useWebPush();
+  const [busy, setBusy] = useState(false);
+  if (state === 'unsupported' || state === 'on') return null;
+  const turnOn = async () => {
+    setBusy(true);
+    try {
+      await enable();
+    } catch {
+      toast('Couldn’t turn them on. Try again in a bit.');
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <Card style={styles.pushCard}>
+      <View style={styles.row}>
+        <Icon name="bell" color={colors.volt} size={26} />
+        <View style={styles.text}>
+          {state === 'ask' ? <>
+            <Text style={styles.title}>Hear about it right away</Text>
+            <Muted>Calls on you, replies and nudges, as they happen.</Muted>
+          </> : null}
+          {state === 'install' ? <>
+            <Text style={styles.title}>Want these on your lock screen?</Text>
+            <Muted>On iPhone, add Sandbag to your Home Screen first: tap Share, then Add to Home Screen. Open it from there and turn them on.</Muted>
+          </> : null}
+          {state === 'blocked' ? <>
+            <Text style={styles.title}>Notifications are blocked</Text>
+            <Muted>Turn them back on for Sandbag in your phone’s or browser’s settings.</Muted>
+          </> : null}
+        </View>
+      </View>
+      {state === 'ask' ? <Button title="Turn on notifications" busy={busy} onPress={() => void turnOn()} /> : null}
+    </Card>
+  );
+}
+
 export default function Notifications() {
   const client = useQueryClient();
   const notifications = useQuery({ queryKey: ['notifications'], queryFn: api.notifications });
@@ -64,6 +105,7 @@ export default function Notifications() {
 
   return (
     <Screen padTop={false} onRefresh={() => notifications.refetch()}>
+      <WebPushCard />
       {notifications.isPending ? <Loading /> : null}
       {notifications.isSuccess && !items.length ? <Empty title="All quiet" body="Nobody’s talking about you. Yet." /> : null}
       {fresh.length ? <Label style={styles.newLabel}>New</Label> : null}
@@ -76,6 +118,7 @@ export default function Notifications() {
 
 const styles = StyleSheet.create({
   newLabel: { color: colors.volt },
+  pushCard: { gap: space.md },
   unread: { borderColor: colors.volt },
   row: { flexDirection: 'row', alignItems: 'flex-start', gap: space.md },
   text: { flex: 1, gap: 2 },

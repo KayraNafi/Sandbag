@@ -8,18 +8,19 @@ import { randomUUID } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { buildApp } from './app';
-import { deliverPending, type PushMessage } from './modules/push';
+import { deliverPending, type PushMessage, type WebPushTarget } from './modules/push';
 import type { Db } from './db/client';
 import * as schema from './db/schema';
 
 const BOOTSTRAP = 'founder-invite-code-long-enough';
+const WEB_KEY = 'web-push-public-key';
 let app: FastifyInstance;
 let db: ReturnType<typeof drizzle<typeof schema>>;
 
 beforeEach(async () => {
   db = drizzle(new PGlite(), { schema });
   await migrate(db, { migrationsFolder: fileURLToPath(new URL('../migrations', import.meta.url)) });
-  app = await buildApp(db as unknown as Db, { bootstrapInviteCode: BOOTSTRAP });
+  app = await buildApp(db as unknown as Db, { bootstrapInviteCode: BOOTSTRAP, webPushPublicKey: WEB_KEY });
 });
 
 async function call<T>(method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE', url: string, token?: string, body?: unknown): Promise<{ status: number; body: T }> {
@@ -772,11 +773,11 @@ describe('staying signed in', () => {
 
 describe('push', () => {
   const TOKEN = 'fcm-token-long-enough-for-the-schema';
-  const fake = (result: { dead?: string[]; retry?: boolean } = {}) => {
-    const sent: { tokens: string[]; message: PushMessage }[] = [];
-    return { sent, sender: { send: async (tokens: string[], message: PushMessage) => { sent.push({ tokens, message }); return { dead: result.dead ?? [], retry: result.retry ?? false }; } } };
+  const fake = <Target = string>(result: { dead?: Target[]; retry?: boolean } = {}) => {
+    const sent: { tokens: Target[]; message: PushMessage }[] = [];
+    return { sent, sender: { send: async (tokens: Target[], message: PushMessage) => { sent.push({ tokens, message }); return { dead: result.dead ?? [], retry: result.retry ?? false }; } } };
   };
-  const pending = () => deliverPending(db as unknown as Db, sender.sender);
+  const pending = () => deliverPending(db as unknown as Db, { fcm: sender.sender });
   let sender = fake();
   beforeEach(() => { sender = fake(); });
 
@@ -809,14 +810,14 @@ describe('push', () => {
   it('forgets a phone Firebase says is gone', async () => {
     const founder = await inviterWithToken();
     await register('friend', founder.user.inviteCode);
-    await deliverPending(db as unknown as Db, fake({ dead: [TOKEN] }).sender);
+    await deliverPending(db as unknown as Db, { fcm: fake({ dead: [TOKEN] }).sender });
     expect(await db.select().from(schema.pushTokens)).toHaveLength(0);
   });
 
   it('tries again after a failure, but not with old news', async () => {
     const founder = await inviterWithToken();
     await register('friend', founder.user.inviteCode);
-    expect(await deliverPending(db as unknown as Db, fake({ retry: true }).sender)).toBe(0);
+    expect(await deliverPending(db as unknown as Db, { fcm: fake({ retry: true }).sender })).toBe(0);
     await db.update(schema.notifications).set({ createdAt: new Date(Date.now() - 2 * 3_600_000) });
     expect(await pending()).toBe(0);
     expect(sender.sent).toHaveLength(0);
@@ -835,6 +836,72 @@ describe('push', () => {
     const founder = await register('founder', BOOTSTRAP);
     const key = await call<{ key: string }>('POST', '/me/api-keys', founder.token, { name: 'x', password: 'correct horse battery' });
     expect((await call('PUT', '/me/push-token', key.body.key, { token: TOKEN })).status).toBe(401);
+  });
+});
+
+describe('web push', () => {
+  const SUBSCRIPTION = { endpoint: 'https://web.push.apple.com/QGx1', keys: { p256dh: 'BPk3', auth: 'c2Vj' }, expirationTime: null };
+  const TARGET: WebPushTarget = { endpoint: SUBSCRIPTION.endpoint, p256dh: 'BPk3', auth: 'c2Vj' };
+  const fake = (result: { dead?: WebPushTarget[]; retry?: boolean } = {}) => {
+    const sent: WebPushTarget[][] = [];
+    return { sent, sender: { send: async (targets: WebPushTarget[]) => { sent.push(targets); return { dead: result.dead ?? [], retry: result.retry ?? false }; } } };
+  };
+  const subscribed = async () => {
+    const founder = await register('founder', BOOTSTRAP);
+    expect((await call('PUT', '/me/web-push', founder.token, SUBSCRIPTION)).status).toBe(204);
+    return founder;
+  };
+
+  it('hands out the key browsers need, only to the signed in', async () => {
+    const founder = await register('founder', BOOTSTRAP);
+    expect((await call('GET', '/push/web-key')).status).toBe(401);
+    expect((await call<{ key: string }>('GET', '/push/web-key', founder.token)).body.key).toBe(WEB_KEY);
+  });
+
+  it('says so when the server has no key', async () => {
+    app = await buildApp(db as unknown as Db, { bootstrapInviteCode: BOOTSTRAP });
+    const founder = await register('founder', BOOTSTRAP);
+    expect((await call('GET', '/push/web-key', founder.token)).status).toBe(404);
+  });
+
+  it('sends to the browser, and forgets one the push service says is gone', async () => {
+    const founder = await subscribed();
+    await register('friend', founder.user.inviteCode);
+    const web = fake({ dead: [TARGET] });
+    expect(await deliverPending(db as unknown as Db, { web: web.sender })).toBe(1);
+    expect(web.sent).toEqual([[TARGET]]);
+    expect(await db.select().from(schema.webPushSubscriptions)).toHaveLength(0);
+  });
+
+  it('only accepts the browsers’ own push services', async () => {
+    const founder = await register('founder', BOOTSTRAP);
+    for (const endpoint of ['https://db:5432/x', 'http://fcm.googleapis.com/x', 'https://push.apple.com.evil.example/x']) {
+      expect((await call('PUT', '/me/web-push', founder.token, { ...SUBSCRIPTION, endpoint })).status).toBe(400);
+    }
+    expect(await db.select().from(schema.webPushSubscriptions)).toHaveLength(0);
+  });
+
+  it('stops when you sign out', async () => {
+    const founder = await subscribed();
+    await call('POST', '/auth/logout', founder.token);
+    expect(await db.select().from(schema.webPushSubscriptions)).toHaveLength(0);
+  });
+
+  it('doesn’t retry, and so repeat, what reached one of your devices', async () => {
+    const founder = await subscribed();
+    await call('PUT', '/me/push-token', founder.token, { token: 'fcm-token-long-enough-for-the-schema' });
+    await register('friend', founder.user.inviteCode);
+    const web = fake();
+    const firebaseDown = { send: async () => ({ dead: [], retry: true }) };
+    expect(await deliverPending(db as unknown as Db, { fcm: firebaseDown, web: web.sender })).toBe(1);
+    expect(await deliverPending(db as unknown as Db, { web: web.sender })).toBe(0);
+    expect(web.sent).toHaveLength(1);
+  });
+
+  it('can’t be reached with an API key', async () => {
+    const founder = await register('founder', BOOTSTRAP);
+    const key = await call<{ key: string }>('POST', '/me/api-keys', founder.token, { name: 'x', password: 'correct horse battery' });
+    expect((await call('PUT', '/me/web-push', key.body.key, SUBSCRIPTION)).status).toBe(401);
   });
 });
 

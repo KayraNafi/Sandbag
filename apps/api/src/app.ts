@@ -31,6 +31,8 @@ export interface AppConfig {
   /** Number of reverse proxies in front of the app, so rate limits see real IPs. */
   trustedProxies?: number;
   logger?: boolean;
+  /** Turns on notifications for the web app. The private half stays with the push worker. */
+  webPushPublicKey?: string;
 }
 
 export async function buildApp(db: Db, config: AppConfig = {}): Promise<FastifyInstance> {
@@ -73,7 +75,7 @@ export async function buildApp(db: Db, config: AppConfig = {}): Promise<FastifyI
   rankingRoutes(app, db);
   notificationRoutes(app, db);
   trophyRoutes(app, db);
-  pushRoutes(app, db);
+  pushRoutes(app, db, config.webPushPublicKey);
   apiKeyRoutes(app, db);
   publicApiRoutes(app, db);
   return app;

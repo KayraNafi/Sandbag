@@ -31,3 +31,38 @@ self.addEventListener('fetch', (event) => {
     }
   })());
 });
+
+// Sent by the push worker as { title, body, route }. Safari drops a subscription that gets
+// a push without showing something, so this always shows.
+self.addEventListener('push', (event) => {
+  const message = (() => {
+    try {
+      return event.data?.json() ?? {};
+    } catch {
+      return {};
+    }
+  })();
+  event.waitUntil((async () => {
+    await self.registration.showNotification(message.title || 'Sandbag', {
+      body: message.body || '',
+      icon: '/icon-192.png',
+      data: { route: message.route ?? null },
+    });
+    for (const client of await self.clients.matchAll({ type: 'window' })) client.postMessage({ type: 'pushed' });
+  })());
+});
+
+// Opens where the notification leads. The app knows its routes, so it gets the route, not a URL.
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  const route = event.notification.data?.route ?? null;
+  event.waitUntil((async () => {
+    const [open] = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+    if (open) {
+      await open.focus();
+      if (route) open.postMessage({ type: 'open', route });
+      return;
+    }
+    await self.clients.openWindow(route ? `/?open=${encodeURIComponent(route)}` : '/');
+  })());
+});

@@ -8,11 +8,13 @@ const env = z.object({
   PORT: z.coerce.number().int().default(8080),
   BOOTSTRAP_INVITE_CODE: z.string().min(16).optional(),
   TRUSTED_PROXIES: z.coerce.number().int().default(1),
+  // Compose passes an unset one as empty.
+  WEB_PUSH_PUBLIC_KEY: z.string().optional().transform((value) => value || undefined),
 }).parse(process.env);
 
 const migrationsFolder = process.env.MIGRATIONS_DIR ?? fileURLToPath(new URL('../migrations', import.meta.url));
 const { db, close } = await connect(env.DATABASE_URL, migrationsFolder);
-const app = await buildApp(db, { bootstrapInviteCode: env.BOOTSTRAP_INVITE_CODE, trustedProxies: env.TRUSTED_PROXIES, logger: true });
+const app = await buildApp(db, { bootstrapInviteCode: env.BOOTSTRAP_INVITE_CODE, trustedProxies: env.TRUSTED_PROXIES, webPushPublicKey: env.WEB_PUSH_PUBLIC_KEY, logger: true });
 
 async function shutdown() {
   await app.close();

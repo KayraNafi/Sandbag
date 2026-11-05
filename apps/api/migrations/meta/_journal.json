@@ -71,6 +71,13 @@
       "when": 1793816373755,
       "tag": "0009_nudges",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1793910309515,
+      "tag": "0010_web_push",
+      "breakpoints": true
     }
   ]
 }

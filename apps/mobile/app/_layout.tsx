@@ -15,6 +15,7 @@ import { ConfirmHost } from '@/components/confirm';
 import { useData } from '@/data/store';
 import { useSyncLoop } from '@/data/sync';
 import { PushBridge } from '@/push/PushBridge';
+import { WebPushBridge } from '@/push/WebPushBridge';
 import { colors } from '@/theme';
 
 export { ErrorBoundary } from 'expo-router';
@@ -77,6 +78,7 @@ export default function RootLayout() {
         <ToastHost />
         <ConfirmHost />
         {Platform.OS === 'android' ? <PushBridge /> : null}
+        {Platform.OS === 'web' ? <WebPushBridge /> : null}
       </ThemeProvider>
     </QueryClientProvider>
   );

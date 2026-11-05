@@ -171,6 +171,17 @@ export const pushTokens = pgTable('push_tokens', {
   createdAt: createdAt(),
 }, (t) => [index('push_tokens_user').on(t.userId)]);
 
+// The web app's version of a push token: where the browser's push service takes messages,
+// and the keys to encrypt them for it. Tied to a session the same way.
+export const webPushSubscriptions = pgTable('web_push_subscriptions', {
+  endpoint: text('endpoint').primaryKey(),
+  p256dh: text('p256dh').notNull(),
+  auth: text('auth').notNull(),
+  sessionHash: text('session_hash').notNull().references(() => authSessions.tokenHash, { onDelete: 'cascade' }),
+  userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  createdAt: createdAt(),
+}, (t) => [index('web_push_subscriptions_user').on(t.userId)]);
+
 // Long-lived keys for the public API. Like sessions, only the hash is stored.
 export const apiKeys = pgTable('api_keys', {
   id: uuid('id').primaryKey().defaultRandom(),

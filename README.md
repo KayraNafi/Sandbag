@@ -50,7 +50,14 @@ There's no email on file, so a forgotten password is reset by the admin:
 
 ## Push notifications
 
-Optional, for Android. Without them, notifications still appear inside the app.
+Optional. Without them, notifications still appear inside the app.
+
+For the web app, including on iPhone once it's added to the Home Screen:
+
+1. Run `npx web-push generate-vapid-keys` and put the two keys in `deploy/.env` as `WEB_PUSH_PUBLIC_KEY` and `WEB_PUSH_PRIVATE_KEY`, with a contact address in `WEB_PUSH_SUBJECT`.
+2. Follow step 4 below. People turn notifications on from the Notifications screen.
+
+For Android:
 
 1. Create a Firebase project and add an Android app with your package name.
 2. Put its `google-services.json` in `apps/mobile`. It's ignored by git. Build the app from there.

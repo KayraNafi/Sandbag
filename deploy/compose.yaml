@@ -40,6 +40,7 @@ services:
       BOOTSTRAP_INVITE_CODE: ${BOOTSTRAP_INVITE_CODE:?set in .env}
       TRUSTED_PROXIES: "1"
       PORT: "8080"
+      WEB_PUSH_PUBLIC_KEY: ${WEB_PUSH_PUBLIC_KEY:-}
     networks: [app, data]
     mem_limit: 384m
     read_only: true
@@ -58,6 +59,9 @@ services:
     environment:
       DATABASE_URL: postgres://sandbag_push:${PUSH_DB_PASSWORD}@db:5432/sandbag
       FIREBASE_SERVICE_ACCOUNT_FILE: /run/firebase/admin.json
+      WEB_PUSH_PUBLIC_KEY: ${WEB_PUSH_PUBLIC_KEY:-}
+      WEB_PUSH_PRIVATE_KEY: ${WEB_PUSH_PRIVATE_KEY:-}
+      WEB_PUSH_SUBJECT: ${WEB_PUSH_SUBJECT:-}
     volumes:
       - ./.firebase/admin.json:/run/firebase/admin.json:ro
     networks: [data, egress]

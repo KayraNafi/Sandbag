@@ -114,7 +114,7 @@ describe('getting in without an invite', () => {
     const id = randomUUID();
     const routes: ['GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE', string][] = [
       ['GET', '/me'], ['PATCH', '/me'], ['DELETE', '/me'], ['POST', '/me/password'], ['GET', '/me/export'],
-      ['GET', '/me/api-keys'], ['POST', '/me/api-keys'], ['DELETE', `/me/api-keys/${id}`], ['PUT', '/me/push-token'],
+      ['GET', '/me/api-keys'], ['POST', '/me/api-keys'], ['DELETE', `/me/api-keys/${id}`], ['PUT', '/me/push-token'], ['PUT', '/me/web-push'], ['GET', '/push/web-key'],
       ['POST', '/sync'], ['GET', '/feed'], ['POST', '/posts'], ['GET', `/posts/${id}`], ['DELETE', `/posts/${id}`],
       ['PUT', `/posts/${id}/respect`], ['DELETE', `/posts/${id}/respect`], ['POST', `/posts/${id}/replies`], ['POST', `/posts/${id}/save`], ['POST', `/posts/${id}/calls`],
       ['GET', '/calls'], ['GET', '/rankings'], ['GET', '/friends'], ['POST', '/friends'], ['DELETE', `/friends/${id}`], ['GET', '/invites'],

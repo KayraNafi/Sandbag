@@ -290,6 +290,16 @@ export const createApiKeySchema = z.object({ name: cleaned(40), password: z.stri
 
 export const pushTokenSchema = z.object({ token: z.string().min(20).max(4096) });
 
+// The push worker posts to whatever endpoint is stored, so only the browsers' own push
+// services are allowed. Anything else would let a user point it at the internal network.
+const PUSH_SERVICES = /^(fcm\.googleapis\.com|updates\.push\.services\.mozilla\.com|([a-z0-9-]+\.)*push\.apple\.com|([a-z0-9-]+\.)*notify\.windows\.com)$/;
+
+/** What a browser's PushSubscription.toJSON() gives, minus the expiry nobody sets. */
+export const webPushSubscriptionSchema = z.object({
+  endpoint: z.url({ protocol: /^https$/, hostname: PUSH_SERVICES }).max(2048),
+  keys: z.object({ p256dh: z.string().min(1).max(200), auth: z.string().min(1).max(100) }),
+});
+
 export interface ApiKeyView {
   id: string;
   name: string;
