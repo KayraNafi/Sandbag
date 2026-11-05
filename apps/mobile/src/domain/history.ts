@@ -1,4 +1,4 @@
-import { exerciseKey, type Entry, type LoggedWorkout, type SavedExercise, type SavedWorkout } from '@sandbag/shared';
+import { entryMax, exerciseKey, type Entry, type LoggedWorkout, type SavedExercise, type SavedWorkout } from '@sandbag/shared';
 
 export interface LogItem extends Entry {
   date: string;
@@ -133,4 +133,13 @@ export function moveItem<T>(list: T[], index: number, delta: -1 | 1): T[] {
   const next = list.filter((_, position) => position !== index);
   next.splice(target, 0, item);
   return next;
+}
+
+/** Every kilo lifted in a session: weight × reps for each set, both sides when it's per side. Joke numbers count for nothing. */
+export function volumeOf(workout: Pick<LoggedWorkout, 'entries'>): number {
+  return Math.round(workout.entries.reduce((total, entry) => {
+    if (entry.kind !== 'strength' || !entry.weight || entryMax(entry) === null) return total;
+    const reps = entry.setReps?.length ? entry.setReps : Array.from({ length: entry.sets ?? 1 }, () => entry.reps);
+    return total + reps.reduce<number>((sum, count) => sum + entry.weight! * (count ?? 0) * (entry.perSide ? 2 : 1), 0);
+  }, 0));
 }

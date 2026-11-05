@@ -5,6 +5,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { voice } from '@sandbag/shared';
+import { Icon, type IconName } from '@/components/icons';
 import { EASE_OUT, feel, NATIVE, prefersLessMotion } from '@/components/motion';
 import { toast } from '@/components/Toast';
 import { isOverMax, parseNumber } from '@/domain/format';
@@ -201,6 +202,29 @@ export function Segmented<T extends string>({ options, value, onChange }: { opti
   );
 }
 
+/** One row of a settings-style list: an icon, what it is, and a chevron when it goes somewhere. */
+export function ListRow({ icon, title, body, onPress, danger }: { icon?: IconName; title: string; body?: string; onPress?: () => void; danger?: boolean }) {
+  return (
+    <Pressable
+      accessibilityRole={onPress ? 'button' : undefined}
+      accessibilityLabel={title}
+      disabled={!onPress}
+      onPress={onPress}
+      style={({ pressed }) => [styles.listRow, pressed && styles.listPressed]}
+    >
+      {icon ? <Icon name={icon} size={22} color={danger ? colors.danger : colors.volt} /> : null}
+      <View style={styles.listText}>
+        <Text style={[styles.listTitle, danger && styles.listDanger]}>{title}</Text>
+        {body ? <Text style={styles.muted}>{body}</Text> : null}
+      </View>
+      {onPress ? <Icon name="chevron" size={18} color={colors.ink3} /> : null}
+    </Pressable>
+  );
+}
+
+/** Rows grouped on one surface, the way settings look on a phone. */
+export const ListGroup = ({ children }: { children: ReactNode }) => <View style={styles.listGroup}>{children}</View>;
+
 export const Row = ({ children, style }: { children: ReactNode; style?: StyleProp<ViewStyle> }) => <View style={[styles.row, style]}>{children}</View>;
 
 export function MoveButtons({ name, index, total, onMove }: { name: string; index: number; total: number; onMove: (delta: -1 | 1) => void }) {
@@ -248,6 +272,12 @@ export function Segments({ total, done }: { total: number; done: number }) {
 }
 
 const styles = StyleSheet.create({
+  listGroup: { backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.line, borderRadius: radius.lg, overflow: 'hidden' },
+  listRow: { flexDirection: 'row', alignItems: 'center', gap: space.md, minHeight: 56, paddingVertical: space.md, paddingHorizontal: space.lg, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.line },
+  listPressed: { backgroundColor: colors.surface2 },
+  listText: { flex: 1, gap: 2 },
+  listTitle: { fontFamily: fonts.bodyStrong, fontSize: 17, color: colors.ink },
+  listDanger: { color: colors.danger },
   segmented: { flexDirection: 'row', height: 48, borderRadius: 24, backgroundColor: colors.surface2, overflow: 'hidden' },
   thumb: { position: 'absolute', top: 0, bottom: 0, left: 0, borderRadius: 24, backgroundColor: colors.volt },
   segmentedItem: { flex: 1, alignItems: 'center', justifyContent: 'center' },

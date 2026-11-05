@@ -30,7 +30,7 @@ export function changePercent(first: number, latest: number): number {
   return first > 0 ? Math.round(((latest - first) / first) * 100) : 0;
 }
 
-/** Lifts with a trend to show, the ones you do most first. */
+/** Lifts with a trend to show, the most improved first. */
 export function liftProgress(index: Map<string, ExerciseHistory>): LiftProgress[] {
   const lifts: LiftProgress[] = [];
   for (const history of index.values()) {
@@ -43,5 +43,5 @@ export function liftProgress(index: Map<string, ExerciseHistory>): LiftProgress[
       points, first, latest, change: changePercent(first, latest),
     });
   }
-  return lifts.sort((a, b) => b.points.length - a.points.length || a.name.localeCompare(b.name));
+  return lifts.sort((a, b) => b.change - a.change || b.points.length - a.points.length || a.name.localeCompare(b.name));
 }

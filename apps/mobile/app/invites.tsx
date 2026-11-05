@@ -2,13 +2,14 @@ import { INVITE_GOALS } from '@sandbag/shared';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import * as Clipboard from 'expo-clipboard';
 import { useState } from 'react';
-import { Share, StyleSheet, Text, View } from 'react-native';
+import { Pressable, Share, StyleSheet, Text, View } from 'react-native';
 import { api, errorText } from '@/api/client';
 import { confirm } from '@/components/confirm';
 import { toast } from '@/components/Toast';
 import { useSession } from '@/auth/session';
 import { Button, Card, Field, Heading, Label, Loading, Muted, Row, Screen, Segments, Title } from '@/components/ui';
 import { Avatar } from '@/components/Avatar';
+import { Icon } from '@/components/icons';
 import { colors, fonts, space } from '@/theme';
 
 export default function Invites() {
@@ -97,7 +98,12 @@ export default function Invites() {
               <Avatar user={row.user} size={30} />
               <Text style={[styles.flex, styles.name]}>{row.user.displayName}</Text>
               <Text style={styles.recruited}>{row.joined}</Text>
-              {row.user.id === myId ? null : <Button title={`Remove ${row.user.displayName}`} variant="ghost" style={styles.remove} onPress={() => void askToRemove(row.user.id, row.user.displayName)} />}
+              {/* Your own row has no button, so it keeps the space to line the numbers up. */}
+              {row.user.id === myId ? <View style={styles.remove} /> : (
+                <Pressable accessibilityRole="button" accessibilityLabel={`Remove ${row.user.displayName}`} onPress={() => void askToRemove(row.user.id, row.user.displayName)} style={({ pressed }) => [styles.remove, pressed && styles.pressed]}>
+                  <Icon name="unfriend" size={20} color={colors.ink3} />
+                </Pressable>
+              )}
             </Row>
           ))}
         </>
@@ -119,5 +125,6 @@ const styles = StyleSheet.create({
   name: { fontFamily: fonts.bodyStrong, fontSize: 15, color: colors.ink },
   recruited: { fontFamily: fonts.display, fontSize: 22, color: colors.ink },
   section: { marginTop: space.md },
-  remove: { minHeight: 44, paddingHorizontal: space.sm, justifyContent: 'center' },
+  remove: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center' },
+  pressed: { backgroundColor: colors.surface2 },
 });

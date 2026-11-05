@@ -1,8 +1,35 @@
 /** One of a few lines, so the same joke doesn't land twice in a row. */
 const pick = (lines: string[], seed: number) => lines[Math.abs(Math.floor(seed)) % lines.length]!;
 
+/** Real masses in kg, so whatever you moved is compared to the thing it's actually closest to. */
+const MOVED: readonly (readonly [number, string])[] = [
+  [1, 'That’s a bag of sugar. Put it in your coffee.'],
+  [4, 'That’s a cat. It didn’t want to be lifted either.'],
+  [7, 'That’s a bowling ball. Nobody clapped.'],
+  [23, 'That’s a suitcase. Carry-on, if you’re lucky.'],
+  [45, 'That’s one large dog. Carried, repeatedly.'],
+  [90, 'That’s a fridge. The beers stayed in.'],
+  [300, 'That’s a vending machine. It still owes you a drink.'],
+  [450, 'That’s a grand piano. Up the stairs, in pieces.'],
+  [1000, 'That’s a small car. You still drove to the gym.'],
+  [2000, 'That’s a hippo. Nobody asked, but well done.'],
+  [6000, 'That’s an elephant. It isn’t impressed either.'],
+  [12000, 'That’s a city bus. Exact change not required.'],
+  [40000, 'That’s a loaded lorry. The driver has questions.'],
+  [150000, 'That’s a blue whale. Go home.'],
+  [400000, 'That’s a full jumbo jet. Sure.'],
+  [2000000, 'That’s a space shuttle on the pad. Houston has questions.'],
+  [7300000, 'That’s the Eiffel Tower. The French want it back.'],
+  [52000000, 'That’s the Titanic. That also went badly.'],
+  [6000000000, 'That’s the Great Pyramid. It took them twenty years.'],
+];
+
+const closestMoved = (kg: number) => MOVED.reduce((near, item) => (Math.abs(Math.log(kg / item[0])) < Math.abs(Math.log(kg / near[0])) ? item : near));
+
 /** The app's one voice: lightly sarcastic, about effort and excuses, never bodies. */
 export const voice = {
+  /** What a total of kilos moved is closest to, as a line. */
+  lifted: (kg: number) => closestMoved(kg)[1],
   weightUp: (gain: string) => `+${gain} kg. Alert the press.`,
   weightDown: () => 'Deload. That’s what we’re calling it.',
   sameWeight: (weight: string) => `${weight} kg again. Consistency, or fear?`,

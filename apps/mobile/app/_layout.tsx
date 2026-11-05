@@ -53,7 +53,7 @@ export default function RootLayout() {
             <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
             <Stack.Screen name="welcome" options={{ headerShown: false, gestureEnabled: false }} />
             <Stack.Screen name="workout/active" options={{ title: 'Workout', gestureEnabled: false }} />
-            <Stack.Screen name="workout/finished" options={{ title: 'Logged', headerBackVisible: false, gestureEnabled: false }} />
+            <Stack.Screen name="workout/finished" options={{ title: 'Logged', headerBackVisible: false, headerLeft: () => null, gestureEnabled: false }} />
             <Stack.Screen name="workout/saved/[id]" options={{ title: 'Saved workout' }} />
             <Stack.Screen name="workout/edit/[id]" options={{ title: 'Edit workout' }} />
             <Stack.Screen name="workout/logged/[id]" options={{ title: 'Session' }} />

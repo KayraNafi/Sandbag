@@ -1,6 +1,6 @@
 import type { Entry, LoggedWorkout, SavedWorkout } from '@sandbag/shared';
 import { describe, expect, it } from 'vitest';
-import { activeLogged, bestBefore, buildHistory, draftEntryFor, fitSetReps, lastLogged, moveItem, nextWorkout, recentWeights, sameExercises } from './history';
+import { activeLogged, bestBefore, buildHistory, draftEntryFor, fitSetReps, lastLogged, moveItem, nextWorkout, recentWeights, sameExercises, volumeOf } from './history';
 
 const entry = (name: string, weight: number | null, extra: Partial<Entry> = {}): Entry => ({
   id: `${name}-${weight}`, name, kind: 'strength', sets: 3, reps: 8, weight, perSide: false, rpe: 8, minutes: null, note: '', ...extra,
@@ -130,5 +130,19 @@ describe('draftEntryFor', () => {
     const exercise = { name: 'Squat', kind: 'strength' as const, sets: null, reps: null };
     expect(draftEntryFor(index, exercise, () => 'id').includesEquipment).toBe(false);
     expect(draftEntryFor(buildHistory([]), exercise, () => 'id').includesEquipment).toBeUndefined();
+  });
+});
+
+describe('volumeOf', () => {
+  it('adds weight times reps for each set, both sides when it is per side', () => {
+    expect(volumeOf({ entries: [entry('Squat', 100, { sets: 3, reps: 5 }), entry('Curl', 10, { sets: 2, reps: 10, perSide: true })] })).toBe(1500 + 400);
+  });
+
+  it('uses each set’s reps when they differ', () => {
+    expect(volumeOf({ entries: [entry('Bench', 80, { sets: 3, reps: 8, setReps: [8, 6, 4] })] })).toBe(80 * 18);
+  });
+
+  it('counts nothing for timed work or a joke weight', () => {
+    expect(volumeOf({ entries: [entry('Run', null, { kind: 'time', minutes: 30 }), entry('Bench', 9000, { sets: 1, reps: 1 })] })).toBe(0);
   });
 });

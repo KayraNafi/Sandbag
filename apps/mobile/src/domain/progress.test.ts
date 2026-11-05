@@ -24,7 +24,7 @@ describe('progress', () => {
     expect(changePercent(0, 20)).toBe(0);
   });
 
-  it('needs two days for a trend, and lists the most-done lift first', () => {
+  it('needs two days for a trend, and lists the most improved lift first', () => {
     const once = lift('once', [item('2026-10-01', 10)]);
     const some = lift('some', [item('2026-10-01', 10), item('2026-10-02', 11)]);
     const many = lift('many', [item('2026-10-01', 20), item('2026-10-02', 21), item('2026-10-03', 25)]);

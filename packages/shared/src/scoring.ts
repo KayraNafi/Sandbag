@@ -173,8 +173,8 @@ export interface Streak {
 }
 
 /** Every fourth week on target earns a shield, and a few can be held. */
-const WEEKS_PER_SHIELD = 4;
-const MAX_SHIELDS = 2;
+export const WEEKS_PER_SHIELD = 4;
+export const MAX_SHIELDS = 2;
 
 /**
  * Weeks in a row, Monday to Sunday, that hit the goal of their time. The week in progress
