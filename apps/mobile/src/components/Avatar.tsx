@@ -3,8 +3,7 @@ import type { ReactNode } from 'react';
 import { View } from 'react-native';
 import Svg, { Circle, Ellipse, G, Path, Rect } from 'react-native-svg';
 import { colors } from '@/theme';
-
-const INK = '#17180f';
+import { bahgat, INK, shakal } from './portraits';
 
 interface Look {
   bg: string;
@@ -115,6 +114,8 @@ const DRAWINGS: Record<AvatarId, ReactNode> = {
     <Circle cx={39} cy={22} r={2.5} fill={INK} /><Circle cx={61} cy={22} r={2.5} fill={INK} />
     <Path d="M34 37C42 44 58 44 66 37" stroke={INK} strokeWidth={2.2} fill="none" strokeLinecap="round" />
   </>} />,
+  bahgat,
+  shakal,
 };
 
 export const AVATAR_NAMES: Record<AvatarId, string> = {
@@ -132,6 +133,8 @@ export const AVATAR_NAMES: Record<AvatarId, string> = {
   sandbag: 'The Sandbag',
   dumbbell: 'Dumb Bell',
   frog: 'Skips Nothing',
+  bahgat: 'Bahgat Saber',
+  shakal: 'Adel Shakal',
 };
 
 export const AVATAR_IDS = AVATARS;

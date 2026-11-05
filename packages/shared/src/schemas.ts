@@ -84,17 +84,20 @@ export interface SyncResponse {
   savedWorkouts: SavedWorkout[];
 }
 
-export const AVATARS = [
+/** The characters anyone starts as. Frozen: growing it would change the face of everyone who never picked one. */
+const STARTERS = [
   'flat_top', 'shades', 'mohawk', 'moustache', 'bun', 'beard', 'headband', 'curls',
   'bull', 'gorilla', 'potato', 'sandbag', 'dumbbell', 'frog',
 ] as const;
+/** New characters go at the end, and only by choice. */
+export const AVATARS = [...STARTERS, 'bahgat', 'shakal'] as const;
 export type AvatarId = (typeof AVATARS)[number];
 
 /** Everyone starts as a random character, stable per account. */
 export function defaultAvatar(userId: string): AvatarId {
   let hash = 0;
   for (const char of userId) hash = (hash * 31 + char.charCodeAt(0)) % 9973;
-  return AVATARS[hash % AVATARS.length]!;
+  return STARTERS[hash % STARTERS.length]!;
 }
 
 const username = z.string().trim().toLowerCase().regex(/^[a-z0-9_]{3,24}$/, 'Use 3 to 24 letters, numbers or underscores');
