@@ -1,4 +1,4 @@
-import { loggedWorkoutSchema, savedWorkoutSchema, voice, type Entry, type LoggedWorkout, type SavedExercise, type SavedWorkout } from '@sandbag/shared';
+import { loggedWorkoutSchema, savedWorkoutSchema, tidySets, voice, type Entry, type LoggedWorkout, type SavedExercise, type SavedWorkout } from '@sandbag/shared';
 import { randomUUID } from 'expo-crypto';
 import { today } from '@/domain/format';
 import { activeLogged, buildHistory, draftEntryFor, lastLogged, type Draft, type DraftEntry } from '@/domain/history';
@@ -57,8 +57,7 @@ export function reactionTo(entry: DraftEntry, date: string): string | null {
 export function finishDraft(draft: Draft): LoggedWorkout {
   const entries: Entry[] = draft.entries
     .filter((entry) => entry.done)
-    // A list left behind when the sets changed no longer describes the session.
-    .map(({ done: _done, setReps, ...entry }) => (setReps?.length === entry.sets ? { ...entry, setReps } : entry));
+    .map(({ done: _done, ...entry }) => tidySets(entry));
   const doc = loggedWorkoutSchema.parse({
     id: draft.id, date: draft.date, title: draft.title.trim() || 'Workout', savedWorkoutId: draft.savedWorkoutId,
     entries, updatedAt: Date.now(), deleted: false,

@@ -16,7 +16,7 @@ export const toSaved = (row: typeof savedWorkouts.$inferSelect): SavedWorkout =>
 
 /** What scoring reads from a session. A changed note or title isn't a changed number. */
 const numbersOf = (entries: Entry[]) => JSON.stringify(entries.map((entry) => [
-  exerciseKey(entry.name), entry.kind, entry.weight, entry.reps, entry.setReps, entry.perSide, entry.includesEquipment, entry.minutes,
+  exerciseKey(entry.name), entry.kind, entry.weight, entry.reps, entry.setReps, entry.setWeights, entry.perSide, entry.includesEquipment, entry.minutes,
 ]));
 
 /** Last write wins on updatedAt. Returns the server copies that beat what was sent. */

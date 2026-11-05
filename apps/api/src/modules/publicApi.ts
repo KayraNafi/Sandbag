@@ -1,7 +1,7 @@
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { verify } from '@node-rs/argon2';
 import {
-  apiSavedWorkoutSchema, apiWorkoutsSchema, createApiKeySchema,
+  apiSavedWorkoutSchema, apiWorkoutsSchema, createApiKeySchema, tidySets,
   type ApiKeyView, type LoggedWorkout, type SavedWorkout,
 } from '@sandbag/shared';
 import { and, asc, desc, eq, gt, inArray, sql } from 'drizzle-orm';
@@ -104,7 +104,7 @@ export function publicApiRoutes(app: FastifyInstance, db: Db): void {
     const docs: LoggedWorkout[] = workouts.map((workout) => ({
       ...workout,
       id: workout.id ?? randomUUID(),
-      entries: workout.entries.map((entry) => ({ ...entry, id: entry.id ?? randomUUID() })),
+      entries: workout.entries.map((entry) => tidySets({ ...entry, id: entry.id ?? randomUUID() })),
       updatedAt: 0,
       deleted: false,
     }));

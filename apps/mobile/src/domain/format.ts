@@ -1,4 +1,4 @@
-import { DAY_MS, type Entry } from '@sandbag/shared';
+import { DAY_MS, hasSetWeights, setsOf, type Entry } from '@sandbag/shared';
 
 const pad = (value: number) => String(value).padStart(2, '0');
 
@@ -89,9 +89,15 @@ function equipmentText({ includesEquipment }: Pick<Entry, 'includesEquipment'>):
 export function summary(entry: Entry): string {
   if (entry.kind === 'time') return entry.minutes ? `${num(entry.minutes)} min` : 'No time logged';
   const parts: string[] = [];
-  if (entry.weight !== null) parts.push(`${num(entry.weight)} kg${entry.perSide ? ' each side' : ''}${equipmentText(entry)}`);
-  const sr = setsReps(entry);
-  if (sr) parts.push(sr);
+  const unit = `kg${entry.perSide ? ' each side' : ''}${equipmentText(entry)}`;
+  if (hasSetWeights(entry)) {
+    const each = (value: number | null) => (value === null ? '–' : num(value));
+    parts.push(`${setsOf(entry).map((set) => `${each(set.weight)}×${each(set.reps)}`).join(', ')} ${unit}`);
+  } else {
+    if (entry.weight !== null) parts.push(`${num(entry.weight)} ${unit}`);
+    const sr = setsReps(entry);
+    if (sr) parts.push(sr);
+  }
   if (entry.rpe) parts.push(`RPE ${num(entry.rpe)}`);
   return parts.join(' · ') || 'No numbers logged';
 }

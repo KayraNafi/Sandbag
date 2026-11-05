@@ -1,4 +1,4 @@
-import { entryMax, exerciseKey, type Entry, type LoggedWorkout, type SavedExercise, type SavedWorkout } from '@sandbag/shared';
+import { entryMax, exerciseKey, setsOf, type Entry, type LoggedWorkout, type SavedExercise, type SavedWorkout } from '@sandbag/shared';
 
 export interface LogItem extends Entry {
   date: string;
@@ -122,8 +122,8 @@ export function sameExercises(a: { name: string }[], b: { name: string }[]): boo
 }
 
 /** Keeps what's typed for the sets that remain, and new sets start at the usual number. */
-export function fitSetReps(current: (number | null)[], sets: number, reps: number | null): (number | null)[] {
-  return Array.from({ length: sets }, (_, set) => (set < current.length ? current[set] ?? null : reps));
+export function fitPerSet(current: (number | null)[], sets: number, usual: number | null): (number | null)[] {
+  return Array.from({ length: sets }, (_, set) => (set < current.length ? current[set] ?? null : usual));
 }
 
 export function moveItem<T>(list: T[], index: number, delta: -1 | 1): T[] {
@@ -138,8 +138,7 @@ export function moveItem<T>(list: T[], index: number, delta: -1 | 1): T[] {
 /** Every kilo lifted in a session: weight × reps for each set, both sides when it's per side. Joke numbers count for nothing. */
 export function volumeOf(workout: Pick<LoggedWorkout, 'entries'>): number {
   return Math.round(workout.entries.reduce((total, entry) => {
-    if (entry.kind !== 'strength' || !entry.weight || entryMax(entry) === null) return total;
-    const reps = entry.setReps?.length ? entry.setReps : Array.from({ length: entry.sets ?? 1 }, () => entry.reps);
-    return total + reps.reduce<number>((sum, count) => sum + entry.weight! * (count ?? 0) * (entry.perSide ? 2 : 1), 0);
+    if (entryMax(entry) === null) return total;
+    return total + setsOf(entry).reduce((sum, set) => sum + (set.weight ?? 0) * (set.reps ?? 0) * (entry.perSide ? 2 : 1), 0);
   }, 0));
 }

@@ -289,6 +289,15 @@ describe('sandbag calls', () => {
   const rowOf = async (token: string, userId: string) => (await call<RankingRow[]>('GET', '/rankings', token)).body.find((row) => row.user.id === userId);
   const at = (offset: number) => ({ updatedAt: Date.now() + offset });
 
+  it('targets one real set when each set has its own weight', async () => {
+    const { founder, friend } = await crew();
+    const ramp = entry('Lat pulldown', 90, { setWeights: [70, 80, 90], setReps: [12, 10, 3] });
+    const created = await post(friend.token, { entries: [ramp] });
+    expect((await call('POST', `/posts/${created.body.id}/calls`, founder.token, { exercise: 'Lat pulldown', line: 'Ramped it.' })).status).toBe(201);
+    const [theCall] = (await call<CallView[]>('GET', '/calls', friend.token)).body;
+    expect(theCall).toMatchObject({ targetWeight: 80, targetReps: 10 });
+  });
+
   it('clears a call with more reps at the same weight', async () => {
     const { friend } = await called();
     await sync(friend.token, 0, [logged('w2', [entry('Lat pulldown', 86, { reps: 10 })], later())]);

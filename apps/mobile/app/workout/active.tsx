@@ -10,7 +10,7 @@ import { Button, Card, Chip, Field, Heading, Label, MoveButtons, Muted, NumberFi
 import { addExerciseToDraft, finishDraft, reactionTo } from '@/data/actions';
 import { useData } from '@/data/store';
 import { agoText, backfillDates, dayLabel, num, round2, summary } from '@/domain/format';
-import { activeLogged, buildHistory, fitSetReps, lastLogged, moveItem, recentWeights, type DraftEntry } from '@/domain/history';
+import { activeLogged, buildHistory, fitPerSet, lastLogged, moveItem, recentWeights, type DraftEntry } from '@/domain/history';
 import { colors, fonts, radius, space } from '@/theme';
 
 const WEIGHT_STEP = 2.5;
@@ -33,11 +33,21 @@ function Editor({ entry, date, onChange, onRemove }: {
   };
   const sets = entry.sets ?? 0;
   const canVary = sets >= 2 && sets <= MAX_VARIED_SETS;
-  const varying = canVary && entry.setReps !== undefined;
+  const varying = canVary && (entry.setReps !== undefined || entry.setWeights !== undefined);
+  // Both lists, one value per set, filled from the usual numbers where nothing's typed yet.
+  const perSet = (count: number) => ({ setReps: fitPerSet(entry.setReps ?? [], count, entry.reps), setWeights: fitPerSet(entry.setWeights ?? [], count, entry.weight) });
+  const lists = perSet(sets);
   // Typing "12" passes through "1", so values only change once the count is one that can vary.
   const changeSets = (next: number | null) => {
-    const fits = next !== null && next >= 2 && next <= MAX_VARIED_SETS;
-    onChange({ sets: next, ...(entry.setReps && fits ? { setReps: fitSetReps(entry.setReps, next, entry.reps) } : {}) });
+    const fits = varying && next !== null && next >= 2 && next <= MAX_VARIED_SETS;
+    onChange({ sets: next, ...(fits ? perSet(next) : {}) });
+  };
+  const changeSet = (set: number, field: 'setReps' | 'setWeights', value: number | null) => {
+    const list = lists[field].map((item, position) => (position === set ? value : item));
+    if (field === 'setReps') return onChange({ ...lists, setReps: list, reps: entry.reps ?? value });
+    // The heaviest set stays the weight, which next time starts from.
+    const weighed = list.filter((item): item is number => item !== null);
+    onChange({ ...lists, setWeights: list, weight: weighed.length ? Math.max(...weighed) : null });
   };
 
   return (
@@ -48,19 +58,21 @@ function Editor({ entry, date, onChange, onRemove }: {
         <Chip title="Time" active={entry.kind === 'time'} onPress={() => onChange({ kind: 'time' })} />
         {entry.kind === 'strength' ? <Chip title="Each side" active={entry.perSide} onPress={() => onChange({ perSide: !entry.perSide })} /> : null}
         {entry.kind === 'strength' && canVary ? (
-          <Chip title="Vary reps" active={varying} onPress={() => onChange({ setReps: varying ? undefined : fitSetReps([], sets, entry.reps) })} />
+          <Chip title="Vary sets" active={varying} onPress={() => onChange(varying ? { setReps: undefined, setWeights: undefined } : lists)} />
         ) : null}
       </Row>
       {entry.kind === 'time' ? (
         <NumberField label="Minutes" unit="min" value={entry.minutes} max={1440} onChange={(minutes) => onChange({ minutes })} />
       ) : (
         <>
-          <Row style={styles.bottom}>
-            <Pressable accessibilityRole="button" accessibilityLabel={`Lower weight by ${WEIGHT_STEP}`} onPress={() => stepWeight(-WEIGHT_STEP)} style={styles.step}><Text style={styles.stepText}>−</Text></Pressable>
-            <NumberField label="Weight, kg" unit="kg" value={entry.weight} max={MAX_WEIGHT} onChange={(weight) => onChange({ weight })} />
-            <Pressable accessibilityRole="button" accessibilityLabel={`Raise weight by ${WEIGHT_STEP}`} onPress={() => stepWeight(WEIGHT_STEP)} style={styles.step}><Text style={styles.stepText}>+</Text></Pressable>
-          </Row>
-          {weights.length > 1 ? (
+          {varying ? null : (
+            <Row style={styles.bottom}>
+              <Pressable accessibilityRole="button" accessibilityLabel={`Lower weight by ${WEIGHT_STEP}`} onPress={() => stepWeight(-WEIGHT_STEP)} style={styles.step}><Text style={styles.stepText}>−</Text></Pressable>
+              <NumberField label="Weight, kg" unit="kg" value={entry.weight} max={MAX_WEIGHT} onChange={(weight) => onChange({ weight })} />
+              <Pressable accessibilityRole="button" accessibilityLabel={`Raise weight by ${WEIGHT_STEP}`} onPress={() => stepWeight(WEIGHT_STEP)} style={styles.step}><Text style={styles.stepText}>+</Text></Pressable>
+            </Row>
+          )}
+          {!varying && weights.length > 1 ? (
             <Row style={styles.wrap}>
               {weights.map((weight) => <Chip key={weight} title={num(weight)} active={entry.weight === weight} onPress={() => onChange({ weight })} />)}
             </Row>
@@ -75,24 +87,13 @@ function Editor({ entry, date, onChange, onRemove }: {
             {varying ? null : <NumberField label="Reps" decimals={false} value={entry.reps} max={1000} onChange={(reps) => onChange({ reps })} />}
             <NumberField label="RPE" value={entry.rpe} max={10} onChange={(rpe) => onChange({ rpe })} />
           </Row>
-          {varying ? (
-            <Row style={styles.wrap}>
-              {entry.setReps?.map((reps, set) => (
-                <NumberField
-                  key={set}
-                  label={`Set ${set + 1}`}
-                  decimals={false}
-                  value={reps}
-                  max={1000}
-                  style={styles.setBox}
-                  onChange={(value) => onChange({
-                    setReps: entry.setReps?.map((item, position) => (position === set ? value : item)),
-                    reps: entry.reps ?? value,
-                  })}
-                />
-              ))}
+          {varying ? lists.setReps.map((reps, set) => (
+            <Row key={set} style={styles.bottom}>
+              <Text style={styles.setName}>Set {set + 1}</Text>
+              <NumberField label="kg" unit="kg" value={lists.setWeights[set] ?? null} max={MAX_WEIGHT} onChange={(value) => changeSet(set, 'setWeights', value)} />
+              <NumberField label="Reps" decimals={false} value={reps} max={1000} onChange={(value) => changeSet(set, 'setReps', value)} />
             </Row>
-          ) : null}
+          )) : null}
         </>
       )}
       <Field label="Note" placeholder="last set 13.6" maxLength={NOTE_MAX} value={entry.note} onChangeText={(note) => onChange({ note })} />
@@ -292,7 +293,7 @@ const styles = StyleSheet.create({
   editor: { gap: space.md, marginTop: space.sm },
   bottom: { alignItems: 'flex-end' },
   wrap: { flexWrap: 'wrap' },
-  setBox: { flex: 0, width: '22%' },
+  setName: { width: 56, paddingBottom: space.md, fontFamily: fonts.bodyStrong, fontSize: 15, color: colors.ink2 },
   step: { width: 56, height: 50, borderRadius: radius.md, backgroundColor: colors.surface2, borderWidth: 1, borderColor: colors.line, alignItems: 'center', justifyContent: 'center' },
   stepText: { fontFamily: fonts.display, fontSize: 28, color: colors.volt },
   addInput: { flex: 1, minHeight: 52, backgroundColor: colors.surface2, borderWidth: 1, borderColor: colors.line, borderRadius: radius.md, paddingHorizontal: space.md, color: colors.ink, fontFamily: fonts.body, fontSize: 16 },

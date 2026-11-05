@@ -14,7 +14,9 @@ const count = z.number().int().min(0).max(1000).nullable();
 
 export const MAX_VARIED_SETS = 20;
 export const MAX_WEIGHT = 2000;
+const weight = z.number().min(0).max(MAX_WEIGHT).nullable();
 const setReps = z.array(count).max(MAX_VARIED_SETS).optional();
+const setWeights = z.array(weight).max(MAX_VARIED_SETS).optional();
 
 export const entrySchema = z.object({
   id: clientId,
@@ -24,7 +26,9 @@ export const entrySchema = z.object({
   reps: count,
   // One value per set when they differ. `reps` stays the usual number, which the next session starts from.
   setReps,
-  weight: z.number().min(0).max(MAX_WEIGHT).nullable(),
+  // One value per set when they differ. `weight` stays the heaviest, which is what older apps show.
+  setWeights,
+  weight,
   perSide: z.boolean(),
   // Whether the weight counts the bar or machine. Absent means it wasn't said, as on every older entry.
   includesEquipment: z.boolean().optional(),
@@ -250,7 +254,8 @@ const apiEntrySchema = z.object({
   sets: optionalCount,
   reps: optionalCount,
   setReps,
-  weight: z.number().min(0).max(MAX_WEIGHT).nullable().default(null),
+  setWeights,
+  weight: weight.default(null),
   perSide: z.boolean().default(false),
   includesEquipment: z.boolean().optional(),
   rpe: z.number().min(0).max(10).nullable().default(null),

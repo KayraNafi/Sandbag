@@ -1,6 +1,6 @@
 import type { Entry, LoggedWorkout, SavedWorkout } from '@sandbag/shared';
 import { describe, expect, it } from 'vitest';
-import { activeLogged, bestBefore, buildHistory, draftEntryFor, fitSetReps, lastLogged, moveItem, nextWorkout, recentWeights, sameExercises, volumeOf } from './history';
+import { activeLogged, bestBefore, buildHistory, draftEntryFor, fitPerSet, lastLogged, moveItem, nextWorkout, recentWeights, sameExercises, volumeOf } from './history';
 
 const entry = (name: string, weight: number | null, extra: Partial<Entry> = {}): Entry => ({
   id: `${name}-${weight}`, name, kind: 'strength', sets: 3, reps: 8, weight, perSide: false, rpe: 8, minutes: null, note: '', ...extra,
@@ -92,12 +92,12 @@ describe('a backfilled session', () => {
   });
 });
 
-describe('fitSetReps', () => {
+describe('fitPerSet', () => {
   it('fills from the usual number, and keeps typed values when the sets change', () => {
-    expect(fitSetReps([], 3, 8)).toEqual([8, 8, 8]);
-    expect(fitSetReps([8, 6], 4, 8)).toEqual([8, 6, 8, 8]);
-    expect(fitSetReps([8, 6, 5], 2, 8)).toEqual([8, 6]);
-    expect(fitSetReps([null, 6], 2, 8)).toEqual([null, 6]);
+    expect(fitPerSet([], 3, 8)).toEqual([8, 8, 8]);
+    expect(fitPerSet([8, 6], 4, 8)).toEqual([8, 6, 8, 8]);
+    expect(fitPerSet([8, 6, 5], 2, 8)).toEqual([8, 6]);
+    expect(fitPerSet([null, 6], 2, 8)).toEqual([null, 6]);
   });
 });
 
@@ -140,6 +140,10 @@ describe('volumeOf', () => {
 
   it('uses each set’s reps when they differ', () => {
     expect(volumeOf({ entries: [entry('Bench', 80, { sets: 3, reps: 8, setReps: [8, 6, 4] })] })).toBe(80 * 18);
+  });
+
+  it('uses each set’s weight when they differ', () => {
+    expect(volumeOf({ entries: [entry('Bench', 70, { sets: 3, reps: 8, setWeights: [60, 65, 70], setReps: [10, 8, 5] })] })).toBe(600 + 520 + 350);
   });
 
   it('counts nothing for timed work or a joke weight', () => {

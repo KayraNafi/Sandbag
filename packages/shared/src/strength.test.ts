@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Entry } from './schemas';
-import { entryMax, entrySetup, estimatedMax, hasWork } from './strength';
+import { bestSet, entryMax, entrySetup, estimatedMax, hasWork, setsOf, tidySets } from './strength';
 
 const entry = (name: string, weight: number | null, reps: number | null, extra: Partial<Entry> = {}): Entry => ({
   id: name, name, kind: 'strength', sets: 3, reps, weight, perSide: false, rpe: null, minutes: null, note: '', ...extra,
@@ -17,6 +17,50 @@ describe('estimatedMax', () => {
   it('uses the best set when sets differ', () => {
     expect(entryMax(entry('Bench', 60, 8, { setReps: [8, 10, 6] }))).toBe(estimatedMax(60, 10));
     expect(entryMax(entry('Bench', null, 8))).toBeNull();
+  });
+});
+
+describe('per-set weights', () => {
+  const ramp = entry('Bench', 70, 8, { setWeights: [60, 65, 70], setReps: [10, 8, 5] });
+
+  it('reads each set as it was done', () => {
+    expect(setsOf(ramp)).toEqual([{ weight: 60, reps: 10 }, { weight: 65, reps: 8 }, { weight: 70, reps: 5 }]);
+    expect(setsOf(entry('Bench', 60, 8))).toEqual([{ weight: 60, reps: 8 }, { weight: 60, reps: 8 }, { weight: 60, reps: 8 }]);
+  });
+
+  it('scores the best real set, never the heaviest weight with the most reps', () => {
+    expect(bestSet(ramp)).toEqual({ weight: 65, reps: 8, max: estimatedMax(65, 8) });
+    expect(entryMax(ramp)).toBeLessThan(estimatedMax(70, 10));
+  });
+
+  it('ignores a list that does not match the number of sets', () => {
+    expect(setsOf(entry('Bench', 60, 8, { setWeights: [100, 100] }))[0]).toEqual({ weight: 60, reps: 8 });
+  });
+
+  it('skips an impossible set but keeps the believable ones', () => {
+    expect(bestSet(entry('Bench', 2000, 1, { setWeights: [60, 2000, 70], setReps: [5, 1, 5] }))?.weight).toBe(70);
+  });
+});
+
+describe('tidySets', () => {
+  it('keeps lists that vary and makes the weight the heaviest set', () => {
+    const tidy = tidySets(entry('Bench', 60, 8, { setWeights: [60, 65, 70], setReps: [8, 8, 8] }));
+    expect(tidy.setWeights).toEqual([60, 65, 70]);
+    expect(tidy.weight).toBe(70);
+    expect(tidy.setReps).toBeUndefined();
+    expect(tidy.reps).toBe(8);
+  });
+
+  it('folds a list where every set is the same into the single number', () => {
+    const tidy = tidySets(entry('Bench', 50, 10, { setWeights: [60, 60, 60], setReps: [6, 6, 6] }));
+    expect(tidy).toMatchObject({ weight: 60, reps: 6 });
+    expect('setWeights' in tidy || 'setReps' in tidy).toBe(false);
+  });
+
+  it('drops a list left behind when the sets changed', () => {
+    const tidy = tidySets(entry('Bench', 60, 8, { setWeights: [60, 70] }));
+    expect(tidy.setWeights).toBeUndefined();
+    expect(tidy.weight).toBe(60);
   });
 });
 

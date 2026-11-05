@@ -1,5 +1,5 @@
 import {
-  CALL_DAYS, CALL_POINTS, CALLABLE_DAYS, createCallSchema, createPostSchema, createReplySchema, DAY_MS, entryMax, exerciseKey, LIVE_CALLS, MAX_OPEN_CALLS, topReps, voice,
+  CALL_DAYS, CALL_POINTS, CALLABLE_DAYS, bestSet, createCallSchema, createPostSchema, createReplySchema, DAY_MS, exerciseKey, LIVE_CALLS, MAX_OPEN_CALLS, voice,
   type CallView, type Entry, type PostView, type ReplyView, type SavedWorkout,
 } from '@sandbag/shared';
 import { randomUUID } from 'node:crypto';
@@ -248,10 +248,13 @@ export function feedRoutes(app: FastifyInstance, db: Db): void {
     const input = createCallSchema.parse(request.body);
     const key = exerciseKey(input.exercise);
     // The best of that lift in the post, so a lighter warm-up entry can't be the one to beat.
-    const entry = post.entries
-      .filter((item) => item.kind === 'strength' && exerciseKey(item.name) === key && item.weight !== null)
-      .sort((a, b) => entryMax(b)! - entryMax(a)!)[0];
-    if (!entry || entry.weight === null) throw badRequest('That lift isn’t in this workout');
+    const [{ entry, best } = {}] = post.entries
+      .flatMap((item) => {
+        const set = exerciseKey(item.name) === key ? bestSet(item) : null;
+        return set ? [{ entry: item, best: set }] : [];
+      })
+      .sort((a, b) => b.best.max - a.best.max);
+    if (!entry || !best) throw badRequest('That lift isn’t in this workout');
 
     await expireCalls(db);
     const [{ out } = { out: 0 }] = await db.select({ out: sql<number>`count(*)::int` }).from(sandbagCalls)
@@ -271,9 +274,10 @@ export function feedRoutes(app: FastifyInstance, db: Db): void {
       postId: post.id,
       exercise: entry.name,
       exerciseKey: key,
-      targetWeight: entry.weight,
-      targetReps: topReps(entry),
-      targetMax: entryMax(entry)!,
+      // The weight and reps of one real set, so the target is a set they actually did.
+      targetWeight: best.weight,
+      targetReps: best.reps,
+      targetMax: best.max,
       weightsHidden: !post.showWeights,
       line: input.line,
       createdAt: new Date(now),

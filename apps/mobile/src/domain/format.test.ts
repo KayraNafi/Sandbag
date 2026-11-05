@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { backfillDates, dayLabel, isOverMax, parseNumber, setsReps } from './format';
+import type { Entry } from '@sandbag/shared';
+import { backfillDates, dayLabel, isOverMax, parseNumber, setsReps, summary } from './format';
 
 describe('typed numbers', () => {
   it('reads decimals with either separator, and nothing from blanks', () => {
@@ -28,6 +29,19 @@ describe('setsReps', () => {
   it('falls back to sets × reps without a list, or when the list no longer fits', () => {
     expect(setsReps({ sets: 3, reps: 8 })).toBe('3 × 8');
     expect(setsReps({ sets: 4, reps: 8, setReps: [8, 8, 6] })).toBe('4 × 8');
+  });
+});
+
+describe('summary', () => {
+  const bench: Entry = { id: 'b', name: 'Bench', kind: 'strength', sets: 3, reps: 8, weight: 70, perSide: false, rpe: null, minutes: null, note: '' };
+
+  it('pairs each weight with its reps when the weights differ', () => {
+    expect(summary({ ...bench, setWeights: [60, 65, 70], setReps: [10, 8, 5] })).toBe('60×10, 65×8, 70×5 kg');
+    expect(summary({ ...bench, setWeights: [60, 65, 70], perSide: true })).toBe('60×8, 65×8, 70×8 kg each side');
+  });
+
+  it('keeps one weight and sets × reps otherwise', () => {
+    expect(summary(bench)).toBe('70 kg · 3 × 8');
   });
 });
 
