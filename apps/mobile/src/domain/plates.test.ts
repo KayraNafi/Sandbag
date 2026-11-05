@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { plateWords, platesFor } from './plates';
+import { loadOf, plateWords, platesFor } from './plates';
 
 describe('platesFor', () => {
   it('loads each side, leaving out the bar', () => {
@@ -32,5 +32,26 @@ describe('plateWords', () => {
     expect(plateWords(15)).toBeNull();
     expect(plateWords(21)).toBeNull();
     expect(plateWords(23.3)).toBe('ABOUT EACH SIDE 1.25');
+  });
+});
+
+describe('loadOf', () => {
+  const total = { perSide: false };
+
+  it('loads a bar around the bar, unless the number leaves the bar out or is for one side', () => {
+    expect(loadOf(100, 'barbell', total)).toEqual({ kind: 'plates', plates: [25, 15], words: 'EACH SIDE 25 + 15', handle: 'bar' });
+    expect(loadOf(80, 'barbell', { perSide: false, includesEquipment: false })).toMatchObject({ plates: [25, 15] });
+    expect(loadOf(40, 'barbell', { perSide: true })).toMatchObject({ plates: [25, 15] });
+  });
+
+  it('puts plates on a machine’s sled without a bar, and splits a dumbbell between its ends', () => {
+    expect(loadOf(100, 'plate-loaded', total)).toMatchObject({ plates: [25, 25], words: 'EACH SIDE 2 × 25' });
+    expect(loadOf(20, 'dumbbell', { perSide: true })).toEqual({ kind: 'plates', plates: [10], words: null, handle: 'dumbbell' });
+  });
+
+  it('shows a pin stack for machines and cables, and nothing without a weight', () => {
+    expect(loadOf(45, 'cable', total)).toEqual({ kind: 'stack', weight: 45 });
+    expect(loadOf(45, 'bodyweight', total)).toBeNull();
+    expect(loadOf(null, 'barbell', total)).toBeNull();
   });
 });

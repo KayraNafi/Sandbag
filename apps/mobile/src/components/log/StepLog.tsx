@@ -1,4 +1,4 @@
-import { estimatedMax, exerciseKey, MAX_WEIGHT, voice } from '@sandbag/shared';
+import { estimatedMax, exerciseKey, findLift, MAX_WEIGHT, voice } from '@sandbag/shared';
 import { useQuery } from '@tanstack/react-query';
 import { Stack } from 'expo-router';
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
@@ -9,6 +9,7 @@ import { useSession } from '@/auth/session';
 import { EffortSlider } from '@/components/EffortSlider';
 import { HoldButton } from '@/components/HoldButton';
 import { Icon } from '@/components/icons';
+import { LoadView } from '@/components/LoadView';
 import { Burst, FadeIn, feel, GrowBar, Stamp } from '@/components/motion';
 import { Sheet } from '@/components/Sheet';
 import { Stepper } from '@/components/Stepper';
@@ -339,6 +340,7 @@ export function StepLog({ draft }: { draft: Draft }) {
     // Someone called this lift: the number that matters today is theirs, not your best.
     const called = !done && !joke ? calls.data?.find((call) => call.status === 'open' && call.target.id === me?.id && call.targetWeight !== null && exerciseKey(call.exercise) === exerciseKey(focus.name)) : undefined;
     const clears = called && reps !== 0 && weight !== null && estimatedMax(weight, reps) > estimatedMax(called.targetWeight!, called.targetReps);
+    const kit = findLift(focus.name)?.kit;
     const drop = dropping && dropping.id === focus.id && dropping.set === set && !done ? dropping : null;
     // Past the smallest jump there's nothing lighter to suggest, only an opinion.
     const dropTo = drop && weight ? dropWeight(weight, jump, drop.drops) : null;
@@ -355,7 +357,9 @@ export function StepLog({ draft }: { draft: Draft }) {
               <Icon name="chevron" size={14} color={colors.volt} />
             </Pressable>
           ) : null}
-          <View style={styles.picture} />
+          <View style={styles.picture}>
+            {kit ? <LoadView weight={weight} kit={kit} perSide={focus.perSide} includesEquipment={focus.includesEquipment} /> : null}
+          </View>
           <View style={styles.target}>
             {drop ? (
               <Stamp key={`drop-${drop.drops}`}>

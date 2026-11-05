@@ -1,11 +1,19 @@
+import type { Entry, Kit } from '@sandbag/shared';
 import { useEffect, useRef } from 'react';
 import { Animated, StyleSheet, Text, View } from 'react-native';
-import { plateWords, platesFor } from '@/domain/plates';
+import { num } from '@/domain/format';
+import { loadOf } from '@/domain/plates';
 import { colors, fonts, space } from '@/theme';
-import { EASE_OUT, NATIVE, prefersLessMotion } from './motion';
+import { EASE_OUT, NATIVE, Pop, prefersLessMotion } from './motion';
 
 const HEIGHT = 76;
 const SHOWN_PLATES = 8;
+/** Room between the collars: a bar's sleeve, or a dumbbell's handle. */
+const GRIP = { bar: 92, dumbbell: 44 } as const;
+const STACK_ROWS = 12;
+/** What each block in a pin stack stands for. */
+const STACK_STEP = 10;
+const STACK_DELAY_MS = 35;
 
 const PLATE: Record<number, { height: number; color: string }> = {
   25: { height: 72, color: colors.volt },
@@ -30,22 +38,44 @@ function Plate({ weight, side, delay }: { weight: number; side: 1 | -1; delay: n
   return <Animated.View style={[styles.plate, { height: look.height, backgroundColor: look.color, opacity, transform: [{ translateX }] }]} />;
 }
 
-/** A loaded barbell, plates on both sides, with what to put on each side in words. */
-export function BarbellView({ weight }: { weight: number }) {
-  const plates = platesFor(weight).slice(0, SHOWN_PLATES);
-  const words = plateWords(weight);
+/** A pin in a stack: how a machine shows what's on it. */
+function Stack({ weight }: { weight: number }) {
+  const lit = Math.max(1, Math.min(STACK_ROWS, Math.round(weight / STACK_STEP)));
   return (
-    <View accessible accessibilityLabel={words ?? `${weight} kilos`}>
+    <View accessible accessibilityLabel={`${num(weight)} kilos on the stack`} style={styles.stack}>
+      {Array.from({ length: STACK_ROWS }, (_, row) => {
+        const on = row >= STACK_ROWS - lit;
+        return (
+          <Pop key={row} delay={on ? (STACK_ROWS - row) * STACK_DELAY_MS : 0}>
+            <View style={[styles.block, on && styles.blockOn, row === STACK_ROWS - lit && styles.blockPin]} />
+          </Pop>
+        );
+      })}
+    </View>
+  );
+}
+
+/**
+ * What a weight looks like in the gym, which a number never quite says: plates on a bar, a dumbbell or a machine's sled,
+ * with what goes on each side in words, or the pin in a machine's stack. Nothing for bodyweight.
+ */
+export function LoadView({ weight, kit, perSide = false, includesEquipment }: { weight: number | null; kit: Kit } & Partial<Pick<Entry, 'perSide' | 'includesEquipment'>>) {
+  const load = loadOf(weight, kit, { perSide, includesEquipment });
+  if (!load) return null;
+  if (load.kind === 'stack') return <Stack weight={load.weight} />;
+  const plates = load.plates.slice(0, SHOWN_PLATES);
+  return (
+    <View accessible accessibilityLabel={load.words ?? `${num(weight!)} kilos`}>
       <View style={styles.bar}>
         <View style={styles.shaft} />
         <View style={styles.plates}>
           {[...plates].reverse().map((plate, index) => <Plate key={`l${index}-${plate}`} weight={plate} side={-1} delay={(plates.length - index) * 70} />)}
-          <View style={[styles.collar, styles.gap]} />
+          <View style={[styles.collar, { marginRight: GRIP[load.handle] }]} />
           <View style={styles.collar} />
           {plates.map((plate, index) => <Plate key={`r${index}-${plate}`} weight={plate} side={1} delay={(index + 1) * 70} />)}
         </View>
       </View>
-      {words ? <Text style={styles.words}>{words}</Text> : null}
+      {load.words ? <Text style={styles.words}>{load.words}</Text> : null}
     </View>
   );
 }
@@ -57,5 +87,8 @@ const styles = StyleSheet.create({
   plates: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 2 },
   plate: { width: 14, borderRadius: 3 },
   collar: { width: 6, height: 16, borderRadius: 2, backgroundColor: colors.ink3 },
-  gap: { marginRight: 92 },
+  stack: { alignSelf: 'center', gap: 2, marginVertical: space.xs },
+  block: { width: 132, height: 6, borderRadius: 1.5, backgroundColor: colors.surface2 },
+  blockOn: { backgroundColor: PLATE[15]!.color },
+  blockPin: { backgroundColor: colors.volt },
 });

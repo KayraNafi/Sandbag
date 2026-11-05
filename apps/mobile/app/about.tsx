@@ -9,7 +9,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Defs, Path, RadialGradient, Stop, Text as SvgText } from 'react-native-svg';
 import { AvatarArt } from '@/components/Avatar';
 import { Icon } from '@/components/icons';
-import { BarbellView } from '@/components/BarbellView';
+import { LoadView } from '@/components/LoadView';
 import { Burst, CountUp, FadeIn, feel, GrowUp, NATIVE, Pop, prefersLessMotion, Stamp } from '@/components/motion';
 import { Button, Muted, Segmented, Segments } from '@/components/ui';
 import { signedPoints } from '@/domain/format';
@@ -213,7 +213,7 @@ function Settle() {
     <View style={styles.page}>
       <Text style={styles.heading}>SETTLE IT</Text>
       <Text style={styles.line}>They have {CALL_DAYS} days. Their next logged session of that lift has to beat the number, in weight or in reps. Try it.</Text>
-      <BarbellView weight={weight} />
+      <LoadView weight={weight} kit="barbell" />
       <View style={styles.sliderRow}>
         <Text style={styles.sliderValue}>{weight} KG × {REPS}</Text>
         <Text style={styles.sliderHint}>THE NUMBER: {CALLED} × {REPS}</Text>
