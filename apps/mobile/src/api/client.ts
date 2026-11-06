@@ -1,7 +1,7 @@
 import { Platform } from 'react-native';
 import type {
   ApiKeyView, TrophyView, AuthResponse, AvatarId, CallView, InviteSummary, Me, NotificationView, PostView, PublicUser, RankingPeriod, RankingRow,
-  DataExport, ReplyView, SavedWorkout, SyncRequest, SyncResponse, Entry,
+  DataExport, NewPost, ReplyView, SavedWorkout, SyncRequest, SyncResponse,
 } from '@sandbag/shared';
 
 // The web app is served beside the API, so it needs no address and no CORS.
@@ -41,16 +41,6 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
     throw new ApiError(response.status, payload?.error ?? 'Something went wrong. Try again.');
   }
   return (response.status === 204 ? undefined : await response.json()) as T;
-}
-
-export interface NewPost {
-  id: string;
-  kind: 'workout' | 'share';
-  title: string;
-  caption: string;
-  showWeights: boolean;
-  entries: Entry[];
-  recipientIds: string[];
 }
 
 export const api = {

@@ -4,10 +4,11 @@ import { changeGoal, changePasswordSchema, dateIn, defaultAvatar, deleteAccountS
 import { and, eq, lt, ne, sql } from 'drizzle-orm';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { lockUser, type Db, type DbOrTx, type Tx } from '../db/client';
-import { apiKeys, authSessions, loggedWorkouts, posts, savedWorkouts, users } from '../db/schema';
+import { apiKeys, authSessions, loggedWorkouts, posts, runs, savedWorkouts, users } from '../db/schema';
 import { conflict, HttpError, unauthorized } from '../errors';
 import { joinCrew } from './friends';
 import { notify } from './notifications';
+import { toRun } from './runs';
 
 const SESSION_DAYS = 90;
 const DAY_MS = 86_400_000;
@@ -193,13 +194,15 @@ export function authRoutes(app: FastifyInstance, db: Db, config: { bootstrapInvi
     const user = await requireUser(db, request);
     const logged = await db.select().from(loggedWorkouts).where(eq(loggedWorkouts.ownerId, user.id));
     const saved = await db.select().from(savedWorkouts).where(eq(savedWorkouts.ownerId, user.id));
+    const ran = await db.select().from(runs).where(and(eq(runs.ownerId, user.id), eq(runs.deleted, false)));
     const written = await db.select().from(posts).where(eq(posts.authorId, user.id));
     return {
       exportedAt: new Date().toISOString(),
       profile: toMe(user),
       loggedWorkouts: logged.filter((row) => !row.deleted).map((row) => ({ id: row.id, date: row.date, title: row.title, savedWorkoutId: row.savedWorkoutId, entries: row.entries, updatedAt: row.updatedAt, deleted: false })),
       savedWorkouts: saved.filter((row) => !row.deleted).map((row) => ({ id: row.id, name: row.name, position: row.position, exercises: row.exercises, savedFrom: row.savedFrom, updatedAt: row.updatedAt, deleted: false })),
-      posts: written.map((row) => ({ id: row.id, kind: row.kind, title: row.title, caption: row.caption, entries: row.entries, createdAt: row.createdAt.toISOString() })),
+      runs: ran.map(toRun),
+      posts: written.map((row) => ({ id: row.id, kind: row.kind, title: row.title, caption: row.caption, entries: row.entries, run: row.run, createdAt: row.createdAt.toISOString() })),
     };
   });
 

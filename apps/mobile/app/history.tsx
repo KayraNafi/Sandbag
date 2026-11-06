@@ -1,4 +1,4 @@
-import { voice } from '@sandbag/shared';
+import { kmText, voice } from '@sandbag/shared';
 import { router } from 'expo-router';
 import { Fragment, useMemo } from 'react';
 import { Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
@@ -7,6 +7,7 @@ import { Button, Empty, Label, Muted, Screen, ShowMore, Title, useShowMore } fro
 import { useData } from '@/data/store';
 import { formatDate, formatMonth, plural } from '@/domain/format';
 import { activeLogged, volumeOf } from '@/domain/history';
+import { activeRuns, runSummary, runTitle, timeline } from '@/domain/runs';
 import { colors, fonts, radius, space } from '@/theme';
 
 const BIG = 72;
@@ -43,9 +44,13 @@ function SessionRow({ date, title, detail, delay, onPress }: { date: string; tit
 
 export default function History() {
   const logged = useData((state) => state.logged);
+  const allRuns = useData((state) => state.runs);
   const workouts = useMemo(() => activeLogged(logged), [logged]);
+  const runs = useMemo(() => activeRuns(allRuns), [allRuns]);
+  const items = useMemo(() => timeline(workouts, runs), [workouts, runs]);
   const total = useMemo(() => workouts.reduce((sum, workout) => sum + volumeOf(workout), 0), [workouts]);
-  const { shown, left, more, page } = useShowMore(workouts.length);
+  const distance = useMemo(() => runs.reduce((sum, run) => sum + run.distanceKm, 0), [runs]);
+  const { shown, left, more, page } = useShowMore(items.length);
   const { width } = useWindowDimensions();
   // The total shrinks to fit the screen, however many digits it grows to.
   const size = Math.min(BIG, Math.floor((width - SIDES) / (total.toLocaleString('en-US').length * DIGIT_WIDTH)));
@@ -53,7 +58,7 @@ export default function History() {
   return (
     <Screen padTop={false}>
       <Title>History</Title>
-      {workouts.length ? (
+      {items.length ? (
         <View style={styles.hero}>
           {total > 0 ? (
             <>
@@ -62,7 +67,7 @@ export default function History() {
               <Text style={styles.line}>{voice.lifted(total)}</Text>
             </>
           ) : null}
-          <Muted>{plural(workouts.length, 'session')} on the record.</Muted>
+          <Muted>{plural(workouts.length, 'session')}{runs.length ? ` and ${kmText(distance)} on foot` : ''} on the record.</Muted>
         </View>
       ) : (
         <>
@@ -70,19 +75,31 @@ export default function History() {
           <Button title="Go lift something" onPress={() => router.navigate('/')} />
         </>
       )}
-      {workouts.slice(0, shown).map((workout, index, list) => {
+      {items.slice(0, shown).map((item, index, list) => {
+        const { date } = item;
+        const previous = list[index - 1];
         // Newest first, so a heading goes wherever the month changes.
-        const month = formatMonth(workout.date);
-        const newMonth = index === 0 || formatMonth(list[index - 1]!.date) !== month;
+        const month = formatMonth(date);
+        const newMonth = !previous || formatMonth(previous.date) !== month;
+        const delay = Math.min(index, 8) * 40;
+        if (item.kind === 'run') {
+          return (
+            <Fragment key={`run-${item.run.id}`}>
+              {newMonth ? <Label style={styles.month}>{month}</Label> : null}
+              <SessionRow date={date} title={runTitle(item.run)} detail={runSummary(item.run)} delay={delay} onPress={() => router.push(`/run/${item.run.id}`)} />
+            </Fragment>
+          );
+        }
+        const { workout } = item;
         const moved = volumeOf(workout);
         return (
           <Fragment key={workout.id}>
             {newMonth ? <Label style={styles.month}>{month}</Label> : null}
             <SessionRow
-              date={workout.date}
+              date={date}
               title={workout.title}
               detail={`${plural(workout.entries.length, 'lift')}${moved ? ` · ${moved.toLocaleString('en-US')} kg` : ''}`}
-              delay={Math.min(index, 8) * 40}
+              delay={delay}
               onPress={() => router.push(`/workout/logged/${workout.id}`)}
             />
           </Fragment>

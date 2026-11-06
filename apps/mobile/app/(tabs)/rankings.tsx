@@ -1,4 +1,4 @@
-import type { RankingPeriod, RankingRow, WeekBonuses } from '@sandbag/shared';
+import { kmText, MAX_WEEK_DISTANCE_POINTS, MAX_WEEK_PACE_POINTS, type RankingPeriod, type RankingRow, type RunningStats, type WeekBonuses } from '@sandbag/shared';
 import { useQuery } from '@tanstack/react-query';
 import { router } from 'expo-router';
 import { useState } from 'react';
@@ -77,6 +77,7 @@ function Breakdown({ row, period }: { row: RankingRow; period: RankingPeriod }) 
     : [`Got stronger ${signed(row.progress)}`, period === 'week' ? `${row.workouts} of ${row.target} days trained` : `${plural(row.workouts, 'day')} trained`];
   if (row.streak) lines.push(`${plural(row.streak, 'week')} on target${row.shields ? ` · ${plural(row.shields, 'shield')}` : ''}`);
   if (row.bonuses?.total) lines.push(`Bonus ${signedPoints(row.bonuses.total)}: ${bonusText(row.bonuses)}`);
+  if (row.running.points) lines.push(`Running ${signedPoints(row.running.points)}: ${runningText(row.running)}`);
   if (row.calls) lines.push(`Calls ${signedPoints(row.calls)}`);
   return (
     <Card>
@@ -88,6 +89,11 @@ function Breakdown({ row, period }: { row: RankingRow; period: RankingPeriod }) 
       {lines.map((line) => <Muted key={line}>{line}</Muted>)}
     </Card>
   );
+}
+
+/** What running points are made of, e.g. "14 km +12, pace +6". */
+function runningText(running: RunningStats): string {
+  return [`${kmText(running.km)} +${running.distance}`, running.pace ? `pace +${running.pace}` : ''].filter(Boolean).join(', ');
 }
 
 /** What a week's bonus is made of, e.g. "streak +3, new bests +4". */
@@ -144,8 +150,9 @@ export default function Rankings() {
         Your points are the average of two scores out of 100. Progress: how much stronger you got on the lifts you did, using weight and reps, against your best of the four weeks before. Small gains count for plenty, and +25% is full marks.
         Consistency: days trained against your weekly goal, counted as at least 3. The week runs Monday to Sunday. Heavier friends get no head start.
         This week also pays bonuses, up to 15: for a streak of 2 weeks or more, for coming back after a missed week, for a day more than your goal, and +2 for each lift past its best (up to 3). Every 4 weeks on target earns a shield that saves a streak from one missed week.
+        Running has no goal and no streak: it pays when you run, in every period. A point for every km run and half for every km walked, up to {MAX_WEEK_DISTANCE_POINTS} a week. Every run of 2 km or more also pays for its pace, worked out as the 5k time it’s worth: under 20:00 is 10, then 8, 6, 4 and 2 for every 2½ minutes slower, up to {MAX_WEEK_PACE_POINTS} a week. Walks pay distance only.
         Calls settled in the period add or take points on top: +5 for beating one, −5 for failing it, double for getting caught, and −3 for calling wrong, up to 10 either way a week.
-        All time adds up every week’s score, bonuses and calls included, since your first workout.
+        All time adds up every week’s score, bonuses, distance and calls included, since your first workout.
       </Muted>
       <Button title="What’s sandbagging?" variant="ghost" onPress={() => router.push('/about')} />
     </Screen>

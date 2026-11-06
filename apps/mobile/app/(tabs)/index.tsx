@@ -14,6 +14,7 @@ import { begin, beginSaved } from '@/nav';
 import { syncNow } from '@/data/sync';
 import { agoLong, agoText, daysLeft, formatDate, num, plural, signedPoints } from '@/domain/format';
 import { activeLogged, activeSaved, nextWorkout } from '@/domain/history';
+import { activeRuns, runSummary, runTitle, timeline } from '@/domain/runs';
 import { useWeek } from '@/domain/week';
 import { colors, fonts, space } from '@/theme';
 
@@ -51,9 +52,12 @@ function goalLine(days: number, goal: number, streak: number): string {
 export default function Train() {
   const logged = useData((state) => state.logged);
   const saved = useData((state) => state.saved);
+  const allRuns = useData((state) => state.runs);
   const draft = useData((state) => state.draft);
   const me = useSession((state) => state.me);
   const workouts = useMemo(() => activeLogged(logged), [logged]);
+  const runs = useMemo(() => activeRuns(allRuns), [allRuns]);
+  const recent = useMemo(() => timeline(workouts, runs), [workouts, runs]);
   const rotation = useMemo(() => activeSaved(saved), [saved]);
   const upNext = nextWorkout(rotation, workouts);
   const calls = useQuery({ queryKey: ['calls'], queryFn: api.calls });
@@ -150,9 +154,12 @@ export default function Train() {
           </Row>
         </Card>
       ))}
-      <Button title="Start empty" variant="ghost" onPress={() => void begin(startBlank)} />
+      <Row>
+        <View style={styles.flex}><Button title="Start empty" variant="ghost" onPress={() => void begin(startBlank)} /></View>
+        <View style={styles.flex}><Button title="Log a run" variant="ghost" onPress={() => router.push('/run/new')} /></View>
+      </Row>
 
-      {workouts.length ? (
+      {recent.length ? (
         <>
           <Row style={styles.section}>
             <Heading>Recent</Heading>
@@ -160,12 +167,17 @@ export default function Train() {
               <Text style={styles.link}>All history</Text>
             </Pressable>
           </Row>
-          {workouts.slice(0, 3).map((workout) => (
-            <Card key={workout.id} label={`Open ${workout.title}`} onPress={() => router.push(`/workout/logged/${workout.id}`)}>
-              <Text style={styles.name}>{workout.title}</Text>
-              <Muted>{formatDate(workout.date)} · {agoText(workout.date)} · {plural(workout.entries.length, 'exercise')}</Muted>
+          {recent.slice(0, 3).map((item) => (item.kind === 'workout' ? (
+            <Card key={item.workout.id} label={`Open ${item.workout.title}`} onPress={() => router.push(`/workout/logged/${item.workout.id}`)}>
+              <Text style={styles.name}>{item.workout.title}</Text>
+              <Muted>{formatDate(item.workout.date)} · {agoText(item.workout.date)} · {plural(item.workout.entries.length, 'exercise')}</Muted>
             </Card>
-          ))}
+          ) : (
+            <Card key={item.run.id} label={`Open ${runTitle(item.run)}`} onPress={() => router.push(`/run/${item.run.id}`)}>
+              <Text style={styles.name}>{runTitle(item.run)}</Text>
+              <Muted>{formatDate(item.run.date)} · {agoText(item.run.date)} · {runSummary(item.run)}</Muted>
+            </Card>
+          )))}
         </>
       ) : null}
     </Screen>

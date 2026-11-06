@@ -5,6 +5,7 @@ import { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { api } from '@/api/client';
 import { agoShort, setsReps, summary } from '@/domain/format';
+import { pace } from '@/domain/runs';
 import { Avatar } from './Avatar';
 import { Icon, type IconName } from './icons';
 import { Burst, feel, Stamp } from './motion';
@@ -60,6 +61,24 @@ export function PostEntries({ post, limit }: { post: PostView; limit?: number })
   );
 }
 
+/** What a run post shows under its title: the pace, and a new PB when it set one. */
+export function PostRun({ post }: { post: PostView }) {
+  if (!post.run) return null;
+  return (
+    <Row style={styles.run}>
+      <Text style={styles.pace}>{pace(post.run)}</Text>
+      {post.run.newPb ? <Stamp delay={300}><Text style={styles.pb}>NEW {post.run.newPb.toUpperCase()} PB</Text></Stamp> : null}
+    </Row>
+  );
+}
+
+/** A post's content: a run, or the exercises of a workout. */
+export function PostBody({ post, limit }: { post: PostView; limit?: number }) {
+  return post.run ? <PostRun post={post} /> : <PostEntries post={post} {...(limit ? { limit } : {})} />;
+}
+
+const SUBTITLE: Record<PostView['kind'], string> = { workout: '', share: 'shared a workout · ', run: '' };
+
 function Stat({ icon, count, label }: { icon: IconName; count: number; label: string }) {
   return (
     <View accessible accessibilityLabel={`${count} ${label}`} style={styles.stat}>
@@ -80,21 +99,20 @@ export function PostCard({ post }: { post: PostView }) {
           <Avatar user={post.author} />
           <View style={styles.flex}>
             <Text style={styles.author}>{post.author.displayName}</Text>
-            <Muted>{post.kind === 'share' ? `shared a workout · ${agoShort(post.createdAt)}` : agoShort(post.createdAt)}</Muted>
+            <Muted>{SUBTITLE[post.kind]}{agoShort(post.createdAt)}</Muted>
           </View>
           {called ? <Stamp delay={300}><Text style={styles.stamp}>CALLED</Text></Stamp> : null}
         </Row>
         <Text style={styles.title}>{post.title.toUpperCase()}</Text>
         {post.caption ? <Text style={styles.caption}>{post.caption}</Text> : null}
-        <PostEntries post={post} limit={PREVIEW} />
+        <PostBody post={post} limit={PREVIEW} />
       </Pressable>
       <Row style={styles.footer}>
         <PostActions post={post} />
         <View style={styles.flex} />
         <Stat icon="reply" count={post.replyCount} label={post.replyCount === 1 ? 'reply' : 'replies'} />
-        {post.kind === 'share'
-          ? <Stat icon="share" count={post.saveCount} label="saved" />
-          : <Stat icon="bag" count={post.callCount} label={post.callCount === 1 ? 'call' : 'calls'} />}
+        {post.kind === 'share' ? <Stat icon="share" count={post.saveCount} label="saved" /> : null}
+        {post.kind === 'workout' ? <Stat icon="bag" count={post.callCount} label={post.callCount === 1 ? 'call' : 'calls'} /> : null}
       </Row>
     </Card>
   );
@@ -112,6 +130,9 @@ const styles = StyleSheet.create({
   entryName: { flex: 1, fontFamily: fonts.bodyStrong, fontSize: 14, color: colors.ink },
   entryValue: { flexShrink: 1, textAlign: 'right' },
   footer: { marginTop: space.xs },
+  run: { gap: space.sm },
+  pace: { fontFamily: fonts.display, fontSize: 22, color: colors.volt },
+  pb: { paddingHorizontal: space.sm, borderWidth: 2, borderColor: colors.volt, borderRadius: 4, fontFamily: fonts.display, fontSize: 15, lineHeight: 20, color: colors.volt },
   called: { borderColor: colors.warnLine, backgroundColor: colors.warnBg },
   stamp: { paddingHorizontal: space.sm, borderWidth: 2, borderColor: colors.warn, borderRadius: 4, fontFamily: fonts.display, fontSize: 17, lineHeight: 22, color: colors.warn },
   stat: { flexDirection: 'row', alignItems: 'center', gap: space.xs },

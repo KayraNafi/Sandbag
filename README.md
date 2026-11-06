@@ -1,10 +1,11 @@
 # Sandbag
 
-Log your lifts, share them with friends, and find out who's been holding back.
+Log your lifts and runs, share them with friends, and find out who's been holding back.
 
 *Sandbagging: looking weaker than you are, on purpose.* Friends can call you on a lift, your next session of it
 settles the call, and if you don't beat the number you wear the badge in the rankings for a week. Rankings use
-progress and consistency against your own numbers, so heavier friends get no head start.
+progress and consistency against your own numbers, so heavier friends get no head start. Runs and walks are logged on
+their own, with no goal or streak: they pay points for distance, and runs for pace too.
 
 Sandbag is invite-only and self-hosted: you run the server, and your crew's data stays on it.
 

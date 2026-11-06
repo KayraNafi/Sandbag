@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import type { CallStatus } from './calls';
+import type { RunningStats } from './running';
 import type { GoalChange, WeekBonuses } from './scoring';
 import { canonicalZone } from './time';
 import { cleanText } from './text';
@@ -71,10 +72,32 @@ export const savedWorkoutSchema = z.object({
 });
 export type SavedWorkout = z.infer<typeof savedWorkoutSchema>;
 
+const ACTIVITIES = ['run', 'walk'] as const;
+export type Activity = (typeof ACTIVITIES)[number];
+/** Past the longest ultras. */
+export const MAX_RUN_KM = 500;
+/** A week on the move, which no single run lasts. */
+const MAX_RUN_SECONDS = 7 * 86_400;
+
+/** A run or a walk, logged on its own: no workout around it. */
+export const runSchema = z.object({
+  id: clientId,
+  date: isoDate,
+  activity: z.enum(ACTIVITIES),
+  distanceKm: z.number().gt(0).max(MAX_RUN_KM),
+  seconds: z.number().int().min(1).max(MAX_RUN_SECONDS),
+  note: cleaned(200, 0),
+  updatedAt: z.number().int().nonnegative(),
+  deleted: z.boolean(),
+});
+export type Run = z.infer<typeof runSchema>;
+
 export const syncRequestSchema = z.object({
   cursor: z.number().int().nonnegative(),
   loggedWorkouts: z.array(loggedWorkoutSchema).max(500),
   savedWorkouts: z.array(savedWorkoutSchema).max(500),
+  // Apps from before runs don't send any.
+  runs: z.array(runSchema).max(500).default([]),
 });
 export type SyncRequest = z.infer<typeof syncRequestSchema>;
 
@@ -82,6 +105,7 @@ export interface SyncResponse {
   cursor: number;
   loggedWorkouts: LoggedWorkout[];
   savedWorkouts: SavedWorkout[];
+  runs: Run[];
 }
 
 /** The characters anyone starts as. Frozen: growing it would change the face of everyone who never picked one. */
@@ -123,17 +147,33 @@ export const changePasswordSchema = z.object({ currentPassword: z.string().min(1
 export const deleteAccountSchema = z.object({ password: z.string().min(1).max(200) });
 export const addFriendSchema = z.object({ inviteCode: z.string().trim().min(1).max(32) });
 
-export const createPostSchema = z.object({
+const postBase = {
   // Chosen by the client, so resending after a lost response can't post twice.
   id: z.string().uuid(),
-  kind: z.enum(['workout', 'share']),
-  title: cleaned(100),
   caption: cleaned(140, 0),
-  showWeights: z.boolean(),
-  entries: z.array(entrySchema).min(1).max(100),
   // Empty means the whole crew.
   recipientIds: z.array(z.string().uuid()).max(100),
-});
+};
+export const createPostSchema = z.discriminatedUnion('kind', [
+  z.object({
+    ...postBase,
+    kind: z.enum(['workout', 'share']),
+    title: cleaned(100),
+    showWeights: z.boolean(),
+    entries: z.array(entrySchema).min(1).max(100),
+  }),
+  // A run is posted by id. The server copies it from what was synced, so what the crew sees is what was logged.
+  z.object({ ...postBase, kind: z.literal('run'), runId: clientId }),
+]);
+export type NewPost = z.input<typeof createPostSchema>;
+export type CreatePost = z.infer<typeof createPostSchema>;
+export type PostKind = 'workout' | 'share' | 'run';
+
+/** A run as it was when it was posted. */
+export interface PostedRun extends Pick<Run, 'date' | 'activity' | 'distanceKm' | 'seconds'> {
+  /** The race distance it set a new PB at, beating an earlier one, if it did. */
+  newPb: string | null;
+}
 export const createReplySchema = z.object({ text: cleaned(140) });
 export const createCallSchema = z.object({ exercise: exerciseName, line: cleaned(140) });
 export const periodSchema = z.enum(['week', 'month']);
@@ -164,12 +204,14 @@ export interface AuthResponse {
 
 export interface PostView {
   id: string;
-  kind: 'workout' | 'share';
+  kind: PostKind;
   author: PublicUser;
   title: string;
   caption: string;
   showWeights: boolean;
   entries: Entry[];
+  /** Set on a run post, and only there. */
+  run: PostedRun | null;
   createdAt: string;
   respects: number;
   respectedByMe: boolean;
@@ -218,6 +260,8 @@ export interface RankingRow {
   calls: number;
   /** This week's bonuses, already part of score. Null for the month and all time. */
   bonuses: WeekBonuses | null;
+  /** Runs and walks in the period, their points already part of score. */
+  running: RunningStats;
   score: number;
   wearingSandbag: boolean;
 }
@@ -317,5 +361,6 @@ export interface DataExport {
   profile: Me;
   loggedWorkouts: LoggedWorkout[];
   savedWorkouts: SavedWorkout[];
-  posts: { id: string; kind: 'workout' | 'share'; title: string; caption: string; entries: Entry[]; createdAt: string }[];
+  runs: Run[];
+  posts: { id: string; kind: PostKind; title: string; caption: string; entries: Entry[]; run: PostedRun | null; createdAt: string }[];
 }

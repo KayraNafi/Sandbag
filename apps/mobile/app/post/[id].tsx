@@ -7,7 +7,7 @@ import { api, ApiError, errorText } from '@/api/client';
 import { leave } from '@/nav';
 import { useSession } from '@/auth/session';
 import { confirm } from '@/components/confirm';
-import { PostActions, PostEntries } from '@/components/PostCard';
+import { PostActions, PostBody } from '@/components/PostCard';
 import { toast } from '@/components/Toast';
 import { Button, Card, Chip, Field, Heading, Loading, Muted, Row, Screen } from '@/components/ui';
 import { useData } from '@/data/store';
@@ -118,7 +118,7 @@ export default function PostScreen() {
       </Row>
       <Heading>{data.title}</Heading>
       {data.caption ? <Text style={styles.caption}>{data.caption}</Text> : null}
-      <Card><PostEntries post={data} /></Card>
+      <Card><PostBody post={data} /></Card>
       <Row style={styles.wrap}>
         <PostActions post={data} />
         {data.kind === 'share' ? <Muted>{data.saveCount} saved</Muted> : null}

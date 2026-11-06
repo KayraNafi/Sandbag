@@ -96,5 +96,7 @@ export const voice = {
   manyReps: (reps: number, seed = 0) => pick([`${reps} reps. Is this cardio now?`, `${reps} reps. Someone’s avoiding adding weight.`], seed),
   rpeLow: (seed = 0) => pick(['That easy? So why are we here?', 'That easy? Someone should call that.', 'Barely an effort, and you put it in writing.'], seed),
   discard: () => 'None of this gets logged. We’ll say you were never here.',
+  runLogged: (seed = 0) => pick(['Logged. Your knees have been informed.', 'Logged. Running away from your problems, one km at a time.', 'Logged. A running club somewhere felt a disturbance.'], seed),
+  tooFast: () => 'Faster than the world record. Congratulations, it doesn’t count.',
   restOver: 'Rest’s over. That bar isn’t going to lift itself.',
 };

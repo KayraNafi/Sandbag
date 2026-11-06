@@ -1,13 +1,13 @@
 import {
-  CALL_DAYS, CALL_POINTS, CALLABLE_DAYS, bestSet, createCallSchema, createPostSchema, createReplySchema, DAY_MS, exerciseKey, LIVE_CALLS, MAX_OPEN_CALLS, voice,
-  type CallView, type Entry, type PostView, type ReplyView, type SavedWorkout,
+  CALL_DAYS, CALL_POINTS, CALLABLE_DAYS, bestSet, createCallSchema, createPostSchema, createReplySchema, DAY_MS, exerciseKey, LIVE_CALLS, MAX_OPEN_CALLS, newPbOf,
+  runHeadline, voice, type CallView, type CreatePost, type Entry, type PostView, type ReplyView, type SavedWorkout,
 } from '@sandbag/shared';
 import { randomUUID } from 'node:crypto';
 import { and, desc, eq, inArray, lt, or, sql, type SQL } from 'drizzle-orm';
 import { alias } from 'drizzle-orm/pg-core';
 import type { FastifyInstance } from 'fastify';
 import type { Db, DbOrTx } from '../db/client';
-import { postReplies, postRespects, posts, postSaves, sandbagCalls, savedWorkouts, syncSeq, users } from '../db/schema';
+import { postReplies, postRespects, posts, postSaves, runs, sandbagCalls, savedWorkouts, syncSeq, users } from '../db/schema';
 import { badRequest, conflict, forbidden, notFound } from '../errors';
 import { requireUser, toPublic } from './auth';
 import { expireCalls } from './calls';
@@ -20,6 +20,27 @@ const WRITE_LIMIT = { config: { rateLimit: { max: 30, timeWindow: '1 minute' } }
 const UUID = /^[0-9a-f-]{36}$/i;
 
 type Post = typeof posts.$inferSelect;
+type PostContent = Pick<typeof posts.$inferInsert, 'kind' | 'title' | 'showWeights' | 'entries' | 'run'>;
+
+/**
+ * What a post holds. A run is copied from what was synced, never taken from the request, so what the crew
+ * sees is what was logged, and the PB mark is worked out here against every other run of yours.
+ */
+async function contentOf(db: DbOrTx, userId: string, input: CreatePost): Promise<PostContent> {
+  if (input.kind !== 'run') return { kind: input.kind, title: input.title, showWeights: input.showWeights, entries: input.entries, run: null };
+  const own = await db.select().from(runs).where(and(eq(runs.ownerId, userId), eq(runs.deleted, false)));
+  const run = own.find((item) => item.id === input.runId);
+  if (!run) throw badRequest('That run isn’t synced yet, or it’s been deleted');
+  const pb = newPbOf(run, own.filter((item) => item.id !== run.id));
+  return {
+    kind: 'run',
+    title: runHeadline(run),
+    // Nothing on a run is hidden.
+    showWeights: true,
+    entries: [],
+    run: { date: run.date, activity: run.activity, distanceKm: run.distanceKm, seconds: run.seconds, newPb: pb?.name ?? null },
+  };
+}
 
 /** Weights are removed here, on the server, so "hide my weights" can't leak. */
 function visibleEntries(post: Post, viewerId: string): Entry[] {
@@ -100,6 +121,7 @@ async function toViews(db: DbOrTx, rows: Post[], viewerId: string): Promise<Post
     caption: row.caption,
     showWeights: row.showWeights,
     entries: visibleEntries(row, viewerId),
+    run: row.run,
     createdAt: row.createdAt.toISOString(),
     respects: respects.get(row.id) ?? 0,
     respectedByMe: mineSet.has(row.id),
@@ -142,11 +164,8 @@ export function feedRoutes(app: FastifyInstance, db: Db): void {
     const [post] = await db.insert(posts).values({
       id: input.id,
       authorId: user.id,
-      kind: input.kind,
-      title: input.title,
+      ...(await contentOf(db, user.id, input)),
       caption: input.caption,
-      showWeights: input.showWeights,
-      entries: input.entries,
       recipientIds: input.recipientIds.length ? input.recipientIds : null,
     }).onConflictDoNothing({ target: posts.id }).returning();
     if (post) reply.code(201);

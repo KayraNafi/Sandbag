@@ -1,4 +1,4 @@
-import type { AvatarId, CallStatus, Entry, GoalChange, NotificationKind, SavedExercise } from '@sandbag/shared';
+import type { Activity, AvatarId, CallStatus, Entry, GoalChange, NotificationKind, PostedRun, SavedExercise } from '@sandbag/shared';
 import { sql } from 'drizzle-orm';
 import {
   bigint, boolean, check, date, doublePrecision, index, integer, jsonb, pgSequence, pgTable, primaryKey, real, text, timestamp, uuid,
@@ -63,6 +63,24 @@ export const loggedWorkouts = pgTable('logged_workouts', {
   index('logged_workouts_date').on(t.ownerId, t.date),
 ]);
 
+export const runs = pgTable('runs', {
+  ownerId: uuid('owner_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  id: text('id').notNull(),
+  date: date('date', { mode: 'string' }).notNull(),
+  activity: text('activity').$type<Activity>().notNull(),
+  distanceKm: doublePrecision('distance_km').notNull(),
+  seconds: integer('seconds').notNull(),
+  note: text('note').notNull(),
+  updatedAt: bigint('updated_at', { mode: 'number' }).notNull(),
+  deleted: boolean('deleted').notNull().default(false),
+  seq: bigint('seq', { mode: 'number' }).notNull(),
+}, (t) => [
+  primaryKey({ columns: [t.ownerId, t.id] }),
+  index('runs_seq').on(t.ownerId, t.seq),
+  index('runs_date').on(t.ownerId, t.date),
+  check('runs_activity', sql`${t.activity} in ('run', 'walk')`),
+]);
+
 export const savedWorkouts = pgTable('saved_workouts', {
   ownerId: uuid('owner_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
   id: text('id').notNull(),
@@ -81,15 +99,21 @@ export const savedWorkouts = pgTable('saved_workouts', {
 export const posts = pgTable('posts', {
   id: uuid('id').primaryKey().defaultRandom(),
   authorId: uuid('author_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
-  kind: text('kind', { enum: ['workout', 'share'] }).notNull(),
+  kind: text('kind', { enum: ['workout', 'share', 'run'] }).notNull(),
   title: text('title').notNull(),
   caption: text('caption').notNull(),
   showWeights: boolean('show_weights').notNull(),
+  // Empty on a run post.
   entries: jsonb('entries').$type<Entry[]>().notNull(),
+  // A run as it was when posted. Set on a run post, and only there.
+  run: jsonb('run').$type<PostedRun>(),
   // Null means the whole crew at the time of reading.
   recipientIds: uuid('recipient_ids').array(),
   createdAt: createdAt(),
-}, (t) => [index('posts_author_created').on(t.authorId, t.createdAt)]);
+}, (t) => [
+  index('posts_author_created').on(t.authorId, t.createdAt),
+  check('posts_run', sql`(${t.kind} = 'run') = (${t.run} is not null)`),
+]);
 
 export const postRespects = pgTable('post_respects', {
   postId: uuid('post_id').notNull().references(() => posts.id, { onDelete: 'cascade' }),

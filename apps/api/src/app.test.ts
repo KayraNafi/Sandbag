@@ -1,5 +1,5 @@
 import { PGlite } from '@electric-sql/pglite';
-import { addDays, mondayOf, type ApiKeyView, type AuthResponse, type CallView, type NotificationView, type TrophyView, type Entry, type InviteSummary, type LoggedWorkout, type Me, type PostView, type RankingRow, type SyncResponse } from '@sandbag/shared';
+import { addDays, mondayOf, type ApiKeyView, type AuthResponse, type CallView, type NotificationView, type TrophyView, type Entry, type InviteSummary, type DataExport, type LoggedWorkout, type Me, type PostView, type RankingRow, type Run, type SyncResponse } from '@sandbag/shared';
 import { eq } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/pglite';
 import { migrate } from 'drizzle-orm/pglite/migrator';
@@ -61,8 +61,12 @@ const logged = (id: string, entries: Entry[], extra: Partial<LoggedWorkout> = {}
   id, date: new Date().toISOString().slice(0, 10), title: 'Upper', savedWorkoutId: null, entries, updatedAt: Date.now(), deleted: false, ...extra,
 });
 
-const sync = (token: string, cursor: number, loggedWorkouts: LoggedWorkout[] = []) =>
-  call<SyncResponse>('POST', '/sync', token, { cursor, loggedWorkouts, savedWorkouts: [] });
+const sync = (token: string, cursor: number, loggedWorkouts: LoggedWorkout[] = [], runs: Run[] = []) =>
+  call<SyncResponse>('POST', '/sync', token, { cursor, loggedWorkouts, savedWorkouts: [], runs });
+
+const ran = (id: string, distanceKm: number, minutes: number, extra: Partial<Run> = {}): Run => ({
+  id, date: todayIso(), activity: 'run', distanceKm, seconds: minutes * 60, note: '', updatedAt: Date.now(), deleted: false, ...extra,
+});
 
 const post = (token: string, overrides: Record<string, unknown> = {}) =>
   call<PostView>('POST', '/posts', token, { id: randomUUID(), kind: 'workout', title: 'Upper', caption: '', showWeights: true, entries: [entry('Lat pulldown', 86)], recipientIds: [], ...overrides });
@@ -177,6 +181,83 @@ describe('sync', () => {
     const { founder } = await crew();
     const result = await sync(founder.token, 0, [logged('w1', [], { updatedAt: Date.now() + 3 * 86_400_000 })]);
     expect(result.status).toBe(400);
+  });
+});
+
+describe('runs', () => {
+  it('sync on their own, newest write winning, and only what is new comes back', async () => {
+    const { founder } = await crew();
+    const first = await sync(founder.token, 0, [], [ran('r1', 5, 25, { updatedAt: 2000 })]);
+    expect(first.body.runs.map((run) => run.id)).toEqual(['r1']);
+    expect(first.body.loggedWorkouts).toEqual([]);
+    const stale = await sync(founder.token, first.body.cursor, [], [ran('r1', 3, 25, { updatedAt: 1000 })]);
+    expect(stale.body.runs[0]?.distanceKm).toBe(5);
+    expect((await sync(founder.token, stale.body.cursor)).body.runs).toEqual([]);
+  });
+
+  it('still syncs an app from before runs', async () => {
+    const { founder } = await crew();
+    const result = await call<SyncResponse>('POST', '/sync', founder.token, { cursor: 0, loggedWorkouts: [logged('w1', [entry('Row', 90)])], savedWorkouts: [] });
+    expect(result.status).toBe(200);
+  });
+
+  it('refuses a run with no distance', async () => {
+    const { founder } = await crew();
+    expect((await sync(founder.token, 0, [], [ran('r1', 0, 25)])).status).toBe(400);
+  });
+
+  it('add distance and pace to the score, in every period, without counting as days trained', async () => {
+    const { founder } = await crew();
+    // A 10k in 50:00 is a 24:00 5k: 10 for the distance and 6 for the pace. A 4 km walk is 2.
+    await sync(founder.token, 0, [], [ran('r1', 10, 50), ran('r2', 4, 50, { activity: 'walk' })]);
+    for (const period of ['week', 'month', 'all']) {
+      const [row] = (await call<RankingRow[]>('GET', `/rankings?period=${period}`, founder.token)).body;
+      expect(row).toMatchObject({ workouts: 0, streak: 0, running: { km: 14, distance: 12, pace: 6, points: 18 }, score: 18 });
+    }
+  });
+
+  it('leave the rankings when deleted', async () => {
+    const { founder } = await crew();
+    const { body } = await sync(founder.token, 0, [], [ran('r1', 10, 50, { updatedAt: 1000 })]);
+    await sync(founder.token, body.cursor, [], [ran('r1', 10, 50, { updatedAt: 2000, deleted: true })]);
+    const [week] = (await call<RankingRow[]>('GET', '/rankings?period=week', founder.token)).body;
+    expect(week).toMatchObject({ running: { km: 0, points: 0 }, score: 0 });
+  });
+
+  it('post to the crew as they were synced, with a new PB marked by the server', async () => {
+    const { founder, friend } = await crew();
+    await sync(founder.token, 0, [], [ran('old', 10, 50, { date: addDays(todayIso(), -7) }), ran('r1', 10, 48)]);
+    const posted = await call<PostView>('POST', '/posts', founder.token, { id: randomUUID(), kind: 'run', runId: 'r1', caption: 'Windy', recipientIds: [] });
+    expect(posted.status).toBe(201);
+    expect(posted.body).toMatchObject({ kind: 'run', title: 'Ran 10 km in 48:00', entries: [], run: { distanceKm: 10, seconds: 2880, newPb: '10k' } });
+    const [seen] = (await call<PostView[]>('GET', '/feed', friend.token)).body;
+    expect(seen?.run).toEqual(posted.body.run);
+    const slower = await call<PostView>('POST', '/posts', founder.token, { id: randomUUID(), kind: 'run', runId: 'old', caption: '', recipientIds: [] });
+    expect(slower.body.run?.newPb).toBeNull();
+  });
+
+  it('can only be posted once synced, and only your own', async () => {
+    const { founder, friend } = await crew();
+    await sync(founder.token, 0, [], [ran('r1', 10, 50)]);
+    const theirs = await call('POST', '/posts', friend.token, { id: randomUUID(), kind: 'run', runId: 'r1', caption: '', recipientIds: [] });
+    expect(theirs.status).toBe(400);
+  });
+
+  it('can be respected and replied to, but not called or saved', async () => {
+    const { founder, friend } = await crew();
+    await sync(founder.token, 0, [], [ran('r1', 10, 50)]);
+    const { body: post } = await call<PostView>('POST', '/posts', founder.token, { id: randomUUID(), kind: 'run', runId: 'r1', caption: '', recipientIds: [] });
+    expect((await call('PUT', `/posts/${post.id}/respect`, friend.token)).status).toBe(204);
+    expect((await call('POST', `/posts/${post.id}/replies`, friend.token, { text: 'Fast' })).status).toBe(201);
+    expect((await call('POST', `/posts/${post.id}/calls`, friend.token, { exercise: 'Run', line: 'Downhill' })).status).toBe(400);
+    expect((await call('POST', `/posts/${post.id}/save`, friend.token)).status).toBe(400);
+  });
+
+  it('are in the export', async () => {
+    const founder = await register('founder', BOOTSTRAP);
+    await sync(founder.token, 0, [], [ran('r1', 5, 25), ran('gone', 5, 25, { deleted: true })]);
+    const exported = await call<DataExport>('GET', '/me/export', founder.token);
+    expect(exported.body.runs.map((run) => run.id)).toEqual(['r1']);
   });
 });
 

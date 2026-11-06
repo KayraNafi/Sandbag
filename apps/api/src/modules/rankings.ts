@@ -1,11 +1,11 @@
 import {
   addDays, allTimeScore, cappedCallPoints, dateIn, DAY_MS, goalIn, goalsOf, mondayOf, periodDays, periodStats, rankingPeriodSchema, trainedDates, voice,
-  weekBonuses, weekStreak, type RankingPeriod, type RankingRow,
+  runningStats, weekBonuses, weekStreak, type RankingPeriod, type RankingRow,
 } from '@sandbag/shared';
 import { and, eq, gt, inArray } from 'drizzle-orm';
 import type { FastifyInstance } from 'fastify';
 import type { Db, DbOrTx } from '../db/client';
-import { loggedWorkouts, notifications, users } from '../db/schema';
+import { loggedWorkouts, notifications, runs, users } from '../db/schema';
 import { requireUser, toPublic } from './auth';
 import { expireCalls, settledCallPoints } from './calls';
 import { friendIds } from './friends';
@@ -24,14 +24,21 @@ export async function crewTable(db: DbOrTx, userId: string, period: RankingPerio
   const workouts = await db.select({ ownerId: loggedWorkouts.ownerId, date: loggedWorkouts.date, entries: loggedWorkouts.entries, recordedAt: loggedWorkouts.recordedAt })
     .from(loggedWorkouts)
     .where(and(inArray(loggedWorkouts.ownerId, crew), eq(loggedWorkouts.deleted, false)));
+  const crewRuns = await db.select({ ownerId: runs.ownerId, date: runs.date, activity: runs.activity, distanceKm: runs.distanceKm, seconds: runs.seconds })
+    .from(runs)
+    .where(and(inArray(runs.ownerId, crew), eq(runs.deleted, false)));
   const now = new Date();
   const settled = await settledCallPoints(db, crew, period === 'all' ? new Date(0) : new Date(now.getTime() - CALL_LOOKBACK_DAYS * DAY_MS));
 
   const rows = people.map((person) => {
     const day = dateIn(person.timeZone, now);
     const goals = goalsOf(person);
-    const own = workouts.filter((workout) => workout.ownerId === person.id);
-    const streak = weekStreak(trainedDates(own), goals, day);
+    const own = {
+      workouts: workouts.filter((workout) => workout.ownerId === person.id),
+      runs: crewRuns.filter((run) => run.ownerId === person.id),
+    };
+    // Running has no goal, so only the gym makes a streak, and only the gym counts days trained.
+    const streak = weekStreak(trainedDates(own.workouts), goals, day);
     const calls = (settled.get(person.id) ?? [])
       .map(({ at, points }) => ({ day: dateIn(person.timeZone, at), points }))
       .filter((call) => call.day <= day)
@@ -51,24 +58,27 @@ export async function crewTable(db: DbOrTx, userId: string, period: RankingPerio
         ...shared,
         // Getting stronger needs a before to compare with, and all time has none.
         progress: 0,
-        workouts: trainedDates(own).length,
+        workouts: trainedDates(own.workouts).length,
         consistency: 0,
         bonuses: null,
+        running: runningStats(own.runs, null, day),
         calls: [...callsByWeek.values()].reduce((sum, points) => sum + points, 0),
         score: allTimeScore(own, goals, day, callsByWeek),
       };
     }
     const start = addDays(day, 1 - periodDays(period, day));
-    const stats = periodStats(own, period, goals, day);
-    const bonuses = period === 'week' ? weekBonuses(own, goals, day) : null;
+    const stats = periodStats(own.workouts, period, goals, day);
+    const bonuses = period === 'week' ? weekBonuses(own.workouts, goals, day) : null;
+    const running = runningStats(own.runs, start, day);
     const callPoints = cappedCallPoints(calls.filter((call) => call.day >= start));
     return {
       ...shared,
       ...stats,
       bonuses,
+      running,
       calls: callPoints,
       // Calls can cost points, but never below nothing.
-      score: Math.max(0, stats.score + (bonuses?.total ?? 0) + callPoints),
+      score: Math.max(0, stats.score + (bonuses?.total ?? 0) + running.points + callPoints),
     };
   });
   rows.sort((a, b) => b.score - a.score || a.user.displayName.localeCompare(b.user.displayName));

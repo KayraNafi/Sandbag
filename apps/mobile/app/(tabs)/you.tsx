@@ -67,7 +67,7 @@ function StreakHero({ current, best, shields, dates, today }: { current: number;
 export default function You() {
   const me = useSession((state) => state.me);
   const logged = useData((state) => state.logged);
-  const pending = useData((state) => state.dirtyLogged.length + state.dirtySaved.length + state.outbox.length);
+  const pending = useData((state) => state.dirtyLogged.length + state.dirtySaved.length + state.dirtyRuns.length + state.outbox.length);
   const online = useSyncStatus((state) => state.online);
   const trophies = useQuery({ queryKey: ['trophies'], queryFn: api.trophies });
   const earned = trophies.data?.filter((trophy) => trophy.earnedAt);

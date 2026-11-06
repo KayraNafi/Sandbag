@@ -1,4 +1,4 @@
-import { loggedWorkoutSchema, savedWorkoutSchema, voice, type Entry, type LoggedWorkout, type SavedExercise, type SavedWorkout } from '@sandbag/shared';
+import { loggedWorkoutSchema, runSchema, savedWorkoutSchema, voice, type Entry, type LoggedWorkout, type Run, type SavedExercise, type SavedWorkout } from '@sandbag/shared';
 import { randomUUID } from 'expo-crypto';
 import { today } from '@/domain/format';
 import { activeLogged, buildHistory, draftEntryFor, lastLogged, type Draft, type DraftEntry } from '@/domain/history';
@@ -103,4 +103,17 @@ export function moveSaved(list: SavedWorkout[], index: number, direction: -1 | 1
   const { putSaved } = useData.getState();
   putSaved({ ...a, position: b.position });
   putSaved({ ...b, position: a.position });
+}
+
+/** Saves a new run or an edit of one. Validated here, as a workout is, so one bad value can't block every later sync. */
+export function saveRun(fields: Omit<Run, 'id' | 'updatedAt' | 'deleted'>, id: string = newId()): Run {
+  const doc = runSchema.parse({ ...fields, id, note: fields.note.trim(), updatedAt: Date.now(), deleted: false });
+  useData.getState().putRun(doc);
+  return doc;
+}
+
+/** Returns how to take it back. */
+export function deleteRun(run: Run): () => void {
+  useData.getState().putRun({ ...run, deleted: true });
+  return () => useData.getState().putRun({ ...run, deleted: false });
 }

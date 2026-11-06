@@ -1,5 +1,6 @@
 export * from './calls';
 export * from './exercises';
+export * from './running';
 export * from './schemas';
 export * from './scoring';
 export * from './strength';

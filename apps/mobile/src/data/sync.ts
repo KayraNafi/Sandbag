@@ -28,18 +28,21 @@ export async function syncNow(): Promise<void> {
       const state = useData.getState();
       const loggedIds = state.dirtyLogged.slice(0, BATCH);
       const savedIds = state.dirtySaved.slice(0, BATCH);
+      const runIds = state.dirtyRuns.slice(0, BATCH);
       const logged = loggedIds.flatMap((id) => state.logged[id] ?? []);
       const saved = savedIds.flatMap((id) => state.saved[id] ?? []);
-      const response = await api.sync({ cursor: state.cursor, loggedWorkouts: logged, savedWorkouts: saved });
-      if (logged.length || saved.length || response.loggedWorkouts.length || response.savedWorkouts.length) {
+      const runs = runIds.flatMap((id) => state.runs[id] ?? []);
+      const response = await api.sync({ cursor: state.cursor, loggedWorkouts: logged, savedWorkouts: saved, runs });
+      if (logged.length || saved.length || runs.length || response.loggedWorkouts.length || response.savedWorkouts.length || response.runs.length) {
         // Rankings and call verdicts are computed from what just arrived.
         void queryClient.invalidateQueries({ predicate: ({ queryKey }) => ['rankings', 'calls', 'notifications', 'trophies'].includes(String(queryKey[0])) });
       }
       useData.getState().applySync(response, {
         logged: new Map(logged.map((doc) => [doc.id, doc.updatedAt])),
         saved: new Map(saved.map((doc) => [doc.id, doc.updatedAt])),
+        runs: new Map(runs.map((doc) => [doc.id, doc.updatedAt])),
       });
-      more = loggedIds.length === BATCH || savedIds.length === BATCH;
+      more = loggedIds.length === BATCH || savedIds.length === BATCH || runIds.length === BATCH;
     }
     await flushOutbox();
     useSyncStatus.setState({ online: true });
@@ -83,8 +86,8 @@ export function useSyncLoop(): void {
 
     let timer: ReturnType<typeof setTimeout> | undefined;
     const unsubscribe = useData.subscribe((state, previous) => {
-      const changed = state.dirtyLogged !== previous.dirtyLogged || state.dirtySaved !== previous.dirtySaved || state.outbox !== previous.outbox;
-      if (!changed || !(state.dirtyLogged.length || state.dirtySaved.length || state.outbox.length)) return;
+      const changed = state.dirtyLogged !== previous.dirtyLogged || state.dirtySaved !== previous.dirtySaved || state.dirtyRuns !== previous.dirtyRuns || state.outbox !== previous.outbox;
+      if (!changed || !(state.dirtyLogged.length || state.dirtySaved.length || state.dirtyRuns.length || state.outbox.length)) return;
       clearTimeout(timer);
       timer = setTimeout(() => void syncNow(), DEBOUNCE_MS);
     });
