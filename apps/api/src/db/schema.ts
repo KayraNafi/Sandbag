@@ -1,7 +1,7 @@
 import type { Activity, AvatarId, CallStatus, Entry, GoalChange, NotificationKind, PostedRun, SavedExercise } from '@sandbag/shared';
 import { sql } from 'drizzle-orm';
 import {
-  bigint, boolean, check, date, doublePrecision, index, integer, jsonb, pgSequence, pgTable, primaryKey, real, text, timestamp, uuid,
+  bigint, boolean, check, date, doublePrecision, foreignKey, index, integer, jsonb, pgSequence, pgTable, primaryKey, real, text, timestamp, uuid,
 } from 'drizzle-orm/pg-core';
 
 const createdAt = () => timestamp('created_at', { withTimezone: true }).notNull().defaultNow();
@@ -109,10 +109,21 @@ export const posts = pgTable('posts', {
   run: jsonb('run').$type<PostedRun>(),
   // Null means the whole crew at the time of reading.
   recipientIds: uuid('recipient_ids').array(),
+  // What the post shows, so the app can tell you've already shown it. Null on a saved workout, and on posts made
+  // before these existed.
+  loggedWorkoutId: text('logged_workout_id'),
+  runId: text('run_id'),
   createdAt: createdAt(),
 }, (t) => [
   index('posts_author_created').on(t.authorId, t.createdAt),
+  index('posts_logged_workout').on(t.authorId, t.loggedWorkoutId),
+  index('posts_run_id').on(t.authorId, t.runId),
   check('posts_run', sql`(${t.kind} = 'run') = (${t.run} is not null)`),
+  check('posts_source', sql`${t.loggedWorkoutId} is null or ${t.kind} = 'workout'`),
+  check('posts_run_source', sql`${t.runId} is null or ${t.kind} = 'run'`),
+  // Your own session or run only. Neither is ever removed, only marked deleted, so a post never loses what it points at.
+  foreignKey({ columns: [t.authorId, t.loggedWorkoutId], foreignColumns: [loggedWorkouts.ownerId, loggedWorkouts.id] }),
+  foreignKey({ columns: [t.authorId, t.runId], foreignColumns: [runs.ownerId, runs.id] }),
 ]);
 
 export const postRespects = pgTable('post_respects', {

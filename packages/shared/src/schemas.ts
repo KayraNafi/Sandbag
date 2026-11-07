@@ -163,20 +163,28 @@ const postBase = {
   // Empty means the whole crew.
   recipientIds: z.array(z.string().uuid()).max(100),
 };
+const postedEntries = {
+  title: cleaned(100),
+  showWeights: z.boolean(),
+  entries: z.array(entrySchema).min(1).max(100),
+};
 export const createPostSchema = z.discriminatedUnion('kind', [
-  z.object({
-    ...postBase,
-    kind: z.enum(['workout', 'share']),
-    title: cleaned(100),
-    showWeights: z.boolean(),
-    entries: z.array(entrySchema).min(1).max(100),
-  }),
+  // The session it shows, so the app can tell you've already shown it. Optional: older apps don't send it.
+  z.object({ ...postBase, kind: z.literal('workout'), ...postedEntries, loggedWorkoutId: clientId.optional() }),
+  // A saved workout, the exercises without anyone's numbers. Nothing to point at: it's a plan, not a session.
+  z.object({ ...postBase, kind: z.literal('share'), ...postedEntries }),
   // A run is posted by id. The server copies it from what was synced, so what the crew sees is what was logged.
   z.object({ ...postBase, kind: z.literal('run'), runId: clientId }),
 ]);
 export type NewPost = z.input<typeof createPostSchema>;
 export type CreatePost = z.infer<typeof createPostSchema>;
 export type PostKind = 'workout' | 'share' | 'run';
+
+/** One of your posts about a session or a run: enough to say when, and to open it. */
+export interface PostRef {
+  id: string;
+  createdAt: string;
+}
 
 /** A run as it was when it was posted. */
 export interface PostedRun extends Pick<Run, 'date' | 'activity' | 'distanceKm' | 'seconds'> {

@@ -2,14 +2,18 @@ import { runHeadline, type NewPost } from '@sandbag/shared';
 import { useQuery } from '@tanstack/react-query';
 import { useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
+import { StyleSheet } from 'react-native';
 import { api } from '@/api/client';
 import { leave } from '@/nav';
 import { toast } from '@/components/Toast';
-import { Button, Chip, Field, Heading, Label, Muted, Row, Screen } from '@/components/ui';
+import { Button, Card, Chip, Field, Heading, Label, Muted, Row, Screen } from '@/components/ui';
 import { newId } from '@/data/actions';
 import { useData } from '@/data/store';
+import { useLastShown, type ShownThing } from '@/data/shown';
 import { syncNow } from '@/data/sync';
+import { agoText } from '@/domain/format';
 import { runSummary } from '@/domain/runs';
+import { colors } from '@/theme';
 
 const CAPTION_MAX = 140;
 
@@ -20,6 +24,8 @@ interface Shared {
   kind: NewPost['kind'];
   title: string;
   about: string;
+  /** The session or run it shows, which may have been shown before. A saved workout is a plan, shared as often as you like. */
+  thing: ShownThing | null;
   post: (base: PostBase, showWeights: boolean) => NewPost;
 }
 
@@ -33,6 +39,7 @@ function useShared(): Shared | null {
       kind: 'run',
       title: runHeadline(run),
       about: `${runSummary(run)}. Friends can respect it and reply to it.`,
+      thing: { runId: run.id },
       post: (base) => ({ ...base, kind: 'run', runId: run.id }),
     };
   }
@@ -41,7 +48,8 @@ function useShared(): Shared | null {
       kind: 'workout',
       title: logged.title,
       about: 'Friends can respect it, reply to it, or call sandbag on it.',
-      post: (base, showWeights) => ({ ...base, kind: 'workout', title: logged.title, showWeights, entries: logged.entries }),
+      thing: { loggedWorkoutId: logged.id },
+      post: (base, showWeights) => ({ ...base, kind: 'workout', title: logged.title, showWeights, entries: logged.entries, loggedWorkoutId: logged.id }),
     };
   }
   if (saved?.exercises.length) {
@@ -50,6 +58,7 @@ function useShared(): Shared | null {
       kind: 'share',
       title: saved.name,
       about: 'They get the exercises and none of your weights. Theirs load from their own history.',
+      thing: null,
       post: (base) => ({ ...base, kind: 'share', title: saved.name, showWeights: false, entries }),
     };
   }
@@ -69,7 +78,9 @@ export default function Share() {
   const [showWeights, setShowWeights] = useState(true);
   const [recipients, setRecipients] = useState<string[]>([]);
   const toggle = (id: string) => setRecipients((current) => (current.includes(id) ? current.filter((item) => item !== id) : [...current, id]));
+  const lastShown = useLastShown(shared?.thing ?? null);
   if (!shared) return null;
+  const sendTitle = lastShown ? 'Post it again' : recipients.length ? `Send to ${recipients.length}` : 'Send to the crew';
 
   const send = () => {
     const base = { id: newId(), caption: caption.trim(), recipientIds: recipients };
@@ -81,8 +92,14 @@ export default function Share() {
   };
 
   return (
-    <Screen padTop={false} footer={<Button title={recipients.length ? `Send to ${recipients.length}` : 'Send to the crew'} onPress={send} />}>
+    <Screen padTop={false} footer={<Button title={sendTitle} onPress={send} />}>
       <Heading>{shared.title}</Heading>
+      {lastShown ? (
+        <Card style={styles.again}>
+          <Heading>Already on the record</Heading>
+          <Muted>You showed this to the crew {agoText(lastShown)}. Sending it puts a second post in the feed.</Muted>
+        </Card>
+      ) : null}
       <Muted>{shared.about}</Muted>
       <Field label="Caption" placeholder="Say something you’ll regret" maxLength={CAPTION_MAX} value={caption} onChangeText={setCaption} />
       {shared.kind === 'workout' ? (
@@ -105,3 +122,7 @@ export default function Share() {
     </Screen>
   );
 }
+
+const styles = StyleSheet.create({
+  again: { backgroundColor: colors.warnBg, borderColor: colors.warnLine },
+});

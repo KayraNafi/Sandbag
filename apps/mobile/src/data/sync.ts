@@ -72,7 +72,7 @@ async function flushOutbox(): Promise<void> {
       throw error;
     }
     useData.getState().removeFromOutbox(post.id);
-    void queryClient.invalidateQueries({ queryKey: ['feed'] });
+    void queryClient.invalidateQueries({ predicate: ({ queryKey }) => ['feed', 'shown'].includes(String(queryKey[0])) });
   }
 }
 

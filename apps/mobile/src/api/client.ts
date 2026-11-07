@@ -1,6 +1,6 @@
 import { Platform } from 'react-native';
 import type {
-  ApiKeyView, TrophyView, AuthResponse, AvatarId, CallView, InviteSummary, Me, NotificationView, PostView, PublicUser, RankingPeriod, RankingRow,
+  ApiKeyView, TrophyView, AuthResponse, AvatarId, CallView, InviteSummary, Me, NotificationView, PostRef, PostView, PublicUser, RankingPeriod, RankingRow,
   DataExport, NewPost, ReplyView, SavedWorkout, SyncRequest, SyncResponse,
 } from '@sandbag/shared';
 
@@ -57,6 +57,7 @@ export const api = {
   feed: (before?: string) => request<PostView[]>('GET', before ? `/feed?before=${encodeURIComponent(before)}` : '/feed'),
   post: (id: string) => request<PostView & { replies: ReplyView[]; calls: CallView[] }>('GET', `/posts/${id}`),
   createPost: (input: NewPost) => request<PostView>('POST', '/posts', input),
+  postsAbout: (thing: { loggedWorkoutId: string } | { runId: string }) => request<PostRef[]>('GET', `/posts?${new URLSearchParams(thing)}`),
   deletePost: (id: string) => request<void>('DELETE', `/posts/${id}`),
   respect: (id: string, on: boolean) => request<void>(on ? 'PUT' : 'DELETE', `/posts/${id}/respect`),
   reply: (id: string, text: string) => request<unknown>('POST', `/posts/${id}/replies`, { text }),

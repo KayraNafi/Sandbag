@@ -3,6 +3,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { useMemo } from 'react';
 import { StyleSheet, Text } from 'react-native';
 import { Button, Muted, Screen, Title } from '@/components/ui';
+import { useLastShown } from '@/data/shown';
 import { useData } from '@/data/store';
 import { activeRuns, pace, pbLine, pointsLine, runTitle } from '@/domain/runs';
 import { colors, fonts } from '@/theme';
@@ -13,6 +14,7 @@ export default function RunFinished() {
   const allRuns = useData((state) => state.runs);
   const run = id ? allRuns[id] : undefined;
   const others = useMemo(() => activeRuns(allRuns).filter((other) => other.id !== id && other.date <= (run?.date ?? '')), [allRuns, id, run?.date]);
+  const lastShown = useLastShown(id ? { runId: id } : null);
   if (!run || run.deleted) return null;
   const pb = pbLine(run, others);
   const done = () => {
@@ -23,9 +25,9 @@ export default function RunFinished() {
   return (
     <Screen padTop={false} footer={(
       <>
-        <Button title="Show the crew" onPress={() => router.push(`/share?runId=${run.id}`)} />
+        <Button title={lastShown ? 'Show the crew again' : 'Show the crew'} variant={lastShown ? 'ghost' : undefined} onPress={() => router.push(`/share?runId=${run.id}`)} />
         <Button title="Make a card" variant="ghost" onPress={() => router.push(`/card?runId=${run.id}`)} />
-        <Button title="Done" variant="ghost" onPress={done} />
+        <Button title="Done" variant={lastShown ? undefined : 'ghost'} onPress={done} />
       </>
     )}>
       <Title>{runTitle(run)}</Title>

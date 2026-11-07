@@ -6,6 +6,7 @@ import { useSession } from '@/auth/session';
 import { toast } from '@/components/Toast';
 import { Button, Card, Heading, Muted, Screen, Title } from '@/components/ui';
 import { createSaved, updateSaved } from '@/data/actions';
+import { useLastShown } from '@/data/shown';
 import { useData } from '@/data/store';
 import { newBests, streakOn } from '@/domain/card';
 import { toIsoDate } from '@/domain/format';
@@ -23,6 +24,7 @@ export default function Finished() {
   const streak = useMemo(() => streakOn(all, me ? goalsOf(me) : 3, toIsoDate(new Date())), [all, me]);
   const bests = useMemo(() => (workout ? newBests(workout, buildHistory(all)) : []), [workout, all]);
 
+  const lastShown = useLastShown(id ? { loggedWorkoutId: id } : null);
   if (!workout) return null;
   const source = workout.savedWorkoutId ? saved[workout.savedWorkoutId] : undefined;
   const changed = source && !source.deleted && !sameExercises(source.exercises, workout.entries);
@@ -35,9 +37,9 @@ export default function Finished() {
   return (
     <Screen padTop={false} footer={(
       <>
-        <Button title="Show the crew" onPress={() => router.push(`/share?loggedId=${workout.id}`)} />
+        <Button title={lastShown ? 'Show the crew again' : 'Show the crew'} variant={lastShown ? 'ghost' : undefined} onPress={() => router.push(`/share?loggedId=${workout.id}`)} />
         <Button title="Make a card" variant="ghost" onPress={() => router.push(`/card?loggedId=${workout.id}`)} />
-        <Button title="Done" variant="ghost" onPress={done} />
+        <Button title="Done" variant={lastShown ? undefined : 'ghost'} onPress={done} />
       </>
     )}>
       <Title>{workout.title}</Title>

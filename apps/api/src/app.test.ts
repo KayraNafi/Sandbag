@@ -1,5 +1,5 @@
 import { PGlite } from '@electric-sql/pglite';
-import { addDays, mondayOf, type ApiKeyView, type AuthResponse, type CallView, type NotificationView, type TrophyView, type Entry, type InviteSummary, type DataExport, type LoggedWorkout, type Me, type PostView, type RankingRow, type Run, type SyncResponse } from '@sandbag/shared';
+import { addDays, mondayOf, type ApiKeyView, type AuthResponse, type CallView, type NotificationView, type TrophyView, type Entry, type InviteSummary, type DataExport, type LoggedWorkout, type Me, type PostRef, type PostView, type RankingRow, type Run, type SyncResponse } from '@sandbag/shared';
 import { eq } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/pglite';
 import { migrate } from 'drizzle-orm/pglite/migrator';
@@ -302,6 +302,30 @@ describe('feed privacy', () => {
     const created = await post(founder.token);
     expect((await call('DELETE', `/posts/${created.body.id}`, friend.token)).status).toBe(403);
     expect((await call('DELETE', `/posts/${created.body.id}`, founder.token)).status).toBe(204);
+  });
+});
+
+describe('posting the same thing twice', () => {
+  it('remembers which session or run each of your posts shows, and only tells you', async () => {
+    const { founder, friend } = await crew();
+    await sync(founder.token, 0, [logged('w1', [entry('Bench press', 80)])], [ran('r1', 5, 25)]);
+    const first = await post(founder.token, { loggedWorkoutId: 'w1' });
+    const again = await post(founder.token, { loggedWorkoutId: 'w1' });
+    await post(founder.token);
+    await call('POST', '/posts', founder.token, { id: randomUUID(), kind: 'run', runId: 'r1', caption: '', recipientIds: [] });
+    const shown = await call<PostRef[]>('GET', '/posts?loggedWorkoutId=w1', founder.token);
+    expect(shown.body.map((ref) => ref.id)).toEqual([again.body.id, first.body.id]);
+    expect((await call<PostRef[]>('GET', '/posts?runId=r1', founder.token)).body).toHaveLength(1);
+    expect((await call<PostRef[]>('GET', '/posts?loggedWorkoutId=w1', friend.token)).body).toEqual([]);
+    expect((await call('GET', '/posts', founder.token)).status).toBe(400);
+  });
+
+  it('only points a post at your own synced, undeleted session', async () => {
+    const { founder, friend } = await crew();
+    await sync(founder.token, 0, [logged('w1', [entry('Bench press', 80)]), logged('gone', [entry('Bench press', 80)], { deleted: true })]);
+    expect((await post(friend.token, { loggedWorkoutId: 'w1' })).status).toBe(400);
+    expect((await post(founder.token, { loggedWorkoutId: 'gone' })).status).toBe(400);
+    expect((await post(founder.token, { loggedWorkoutId: 'not-synced' })).status).toBe(400);
   });
 });
 

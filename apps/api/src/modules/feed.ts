@@ -1,13 +1,13 @@
 import {
   CALL_DAYS, CALL_POINTS, CALLABLE_DAYS, bestSet, createCallSchema, createPostSchema, createReplySchema, DAY_MS, exerciseKey, LIVE_CALLS, MAX_OPEN_CALLS, newPbOf,
-  runHeadline, savedExercisesOf, voice, type CallView, type CreatePost, type Entry, type PostView, type ReplyView, type SavedWorkout,
+  runHeadline, savedExercisesOf, voice, type CallView, type CreatePost, type Entry, type PostRef, type PostView, type ReplyView, type SavedWorkout,
 } from '@sandbag/shared';
 import { randomUUID } from 'node:crypto';
 import { and, desc, eq, inArray, lt, or, sql, type SQL } from 'drizzle-orm';
 import { alias } from 'drizzle-orm/pg-core';
 import type { FastifyInstance } from 'fastify';
 import type { Db, DbOrTx } from '../db/client';
-import { postReplies, postRespects, posts, postSaves, runs, sandbagCalls, savedWorkouts, syncSeq, users } from '../db/schema';
+import { loggedWorkouts, postReplies, postRespects, posts, postSaves, runs, sandbagCalls, savedWorkouts, syncSeq, users } from '../db/schema';
 import { badRequest, conflict, forbidden, notFound } from '../errors';
 import { requireUser, toPublic } from './auth';
 import { expireCalls } from './calls';
@@ -20,14 +20,23 @@ const WRITE_LIMIT = { config: { rateLimit: { max: 30, timeWindow: '1 minute' } }
 const UUID = /^[0-9a-f-]{36}$/i;
 
 type Post = typeof posts.$inferSelect;
-type PostContent = Pick<typeof posts.$inferInsert, 'kind' | 'title' | 'showWeights' | 'entries' | 'run'>;
+type PostContent = Pick<typeof posts.$inferInsert, 'kind' | 'title' | 'showWeights' | 'entries' | 'run' | 'loggedWorkoutId' | 'runId'>;
 
 /**
  * What a post holds. A run is copied from what was synced, never taken from the request, so what the crew
  * sees is what was logged, and the PB mark is worked out here against every other run of yours.
  */
 async function contentOf(db: DbOrTx, userId: string, input: CreatePost): Promise<PostContent> {
-  if (input.kind !== 'run') return { kind: input.kind, title: input.title, showWeights: input.showWeights, entries: input.entries, run: null };
+  if (input.kind === 'share') return { kind: 'share', title: input.title, showWeights: input.showWeights, entries: input.entries, run: null };
+  if (input.kind === 'workout') {
+    const loggedWorkoutId = input.loggedWorkoutId ?? null;
+    if (loggedWorkoutId) {
+      const [session] = await db.select({ id: loggedWorkouts.id }).from(loggedWorkouts)
+        .where(and(eq(loggedWorkouts.ownerId, userId), eq(loggedWorkouts.id, loggedWorkoutId), eq(loggedWorkouts.deleted, false)));
+      if (!session) throw badRequest('That session isn’t synced yet, or it’s been deleted');
+    }
+    return { kind: 'workout', title: input.title, showWeights: input.showWeights, entries: input.entries, run: null, loggedWorkoutId };
+  }
   const own = await db.select().from(runs).where(and(eq(runs.ownerId, userId), eq(runs.deleted, false)));
   const run = own.find((item) => item.id === input.runId);
   if (!run) throw badRequest('That run isn’t synced yet, or it’s been deleted');
@@ -39,6 +48,7 @@ async function contentOf(db: DbOrTx, userId: string, input: CreatePost): Promise
     showWeights: true,
     entries: [],
     run: { date: run.date, activity: run.activity, distanceKm: run.distanceKm, seconds: run.seconds, newPb: pb?.name ?? null },
+    runId: run.id,
   };
 }
 
@@ -173,6 +183,18 @@ export function feedRoutes(app: FastifyInstance, db: Db): void {
     if (!existing) throw conflict('That post id is taken');
     const [view] = await toViews(db, [existing], user.id);
     return view!;
+  });
+
+  // Your own posts about one session or run, newest first, so the app can say you've already shown it.
+  app.get<{ Querystring: { loggedWorkoutId?: string; runId?: string } }>('/posts', async (request): Promise<PostRef[]> => {
+    const user = await requireUser(db, request);
+    const { loggedWorkoutId, runId } = request.query;
+    if (!loggedWorkoutId === !runId) throw badRequest('Ask about one session or one run');
+    const about = loggedWorkoutId ? eq(posts.loggedWorkoutId, loggedWorkoutId) : eq(posts.runId, runId!);
+    const rows = await db.select({ id: posts.id, createdAt: posts.createdAt }).from(posts)
+      .where(and(eq(posts.authorId, user.id), about))
+      .orderBy(desc(posts.createdAt));
+    return rows.map((row) => ({ id: row.id, createdAt: row.createdAt.toISOString() }));
   });
 
   app.get<{ Params: { id: string } }>('/posts/:id', async (request): Promise<PostView & { replies: ReplyView[]; calls: CallView[] }> => {
