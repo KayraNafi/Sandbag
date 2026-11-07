@@ -1,4 +1,4 @@
-import { loggedWorkoutSchema, runSchema, savedWorkoutSchema, voice, type Entry, type LoggedWorkout, type Run, type SavedExercise, type SavedWorkout } from '@sandbag/shared';
+import { keepSupersets, loggedWorkoutSchema, runSchema, savedWorkoutSchema, voice, type Entry, type LoggedWorkout, type Run, type SavedExercise, type SavedWorkout } from '@sandbag/shared';
 import { randomUUID } from 'expo-crypto';
 import { today } from '@/domain/format';
 import { activeLogged, buildHistory, draftEntryFor, lastLogged, type Draft, type DraftEntry } from '@/domain/history';
@@ -56,9 +56,8 @@ export function reactionTo(entry: DraftEntry, date: string): string | null {
 
 /** Validated here against the API's schema, so one bad value can't block every later sync. */
 export function finishDraft(draft: Draft): LoggedWorkout {
-  const entries: Entry[] = draft.entries
-    .filter((entry) => entry.done)
-    .map(toEntry);
+  // Lifts not done drop out, and a pair loses its link if half of it does.
+  const entries: Entry[] = keepSupersets(draft.entries, (entry) => entry.done).map(toEntry);
   const doc = loggedWorkoutSchema.parse({
     id: draft.id, date: draft.date, title: draft.title.trim() || 'Workout', savedWorkoutId: draft.savedWorkoutId,
     entries, updatedAt: Date.now(), deleted: false,

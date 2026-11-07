@@ -1,6 +1,6 @@
 import {
   CALL_DAYS, CALL_POINTS, CALLABLE_DAYS, bestSet, createCallSchema, createPostSchema, createReplySchema, DAY_MS, exerciseKey, LIVE_CALLS, MAX_OPEN_CALLS, newPbOf,
-  runHeadline, voice, type CallView, type CreatePost, type Entry, type PostView, type ReplyView, type SavedWorkout,
+  runHeadline, savedExercisesOf, voice, type CallView, type CreatePost, type Entry, type PostView, type ReplyView, type SavedWorkout,
 } from '@sandbag/shared';
 import { randomUUID } from 'node:crypto';
 import { and, desc, eq, inArray, lt, or, sql, type SQL } from 'drizzle-orm';
@@ -248,7 +248,7 @@ export function feedRoutes(app: FastifyInstance, db: Db): void {
         id: randomUUID(),
         name: post.title.slice(0, 40),
         position,
-        exercises: post.entries.map((entry) => ({ name: entry.name, kind: entry.kind, sets: entry.sets, reps: entry.reps })),
+        exercises: savedExercisesOf(post.entries),
         savedFrom: author?.displayName ?? null,
         updatedAt: Date.now(),
         deleted: false,

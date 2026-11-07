@@ -1,4 +1,4 @@
-import { voice } from '@sandbag/shared';
+import { keepSupersets, voice } from '@sandbag/shared';
 import { router } from 'expo-router';
 import { confirm } from '@/components/confirm';
 import { feel } from '@/components/motion';
@@ -16,7 +16,10 @@ export function useWorkout(draft: Draft) {
     done: entries.filter((entry) => entry.done).length,
     update: (id: string, changes: Partial<DraftEntry>) =>
       setDraft({ ...draft, entries: entries.map((entry) => (entry.id === id ? { ...entry, ...changes } : entry)) }),
-    remove: (id: string) => setDraft({ ...draft, entries: entries.filter((entry) => entry.id !== id) }),
+    /** Supersets the lift at this place with the one after it, or splits them. */
+    link: (at: number, on: boolean) =>
+      setDraft({ ...draft, entries: entries.map((entry, place) => (place === at ? { ...entry, supersetWithNext: on || undefined } : entry)) }),
+    remove: (id: string) => setDraft({ ...draft, entries: keepSupersets(entries, (entry) => entry.id !== id) }),
     move: (from: number, to: number) => setDraft({ ...draft, entries: moveTo(entries, from, to) }),
     rename: (title: string) => setDraft({ ...draft, title }),
     redate: (date: string) => setDraft({ ...draft, date }),

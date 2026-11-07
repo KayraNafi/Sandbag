@@ -1,4 +1,4 @@
-import { entryMax, entrySetup, estimatedMax, exerciseKey, setsOf, type Entry, type LoggedWorkout, type SavedExercise, type SavedWorkout } from '@sandbag/shared';
+import { entryMax, entrySetup, estimatedMax, exerciseKey, setsOf, type Entry, type Linkable, type LoggedWorkout, type SavedExercise, type SavedWorkout } from '@sandbag/shared';
 import { nudge } from './format';
 
 export interface LogItem extends Entry {
@@ -141,17 +141,14 @@ export function draftEntryFor(
     rpe: last?.rpe ?? null,
     minutes: last?.minutes ?? null,
     note: last?.note ?? '',
+    ...(exercise.supersetWithNext ? { supersetWithNext: true } : {}),
     done: false,
   };
 }
 
-export function toSavedExercises(entries: Entry[]): SavedExercise[] {
-  return entries.map(({ name, kind, sets, reps }) => ({ name, kind, sets, reps }));
-}
-
-/** Order counts, so a session done in a new order can offer to update the saved workout. */
-export function sameExercises(a: { name: string }[], b: { name: string }[]): boolean {
-  const key = (list: { name: string }[]) => list.map((item) => exerciseKey(item.name)).join('|');
+/** Order and pairs count, so a session done in a new order or with new supersets can offer to update the saved workout. */
+export function sameExercises(a: (Linkable & { name: string })[], b: (Linkable & { name: string })[]): boolean {
+  const key = (list: (Linkable & { name: string })[]) => list.map((item) => `${exerciseKey(item.name)}${item.supersetWithNext ? '+' : ''}`).join('|');
   return key(a) === key(b);
 }
 

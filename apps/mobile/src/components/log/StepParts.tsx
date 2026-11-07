@@ -1,4 +1,4 @@
-import { MAX_VARIED_SETS } from '@sandbag/shared';
+import { MAX_VARIED_SETS, supersetGroups } from '@sandbag/shared';
 import { forwardRef, useEffect, useRef, useState, type ComponentProps, type ComponentRef } from 'react';
 import { Animated, Easing, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import Svg, { Circle } from 'react-native-svg';
@@ -6,7 +6,7 @@ import { Icon } from '@/components/icons';
 import { feel, GrowBar, Pop, prefersLessMotion, usePulse } from '@/components/motion';
 import { clock } from '@/domain/format';
 import type { DraftEntry } from '@/domain/history';
-import { tickedCount, ticksOf } from '@/domain/sets';
+import { isFinished, tickedCount, ticksOf } from '@/domain/sets';
 import { colors, fonts, space } from '@/theme';
 
 /** Past this many lifts the row scrolls, at a fixed width each. */
@@ -22,9 +22,6 @@ const PlainCircle = forwardRef<ComponentRef<typeof Circle>, ComponentProps<typeo
   ({ collapsable: _collapsable, ...props }, ref) => <Circle ref={ref} {...props} />,
 );
 const AnimatedCircle = Animated.createAnimatedComponent(PlainCircle);
-
-/** A lift is finished once every set is ticked, or once it's done for timed work. */
-export const isFinished = (entry: DraftEntry) => (entry.kind === 'time' ? entry.done : ticksOf(entry).every(Boolean));
 
 /** How much of a lift is done, from 0 to 1. */
 const shareDone = (entry: DraftEntry) => (entry.kind === 'time' ? Number(entry.done) : tickedCount(entry) / ticksOf(entry).length);
@@ -60,7 +57,7 @@ export function LiftTrack({ entries, focusId, onPick, onAdd }: { entries: DraftE
   useEffect(() => {
     if (crowded && at >= 0) scroller.current?.scrollTo({ x: Math.max(0, at - 1) * (TRACK_ITEM + space.sm), animated: !prefersLessMotion() });
   }, [at, crowded]);
-  const lifts = entries.map((entry) => {
+  const lift = (entry: DraftEntry) => {
     const on = entry.id === focusId;
     const finished = isFinished(entry);
     return (
@@ -76,7 +73,13 @@ export function LiftTrack({ entries, focusId, onPick, onAdd }: { entries: DraftE
         <Text numberOfLines={1} style={[styles.trackName, on && styles.trackNameOn]}>{entry.name}</Text>
       </Pressable>
     );
-  });
+  };
+  // A superset's lifts sit together on one line, since they're done as one.
+  const lifts = supersetGroups(entries).map((group) => (group.length < 2 ? lift(group[0]!) : (
+    <View key={group[0]!.id} accessibilityLabel={`Superset of ${group.length}`} style={[styles.trackPair, !crowded && { flex: group.length }]}>
+      {group.map(lift)}
+    </View>
+  )));
   const addLift = (
     // An empty slot shaped like the others, the way Invite sits at the end of the crew row.
     <Pressable accessibilityRole="button" accessibilityLabel="Add a lift" onPress={onAdd} style={[styles.trackItem, styles.trackAdd]}>
@@ -159,6 +162,7 @@ const styles = StyleSheet.create({
   clock: { fontFamily: fonts.display, fontSize: 20, color: colors.ink2, fontVariant: ['tabular-nums'] },
   track: { flexDirection: 'row', alignItems: 'flex-start', gap: space.sm },
   trackScroll: { flexGrow: 0 },
+  trackPair: { flexDirection: 'row', gap: space.sm, paddingBottom: space.xs, borderBottomWidth: 2, borderColor: colors.volt },
   trackItem: { gap: space.xs, minHeight: 44, paddingTop: space.xs },
   trackItemFixed: { width: TRACK_ITEM },
   trackName: { fontFamily: fonts.label, fontSize: 15, color: colors.ink3 },

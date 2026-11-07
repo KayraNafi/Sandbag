@@ -11,6 +11,7 @@ import { Icon, type IconName } from './icons';
 import { Burst, feel, Stamp } from './motion';
 import { colors, fonts, space } from '@/theme';
 import { Card, Muted, Row } from './ui';
+import { SupersetList } from './Superset';
 
 const PREVIEW = 4;
 
@@ -48,14 +49,14 @@ export function PostEntries({ post, limit }: { post: PostView; limit?: number })
   const shown = limit ? post.entries.slice(0, limit) : post.entries;
   return (
     <View style={styles.entries}>
-      {shown.map((entry) => (
-        <View key={entry.id} style={styles.entry}>
+      <SupersetList items={shown} keyOf={(entry) => entry.id}>{(entry) => (
+        <View style={styles.entry}>
           <Text style={styles.entryName}>{entry.name}</Text>
           <Muted style={styles.entryValue}>
             {post.kind === 'share' ? setsReps(entry) : post.showWeights ? summary(entry) : setsReps(entry) || 'Weights hidden'}
           </Muted>
         </View>
-      ))}
+      )}</SupersetList>
       {post.entries.length > shown.length ? <Muted>+{post.entries.length - shown.length} more</Muted> : null}
     </View>
   );

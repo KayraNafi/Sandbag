@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { DraftEntry } from './history';
-import { dropsOf, dropWeight, fitPerSet, setAt, setMax, tickedCount, ticksOf, toEntry, varies, warmupSets, withDone, withDrop, withLastDrop, withSetCount, withSetValue, withTick } from './sets';
+import { afterSet, dropsOf, dropWeight, fitPerSet, setAt, setMax, tickedCount, ticksOf, toEntry, varies, warmupSets, withDone, withDrop, withLastDrop, withSetCount, withSetValue, withTick } from './sets';
 
 const bench = (extra: Partial<DraftEntry> = {}): DraftEntry => ({
   id: 'b', name: 'Bench', kind: 'strength', sets: 3, reps: 8, weight: 60, perSide: false, rpe: null, minutes: null, note: '', done: false, ...extra,
@@ -126,5 +126,29 @@ describe('warmupSets', () => {
     expect(warmupSets(100, 2.5)).toEqual([{ weight: 50, reps: 5 }, { weight: 70, reps: 3 }, { weight: 85, reps: 1 }]);
     expect(warmupSets(61, 5)).toEqual([{ weight: 30, reps: 5 }, { weight: 40, reps: 3 }, { weight: 50, reps: 1 }]);
     expect(warmupSets(40, 20)).toEqual([{ weight: 20, reps: 5 }]);
+  });
+});
+
+describe('supersets, set by set', () => {
+  const a = (ticks: boolean[]) => bench({ id: 'a', sets: ticks.length, ticks, supersetWithNext: true });
+  const b = (ticks: boolean[]) => bench({ id: 'b', sets: ticks.length, ticks });
+  const c = bench({ id: 'c', ticks: [false, false, false] });
+
+  it('goes straight on to the partner, then rests and comes back', () => {
+    expect(afterSet([a([true, false, false]), b([false, false, false]), c], 'a')).toEqual({ next: 'b', rest: false });
+    expect(afterSet([a([true, false, false]), b([true, false, false]), c], 'b')).toEqual({ next: 'a', rest: true });
+  });
+
+  it('keeps going on the lift with more sets once its partner is done', () => {
+    expect(afterSet([a([true, true, true]), b([true, true, true, false]), c], 'b')).toEqual({ next: 'b', rest: true });
+    expect(afterSet([a([true, true, false]), b([true, true]), c], 'a')).toEqual({ next: 'a', rest: true });
+  });
+
+  it('is done when every lift in the pair is', () => {
+    expect(afterSet([a([true, true, true]), b([true, true, true]), c], 'b')).toEqual({ next: null, rest: true });
+  });
+
+  it('leaves a lift on its own where it was', () => {
+    expect(afterSet([a([true, false, false]), b([false, false, false]), c], 'c')).toEqual({ next: 'c', rest: true });
   });
 });

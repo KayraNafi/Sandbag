@@ -1,8 +1,9 @@
-import type { SavedExercise } from '@sandbag/shared';
+import { keepSupersets, type SavedExercise } from '@sandbag/shared';
 import { useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
 import { Pressable, StyleSheet, Text } from 'react-native';
 import { LiftPicker } from '@/components/LiftPicker';
+import { SupersetList } from '@/components/Superset';
 import { Button, Card, Chip, Field, MoveButtons, Muted, NumberField, Row, Screen } from '@/components/ui';
 import { leave } from '@/nav';
 import { createSaved, updateSaved } from '@/data/actions';
@@ -41,25 +42,28 @@ export default function EditSavedWorkout() {
     <Screen padTop={false} footer={<Button title="Save workout" onPress={save} />}>
       <Field label="Name" placeholder="Upper" maxLength={NAME_MAX} value={name} onChangeText={setName} error={error} />
       {exercises.length ? <Muted>Your latest numbers load automatically. Sets and reps here only apply until you’ve logged a lift.</Muted> : null}
-      {exercises.map((exercise, index) => (
-        <Card key={`${exercise.name}-${index}`}>
-          <Row>
-            <Text style={styles.name}>{exercise.name}</Text>
-            <MoveButtons name={exercise.name} index={index} total={exercises.length} onMove={(delta) => setExercises((current) => moveItem(current, index, delta))} />
-            <Pressable accessibilityRole="button" accessibilityLabel={`Remove ${exercise.name}`} onPress={() => setExercises((current) => current.filter((_, position) => position !== index))} style={styles.icon}><Text style={styles.remove}>×</Text></Pressable>
-          </Row>
-          <Row>
-            <Chip title="Weight" active={exercise.kind === 'strength'} onPress={() => change(index, { kind: 'strength' })} />
-            <Chip title="Time" active={exercise.kind === 'time'} onPress={() => change(index, { kind: 'time' })} />
-          </Row>
-          {exercise.kind === 'strength' ? (
+      <SupersetList items={exercises} keyOf={(exercise) => `${exercise.name}-${exercises.indexOf(exercise)}`} onLink={(at, on) => change(at, { supersetWithNext: on || undefined })}>{(exercise) => {
+        const index = exercises.indexOf(exercise);
+        return (
+          <Card>
             <Row>
-              <NumberField label="Sets" decimals={false} value={exercise.sets} max={1000} onChange={(sets) => change(index, { sets })} />
-              <NumberField label="Reps" decimals={false} value={exercise.reps} max={1000} onChange={(reps) => change(index, { reps })} />
+              <Text style={styles.name}>{exercise.name}</Text>
+              <MoveButtons name={exercise.name} index={index} total={exercises.length} onMove={(delta) => setExercises((current) => moveItem(current, index, delta))} />
+              <Pressable accessibilityRole="button" accessibilityLabel={`Remove ${exercise.name}`} onPress={() => setExercises((current) => keepSupersets(current, (item) => item !== exercise))} style={styles.icon}><Text style={styles.remove}>×</Text></Pressable>
             </Row>
-          ) : null}
-        </Card>
-      ))}
+            <Row style={styles.wrap}>
+              <Chip title="Weight" active={exercise.kind === 'strength'} onPress={() => change(index, { kind: 'strength' })} />
+              <Chip title="Time" active={exercise.kind === 'time'} onPress={() => change(index, { kind: 'time' })} />
+            </Row>
+            {exercise.kind === 'strength' ? (
+              <Row>
+                <NumberField label="Sets" decimals={false} value={exercise.sets} max={1000} onChange={(sets) => change(index, { sets })} />
+                <NumberField label="Reps" decimals={false} value={exercise.reps} max={1000} onChange={(reps) => change(index, { reps })} />
+              </Row>
+            ) : null}
+          </Card>
+        );
+      }}</SupersetList>
       <Button title="Add exercise" variant="ghost" onPress={() => setPicking(true)} />
       <LiftPicker visible={picking} onClose={() => setPicking(false)} exclude={exercises.map((item) => item.name)} onPick={add} />
     </Screen>
@@ -70,4 +74,5 @@ const styles = StyleSheet.create({
   name: { flex: 1, fontFamily: fonts.bodyStrong, fontSize: 16, color: colors.ink },
   icon: { width: 44, height: 44, borderRadius: 10, backgroundColor: colors.surface2, alignItems: 'center', justifyContent: 'center' },
   remove: { color: colors.danger, fontSize: 22 },
+  wrap: { flexWrap: 'wrap' },
 });

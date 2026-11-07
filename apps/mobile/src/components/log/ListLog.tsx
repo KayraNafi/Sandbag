@@ -3,6 +3,7 @@ import { Stack } from 'expo-router';
 import { useMemo, useState, type ReactNode } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { LiftPicker } from '@/components/LiftPicker';
+import { SupersetList } from '@/components/Superset';
 import { feel } from '@/components/motion';
 import { Stepper } from '@/components/Stepper';
 import { toast } from '@/components/Toast';
@@ -161,7 +162,8 @@ export function ListLog({ draft }: { draft: Draft }) {
           }} />
         ) : null}
       />
-      {draft.entries.map((entry, position) => {
+      <SupersetList items={draft.entries} keyOf={(entry) => entry.id} onLink={reordering ? undefined : workout.link}>{(entry) => {
+        const position = draft.entries.indexOf(entry);
         const open = openId === entry.id;
         if (reordering) {
           return (
@@ -199,11 +201,16 @@ export function ListLog({ draft }: { draft: Draft }) {
               </Pressable>
             </Row>
             {open ? (
-              <Editor entry={entry} date={draft.date} onChange={(changes) => workout.update(entry.id, changes)} onRemove={() => workout.remove(entry.id)} />
+              <Editor
+                entry={entry}
+                date={draft.date}
+                onChange={(changes) => workout.update(entry.id, changes)}
+                onRemove={() => workout.remove(entry.id)}
+              />
             ) : null}
           </Card>
         );
-      })}
+      }}</SupersetList>
       <Button title="Add exercise" variant="ghost" onPress={() => setPicking(true)} />
       <LiftPicker
         visible={picking}

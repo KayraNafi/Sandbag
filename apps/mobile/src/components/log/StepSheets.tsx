@@ -5,6 +5,7 @@ import { DragList } from '@/components/DragList';
 import { feel } from '@/components/motion';
 import { Sheet } from '@/components/Sheet';
 import { Stepper } from '@/components/Stepper';
+import { SupersetList } from '@/components/Superset';
 import { Button, Chip, Field, Label, Muted, Row } from '@/components/ui';
 import { jumpFor, JUMPS, usePrefs } from '@/data/prefs';
 import { useData } from '@/data/store';
@@ -125,7 +126,7 @@ export function WarmupSheet({ warmup, onClose }: { warmup: { weight: number; jum
 }
 
 /** The workout as a whole: finish early, its name and day, the order, the layout, or throw it away. */
-export function WorkoutSheet({ visible, draft, finishLabel, onFinish, onRename, onRedate, onMove, onListView, onDiscard, onClose }: {
+export function WorkoutSheet({ visible, draft, finishLabel, onFinish, onRename, onRedate, onMove, onLink, onListView, onDiscard, onClose }: {
   visible: boolean;
   draft: Draft;
   /** Absent when there's nothing ticked to finish with. */
@@ -134,6 +135,7 @@ export function WorkoutSheet({ visible, draft, finishLabel, onFinish, onRename, 
   onRename: (title: string) => void;
   onRedate: (date: string) => void;
   onMove: (from: number, to: number) => void;
+  onLink: (at: number, on: boolean) => void;
   onListView: () => void;
   onDiscard: () => void;
   onClose: () => void;
@@ -161,6 +163,11 @@ export function WorkoutSheet({ visible, draft, finishLabel, onFinish, onRename, 
             renderItem={(entry) => <View style={styles.orderRow}><Text style={styles.name}>{entry.name}</Text></View>}
             onMove={onMove}
           />
+          <Label>Supersets</Label>
+          <Muted>Tap between two lifts to do them back to back.</Muted>
+          <SupersetList items={draft.entries} keyOf={(entry) => entry.id} onLink={onLink}>
+            {(entry) => <View style={styles.orderRow}><Text style={styles.name}>{entry.name}</Text></View>}
+          </SupersetList>
         </>
       ) : null}
       <Button title="Switch to list view" variant="ghost" onPress={onListView} />

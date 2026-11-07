@@ -1,4 +1,4 @@
-import { estimatedMax, exerciseKey, findLift, MAX_WEIGHT, voice } from '@sandbag/shared';
+import { estimatedMax, exerciseKey, findLift, MAX_WEIGHT, supersetGroups, voice } from '@sandbag/shared';
 import { useQuery } from '@tanstack/react-query';
 import { Stack } from 'expo-router';
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
@@ -20,10 +20,10 @@ import { jumpFor, usePrefs } from '@/data/prefs';
 import { useData } from '@/data/store';
 import { agoText, nudge, num, plural, round2, summary } from '@/domain/format';
 import { activeLogged, bestSetBefore, buildHistory, lastLogged, lastSessionOf, volumeOf, weightToBeat, type Draft, type DraftEntry } from '@/domain/history';
-import { canMarkDrops, dropsOf, dropWeight, setAt, setMax, tickedCount, ticksOf, toEntry, withDone, withDrop, withSetCount, withSetValue, withTick } from '@/domain/sets';
+import { afterSet, canMarkDrops, dropsOf, dropWeight, isFinished, setAt, setMax, tickedCount, ticksOf, toEntry, withDone, withDrop, withSetCount, withSetValue, withTick } from '@/domain/sets';
 import { colors, fonts, space } from '@/theme';
 import { askForRestAlert, watchRest } from './restAlert';
-import { isFinished, LiftTrack, RestRing, SessionClock, SetPips, useSecondsTo } from './StepParts';
+import { LiftTrack, RestRing, SessionClock, SetPips, useSecondsTo } from './StepParts';
 import { JumpSheet, LiftSheet, WarmupSheet, WorkoutSheet } from './StepSheets';
 import { useWorkout } from './workout';
 
@@ -158,13 +158,15 @@ export function StepLog({ draft }: { draft: Draft }) {
       }
     }
 
-    if (!draft.editing) {
+    // A superset goes on to the partner without a rest. Once the whole thing is done it stays here
+    // to ask how hard it was, since the honest-miss rule depends on that answer.
+    const { next: after, rest } = afterSet(draft.entries.map((other) => (other.id === entry.id ? ticked : other)), entry.id);
+    setOpenId(after ?? entry.id);
+    if (rest && !draft.editing) {
       setRestTotal(REST_SECONDS);
       setRestEnd(Date.now() + REST_SECONDS * 1000);
     }
     if (isFinished(ticked)) {
-      // Stays on this lift to ask how hard it was. The honest-miss rule depends on that answer.
-      setOpenId(entry.id);
       const reaction = reactionTo(ticked, draft.date);
       if (reaction) toast(reaction);
     }
@@ -307,20 +309,37 @@ export function StepLog({ draft }: { draft: Draft }) {
     );
 
     if (focusFinished && viewSet === null) {
-      const moreLeft = draft.entries.some((other) => other.id !== focus.id && !isFinished(other));
+      // A finished superset asks about all of its lifts here, since it went straight from one to the next.
+      const group = supersetGroups(draft.entries).find((members) => members.includes(focus)) ?? [focus];
+      const asked = group.every(isFinished) ? group : [focus];
+      const moreLeft = draft.entries.some((other) => !asked.includes(other) && !isFinished(other));
+      const effort = (entry: DraftEntry) => (
+        <EffortSlider key={entry.id} value={entry.rpe} onChange={(rpe) => {
+          if (rpe === 10 && entry.rpe !== 10) toast(voice.rpeTen(Date.now()));
+          else if (rpe <= LOW_EFFORT && (entry.rpe === null || entry.rpe > LOW_EFFORT)) toast(voice.rpeLow(Date.now()));
+          workout.update(entry.id, { rpe });
+        }} />
+      );
       return {
         body: (
           <FadeIn key={`${focus.id}-effort`} style={styles.stage}>
-            {head}
-            <View style={styles.picture}>
-              {beatBest ? <Stamp delay={120} style={styles.stamp}><Text style={styles.stampText}>NEW BEST</Text></Stamp> : null}
-            </View>
-            {pips}
-            <EffortSlider value={focus.rpe} onChange={(rpe) => {
-              if (rpe === 10 && focus.rpe !== 10) toast(voice.rpeTen(Date.now()));
-              else if (rpe <= LOW_EFFORT && (focus.rpe === null || focus.rpe > LOW_EFFORT)) toast(voice.rpeLow(Date.now()));
-              workout.update(focus.id, { rpe });
-            }} />
+            {asked.length > 1 ? null : head}
+            {asked.length > 1 && !beatBest ? null : (
+              <View style={styles.picture}>
+                {beatBest ? <Stamp delay={120} style={styles.stamp}><Text style={styles.stampText}>NEW BEST</Text></Stamp> : null}
+              </View>
+            )}
+            {asked.length > 1 ? asked.map((entry) => (
+              <View key={entry.id} style={styles.head}>
+                <Text style={styles.liftName}>{entry.name}</Text>
+                {effort(entry)}
+              </View>
+            )) : (
+              <>
+                {pips}
+                {effort(focus)}
+              </>
+            )}
           </FadeIn>
         ),
         action: <Button title={moreLeft ? 'Next lift' : 'That’s everything'} onPress={() => { feel.tap(); goTo(null); }} style={styles.done} />,
@@ -509,6 +528,7 @@ export function StepLog({ draft }: { draft: Draft }) {
         onRename={workout.rename}
         onRedate={workout.redate}
         onMove={workout.move}
+        onLink={workout.link}
         onListView={() => { setMore(false); setLogging('list'); }}
         onDiscard={() => { setMore(false); void workout.discard(); }}
         onClose={() => setMore(false)}

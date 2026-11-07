@@ -1,4 +1,4 @@
-import { entryMax, MAX_VARIED_SETS, tidySets, type Entry } from '@sandbag/shared';
+import { entryMax, MAX_VARIED_SETS, supersetGroups, tidySets, type Entry } from '@sandbag/shared';
 import type { DraftEntry } from './history';
 
 /**
@@ -143,4 +143,20 @@ export function warmupSets(weight: number, jump: number): { weight: number; reps
     if (load > (ladder.at(-1)?.weight ?? 0) && load < weight) ladder.push({ weight: load, reps });
   }
   return ladder;
+}
+
+/** A lift is finished once every set is ticked, or once it's done for timed work. */
+export const isFinished = (entry: DraftEntry) => (entry.kind === 'time' ? entry.done : ticksOf(entry).every(Boolean));
+
+/**
+ * Where a superset goes after a set: on to the next lift in the pair that has sets left, without a rest,
+ * or, after the last one, a rest and back to the first with sets left. A lift on its own stays put and rests.
+ * Null when the whole pair is done.
+ */
+export function afterSet(entries: DraftEntry[], id: string): { next: string | null; rest: boolean } {
+  const group = supersetGroups(entries).find((members) => members.some((entry) => entry.id === id)) ?? [];
+  const at = group.findIndex((entry) => entry.id === id);
+  const onward = group.slice(at + 1).find((entry) => !isFinished(entry));
+  if (onward) return { next: onward.id, rest: false };
+  return { next: group.find((entry) => !isFinished(entry))?.id ?? null, rest: true };
 }

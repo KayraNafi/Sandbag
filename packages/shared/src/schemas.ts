@@ -19,6 +19,8 @@ const weight = z.number().min(0).max(MAX_WEIGHT).nullable();
 const setReps = z.array(count).max(MAX_VARIED_SETS).optional();
 const setWeights = z.array(weight).max(MAX_VARIED_SETS).optional();
 const setDrops = z.array(z.boolean()).max(MAX_VARIED_SETS).optional();
+/** Done back to back with the next lift. See supersets.ts. */
+const supersetWithNext = z.boolean().optional();
 
 export const entrySchema = z.object({
   id: clientId,
@@ -32,6 +34,7 @@ export const entrySchema = z.object({
   setWeights,
   // Which sets were drop sets: taken to failure, then on at lighter weights without a rest. Only the mark is kept.
   setDrops,
+  supersetWithNext,
   weight,
   perSide: z.boolean(),
   // Whether the weight counts the bar or machine. Absent means it wasn't said, as on every older entry.
@@ -58,8 +61,14 @@ export const savedExerciseSchema = z.object({
   kind: z.enum(['strength', 'time']),
   sets: count,
   reps: count,
+  supersetWithNext,
 });
 export type SavedExercise = z.infer<typeof savedExerciseSchema>;
+
+/** A session as a workout to do again: the lifts, their order and pairs, and none of the numbers that came from the day. */
+export function savedExercisesOf(entries: Entry[]): SavedExercise[] {
+  return entries.map(({ name, kind, sets, reps, supersetWithNext: linked }) => ({ name, kind, sets, reps, ...(linked ? { supersetWithNext: true } : {}) }));
+}
 
 export const savedWorkoutSchema = z.object({
   id: clientId,
@@ -306,6 +315,7 @@ const apiEntrySchema = z.object({
   setReps,
   setWeights,
   setDrops,
+  supersetWithNext,
   weight: weight.default(null),
   perSide: z.boolean().default(false),
   includesEquipment: z.boolean().optional(),

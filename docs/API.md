@@ -60,6 +60,7 @@ Only `date` and each entry's `name` are required.
 | `weight` | `null` | Kilograms. |
 | `perSide` | `false` | The weight is per side. |
 | `includesEquipment` | not set | `true` if the weight counts the bar or machine, `false` if it doesn't. Leave it out to say neither. |
+| `supersetWithNext` | not set | `true` if it was done back to back with the next entry. A run of them makes one superset. |
 | `rpe` | `null` | 0 to 10. |
 | `minutes` | `null` | For `time`. |
 | `note` | empty | Up to 200 characters. |

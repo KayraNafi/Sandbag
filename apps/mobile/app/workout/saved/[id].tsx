@@ -9,6 +9,7 @@ import { useData } from '@/data/store';
 import { agoText, formatDate, setsReps, summary } from '@/domain/format';
 import { activeLogged, buildHistory, lastLogged } from '@/domain/history';
 import { colors, fonts } from '@/theme';
+import { SupersetList } from '@/components/Superset';
 
 export default function SavedWorkoutScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -23,15 +24,15 @@ export default function SavedWorkoutScreen() {
     <Screen padTop={false} footer={<Button title="Start" onPress={() => void beginSaved(workout)} />}>
       <Title>{workout.name}</Title>
       {workout.savedFrom ? <Muted>From {workout.savedFrom}. The numbers are all yours.</Muted> : null}
-      {workout.exercises.map((exercise, position) => {
+      <SupersetList items={workout.exercises} keyOf={(exercise) => `${exercise.name}-${workout.exercises.indexOf(exercise)}`}>{(exercise) => {
         const last = lastLogged(index, exercise.name);
         return (
-          <Card key={`${exercise.name}-${position}`}>
+          <Card>
             <Text style={styles.name}>{exercise.name}</Text>
             <Muted>{last ? `Last: ${summary(last)}` : setsReps(exercise) || 'No numbers yet'}</Muted>
           </Card>
         );
-      })}
+      }}</SupersetList>
       <Row>
         <View style={styles.flex}><Button title="Edit" variant="ghost" onPress={() => router.push(`/workout/edit/${workout.id}`)} /></View>
         <View style={styles.flex}><Button title="Share" variant="ghost" disabled={!workout.exercises.length} onPress={() => router.push(`/share?savedId=${workout.id}`)} /></View>

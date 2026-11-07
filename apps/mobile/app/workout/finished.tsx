@@ -1,4 +1,4 @@
-import { goalsOf, trainedDates, voice, weekStreak } from '@sandbag/shared';
+import { goalsOf, savedExercisesOf, trainedDates, voice, weekStreak } from '@sandbag/shared';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useMemo, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
@@ -8,7 +8,7 @@ import { Button, Card, Heading, Muted, Screen, Title } from '@/components/ui';
 import { createSaved, updateSaved } from '@/data/actions';
 import { useData } from '@/data/store';
 import { num, toIsoDate } from '@/domain/format';
-import { activeLogged, bestBefore, buildHistory, metricOf, sameExercises, toSavedExercises } from '@/domain/history';
+import { activeLogged, bestBefore, buildHistory, metricOf, sameExercises } from '@/domain/history';
 import { colors, fonts, space } from '@/theme';
 
 export default function Finished() {
@@ -70,7 +70,7 @@ export default function Finished() {
           <Heading>Save this workout?</Heading>
           <Muted>Next time it starts with one tap, loaded with your numbers.</Muted>
           <Button title="Save" variant="ghost" onPress={() => {
-            createSaved(workout.title, toSavedExercises(workout.entries));
+            createSaved(workout.title, savedExercisesOf(workout.entries));
             setHandled(true);
             toast('Saved. One less excuse.');
           }} />
@@ -81,7 +81,7 @@ export default function Finished() {
           <Heading>Update {source.name}?</Heading>
           <Muted>Today’s exercises or their order were different from the saved ones.</Muted>
           <Button title="Update saved workout" variant="ghost" onPress={() => {
-            updateSaved(source, { exercises: toSavedExercises(workout.entries) });
+            updateSaved(source, { exercises: savedExercisesOf(workout.entries) });
             setHandled(true);
             toast('Updated.');
           }} />
