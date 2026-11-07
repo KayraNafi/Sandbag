@@ -117,7 +117,10 @@ const burst = StyleSheet.create({
   white: { backgroundColor: colors.ink },
 });
 
-/** Lands hard, like a rubber stamp. */
+/**
+ * Lands hard, like a rubber stamp. Its box hugs the words, so write a straight apostrophe in them: Android measures
+ * the display font's ’ kerned tighter than it draws it, and the last word wraps out of sight.
+ */
 export function Stamp({ children, delay = 0, style }: { children: ReactNode; delay?: number; style?: StyleProp<ViewStyle> }) {
   const progress = useRef(new Animated.Value(prefersLessMotion() ? 1 : 0)).current;
   useEffect(() => {

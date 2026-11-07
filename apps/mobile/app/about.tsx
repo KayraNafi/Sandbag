@@ -222,7 +222,7 @@ function Settle() {
       <Segmented options={[{ key: 'easy', label: 'Felt fine' }, { key: 'max', label: 'All out' }]} value={effort} onChange={setEffort} />
       <View style={styles.verdict}>
         <Stamp key={verdict} style={[styles.verdictStamp, { borderColor: look.color }]}>
-          <Text style={[styles.verdictText, { color: look.color }]}>{look.stamp}</Text>
+          <Text numberOfLines={1} style={[styles.verdictText, { color: look.color }]}>{look.stamp}</Text>
         </Stamp>
         <Text style={[styles.verdictPoints, { color: look.color }]}>{look.points}</Text>
       </View>
@@ -303,7 +303,7 @@ function Honest() {
 function Free() {
   return (
     <View style={styles.page}>
-      <Stamp delay={160} style={styles.verdictStamp}><Text style={styles.freeStamp}>IT’S FREE</Text></Stamp>
+      <Stamp delay={160} style={styles.verdictStamp}><Text numberOfLines={1} style={styles.freeStamp}>IT'S FREE</Text></Stamp>
       <Text style={styles.line}>Sandbag is open source under the AGPL-3.0. Read the code, run your own, or tell us what’s broken.</Text>
       <Button title="See the source" variant="ghost" onPress={() => void Linking.openURL(SOURCE_URL)} />
       <View style={styles.recap}>

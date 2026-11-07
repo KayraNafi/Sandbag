@@ -212,7 +212,7 @@ export function StepLog({ draft }: { draft: Draft }) {
       return {
         body: (
           <FadeIn key="all-done" style={styles.center}>
-            <Stamp delay={120} style={styles.stamp}><Text style={styles.stampText}>THAT’S ALL</Text></Stamp>
+            <Stamp delay={120} style={styles.stamp}><Text style={styles.stampText}>THAT'S ALL</Text></Stamp>
             <Text style={styles.allDone}>{plural(totals.done, 'set')} done.</Text>
             <Muted style={styles.middle}>{voice.allDone(totals.done)}</Muted>
           </FadeIn>
@@ -419,7 +419,7 @@ export function StepLog({ draft }: { draft: Draft }) {
                 </Pressable>
               )
             ) : null}
-            {!drop && !called && beating ? <Stamp key="best"><Text style={styles.targetStamp}>THAT’S A NEW BEST</Text></Stamp> : null}
+            {!drop && !called && beating ? <Stamp key="best"><Text style={styles.targetStamp}>THAT'S A NEW BEST</Text></Stamp> : null}
             {!drop && !called && toBeat !== null ? (
               <Pressable
                 accessibilityRole="button"
