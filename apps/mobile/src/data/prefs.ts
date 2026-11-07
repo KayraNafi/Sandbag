@@ -2,6 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { exerciseKey } from '@sandbag/shared';
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
+import { underCatalogNames } from '@/domain/lifts';
 
 /** How a workout is logged: every lift on one list, or one set at a time. */
 export type LoggingStyle = 'list' | 'steps';
@@ -30,6 +31,12 @@ export const usePrefs = create<PrefsState>()(persist((set) => ({
 }), {
   name: 'sandbag.prefs.v1',
   storage: createJSONStorage(() => AsyncStorage),
+  // 1: lift names moved to the catalog's spelling, so weight jumps follow them.
+  version: 1,
+  migrate: (stored, version) => {
+    const prefs = stored as Partial<PrefsState>;
+    return version < 1 && prefs.jumps ? { ...prefs, jumps: underCatalogNames(prefs.jumps) } : prefs;
+  },
 }));
 
 export const jumpFor = (jumps: Record<string, number>, exercise: string) => jumps[exerciseKey(exercise)] ?? DEFAULT_JUMP;

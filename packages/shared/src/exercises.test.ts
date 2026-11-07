@@ -81,7 +81,7 @@ describe('the catalog', () => {
       'Machine Seated Wide Row': 'Wide machine row',
       'Machine Shoulder Press': 'Shoulder press machine',
       'Machine Single Hands Row': 'Single-arm machine row',
-      'Narrow Grip Cable Row': 'Seated cable row',
+      'Narrow Grip Cable Row': 'V-bar cable row',
       'Pec fly': 'Pec deck',
       'Rear Delt Fly Cable': 'Cable rear delt fly',
       'Reverse Flyes': 'Rear delt fly',

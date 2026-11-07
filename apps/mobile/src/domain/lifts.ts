@@ -53,3 +53,18 @@ export function liftChoices({ query, muscle, kit, known, exclude }: {
   const meant = typo && !taken.has(exerciseKey(asChoice(typo).name)) ? asChoice(typo) : undefined;
   return { choices, meant, typedIsOffered };
 }
+
+/**
+ * Per-lift settings, with each one also under the catalog's name for its lift. Logged names were moved to
+ * the catalog's spelling on 2026-11-07, and a setting kept under the old name would stop being found.
+ * Anything already under the new name wins.
+ */
+export function underCatalogNames<T>(byLift: Record<string, T>): Record<string, T> {
+  const moved: Record<string, T> = {};
+  for (const [key, value] of Object.entries(byLift)) {
+    const lift = findLift(key);
+    if (lift) moved[exerciseKey(lift.name)] = value;
+  }
+  return { ...moved, ...byLift };
+}
+

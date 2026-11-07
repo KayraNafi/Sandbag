@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { liftChoices } from './lifts';
+import { liftChoices, underCatalogNames } from './lifts';
 
 const none = { query: '', muscle: null, kit: null, known: [], exclude: [] };
 const names = (input: Partial<Parameters<typeof liftChoices>[0]>) => liftChoices({ ...none, ...input }).choices.map((choice) => choice.name);
@@ -39,3 +39,14 @@ describe('the lift picker', () => {
     expect(liftChoices({ ...none, query: 'leg pre' }).typedIsOffered).toBe(false);
   });
 });
+
+describe('settings kept by lift name', () => {
+  it('follow a lift to the catalog’s name for it', () => {
+    expect(underCatalogNames({ 'calf raises': 5, 'zercher squat': 2 })).toEqual({ 'standing calf raise': 5, 'calf raises': 5, 'zercher squat': 2 });
+  });
+
+  it('never replace one already kept under the catalog’s name', () => {
+    expect(underCatalogNames({ 'calf raises': 5, 'standing calf raise': 1 })['standing calf raise']).toBe(1);
+  });
+});
+
