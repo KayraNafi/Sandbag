@@ -1,4 +1,4 @@
-import { goalsOf, savedExercisesOf, trainedDates, voice, weekStreak } from '@sandbag/shared';
+import { goalsOf, savedExercisesOf, voice } from '@sandbag/shared';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useMemo, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
@@ -7,8 +7,9 @@ import { toast } from '@/components/Toast';
 import { Button, Card, Heading, Muted, Screen, Title } from '@/components/ui';
 import { createSaved, updateSaved } from '@/data/actions';
 import { useData } from '@/data/store';
-import { num, toIsoDate } from '@/domain/format';
-import { activeLogged, bestBefore, buildHistory, metricOf, sameExercises } from '@/domain/history';
+import { newBests, streakOn } from '@/domain/card';
+import { toIsoDate } from '@/domain/format';
+import { activeLogged, buildHistory, sameExercises } from '@/domain/history';
 import { colors, fonts, space } from '@/theme';
 
 export default function Finished() {
@@ -18,22 +19,9 @@ export default function Finished() {
   const workout = id ? logged[id] : undefined;
   const [handled, setHandled] = useState(false);
   const me = useSession((state) => state.me);
-  const streak = useMemo(
-    () => weekStreak(trainedDates(activeLogged(logged)), me ? goalsOf(me) : 3, toIsoDate(new Date())).current,
-    [logged, me],
-  );
-
-  const bests = useMemo(() => {
-    if (!workout) return [];
-    const index = buildHistory(activeLogged(logged));
-    return workout.entries.flatMap((entry) => {
-      const value = metricOf(entry);
-      const previous = bestBefore(index, entry.name, workout.date);
-      return value !== null && previous !== null && value > previous
-        ? [{ name: entry.name, text: `${num(previous)} → ${num(value)} ${entry.kind === 'time' ? 'min' : 'kg'}` }]
-        : [];
-    });
-  }, [workout, logged]);
+  const all = useMemo(() => activeLogged(logged), [logged]);
+  const streak = useMemo(() => streakOn(all, me ? goalsOf(me) : 3, toIsoDate(new Date())), [all, me]);
+  const bests = useMemo(() => (workout ? newBests(workout, buildHistory(all)) : []), [workout, all]);
 
   if (!workout) return null;
   const source = workout.savedWorkoutId ? saved[workout.savedWorkoutId] : undefined;
@@ -48,6 +36,7 @@ export default function Finished() {
     <Screen padTop={false} footer={(
       <>
         <Button title="Show the crew" onPress={() => router.push(`/share?loggedId=${workout.id}`)} />
+        <Button title="Make a card" variant="ghost" onPress={() => router.push(`/card?loggedId=${workout.id}`)} />
         <Button title="Done" variant="ghost" onPress={done} />
       </>
     )}>
@@ -79,7 +68,7 @@ export default function Finished() {
       {!handled && changed && source ? (
         <Card>
           <Heading>Update {source.name}?</Heading>
-          <Muted>Today’s exercises or their order were different from the saved ones.</Muted>
+          <Muted>Today’s exercises, their order or supersets were different from the saved ones.</Muted>
           <Button title="Update saved workout" variant="ghost" onPress={() => {
             updateSaved(source, { exercises: savedExercisesOf(workout.entries) });
             setHandled(true);

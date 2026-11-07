@@ -59,6 +59,8 @@ export default function RootLayout() {
             <Stack.Screen name="workout/edit/[id]" options={{ title: 'Edit workout' }} />
             <Stack.Screen name="workout/logged/[id]" options={{ title: 'Session' }} />
             <Stack.Screen name="run/[id]" options={{ title: 'Run' }} />
+            <Stack.Screen name="run/finished" options={{ title: 'Logged', headerBackVisible: false, headerLeft: () => null, gestureEnabled: false }} />
+            <Stack.Screen name="card" options={{ title: 'Make a card' }} />
             <Stack.Screen name="share" options={{ title: 'Share', presentation: 'modal' }} />
             <Stack.Screen name="post/[id]" options={{ title: 'Post' }} />
             <Stack.Screen name="exercise/[key]" options={{ title: 'Progress' }} />

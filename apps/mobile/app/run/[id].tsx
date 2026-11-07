@@ -1,4 +1,4 @@
-import { believable, distancePoints, MAX_RUN_KM, pacePoints, pbDistanceOf, personalBest, runTime, voice, type Activity, type Run } from '@sandbag/shared';
+import { believable, MAX_RUN_KM, voice, type Activity, type Run } from '@sandbag/shared';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useMemo, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
@@ -7,7 +7,7 @@ import { Button, Chip, Field, Label, Muted, NumberField, Row, Screen, Segmented,
 import { deleteRun, saveRun } from '@/data/actions';
 import { useData } from '@/data/store';
 import { backfillDates, dayLabel, today } from '@/domain/format';
-import { activeRuns, fromSeconds, pace, runTitle, toSeconds } from '@/domain/runs';
+import { activeRuns, fromSeconds, pace, pbLine, pointsLine, runTitle, toSeconds, type Effort } from '@/domain/runs';
 import { leave } from '@/nav';
 import { colors, fonts, space } from '@/theme';
 
@@ -16,25 +16,13 @@ const ACTIVITY_OPTIONS: { key: Activity; label: string }[] = [
   { key: 'walk', label: 'Walk' },
 ];
 
-type Effort = Pick<Run, 'activity' | 'distanceKm' | 'seconds'>;
-
-/** Where this run stands against your PB at its race distance, if it's run at one. For reference, it scores nothing. */
-function pbLine(run: Effort, runs: Run[], editing: string | undefined): string | null {
-  const race = pbDistanceOf(run);
-  if (!race) return null;
-  const best = personalBest(runs.filter((other) => other.id !== editing), race);
-  if (!best) return `Your first ${race.name} on record. That’s the PB to beat.`;
-  if (run.seconds < best.seconds) return `New ${race.name} PB, ${runTime(best.seconds - run.seconds)} faster than ${runTime(best.seconds)}.`;
-  return `${race.name} PB: ${runTime(best.seconds)}.`;
-}
-
 /** What the run on screen is worth: its pace, its points and where it stands against your PB. */
 function Preview({ run, runs, editing }: { run: Effort; runs: Run[]; editing: string | undefined }) {
   if (!believable(run)) return <Muted style={styles.warn}>{voice.tooFast()}</Muted>;
-  const pb = pbLine(run, runs, editing);
+  const pb = pbLine(run, runs.filter((other) => other.id !== editing));
   return (
     <>
-      <Muted>+{Math.round(distancePoints(run))} for the distance{run.activity === 'run' ? `, +${pacePoints(run)} for the pace` : ''}</Muted>
+      <Muted>{pointsLine(run)}</Muted>
       {pb ? <Muted>{pb}</Muted> : null}
     </>
   );
@@ -62,34 +50,29 @@ export default function RunScreen() {
   // A run from before the backfill week keeps its own day on the list.
   const dates = backfillDates().includes(date) ? backfillDates() : [date, ...backfillDates()];
 
-  /** Saves what's on screen, then goes back, or on to share it as saved. */
-  const save = (then: 'back' | 'share') => {
+  /** Saves what's on screen. A new one goes on to its finish screen; a change goes back, or on to share it. */
+  const save = (then: 'back' | 'share' | 'finish') => {
     if (!done) return;
     const run = saveRun({ ...done, date, note }, existing?.id);
-    if (then === 'share') {
-      router.replace(`/share?runId=${run.id}`);
-      return;
+    if (then === 'finish') router.replace(`/run/finished?id=${run.id}`);
+    else if (then === 'share') router.replace(`/share?runId=${run.id}`);
+    else {
+      toast('Saved.');
+      leave();
     }
-    toast(existing ? 'Saved.' : voice.runLogged(Date.now()));
-    leave();
   };
 
   return (
     <Screen
       padTop={false}
       footer={(
-        // Logging a run is the moment to show it off, so sharing leads. An edit is usually a fix, so saving does.
+        // A new one ends like a workout does, with the ways to show it off. An edit is usually a fix, so saving leads.
         existing ? (
           <Row>
             <View style={styles.flex}><Button title="Save" disabled={!done} onPress={() => save('back')} /></View>
             <View style={styles.flex}><Button title="Save and share" variant="ghost" disabled={!done} onPress={() => save('share')} /></View>
           </Row>
-        ) : (
-          <Row>
-            <View style={styles.flex}><Button title="Log and share" disabled={!done} onPress={() => save('share')} /></View>
-            <View style={styles.flex}><Button title="Log only" variant="ghost" disabled={!done} onPress={() => save('back')} /></View>
-          </Row>
-        )
+        ) : <Button title={`Log ${activity === 'run' ? 'the run' : 'the walk'}`} disabled={!done} onPress={() => save('finish')} />
       )}
     >
       <Title>{existing ? `Edit ${activity}` : `Log a ${activity}`}</Title>
@@ -122,6 +105,7 @@ export default function RunScreen() {
 
       <Field label="Note" placeholder="Route, weather, excuses" maxLength={200} value={note} onChangeText={setNote} />
 
+      {existing ? <Button title="Make a card" variant="ghost" onPress={() => router.push(`/card?runId=${existing.id}`)} /> : null}
       {existing ? (
         <Button title={`Delete ${activity}`} variant="danger" onPress={() => {
           const undo = deleteRun(existing);

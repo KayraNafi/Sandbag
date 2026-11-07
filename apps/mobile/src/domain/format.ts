@@ -78,6 +78,12 @@ export function clock(seconds: number): string {
 
 export const round2 = (value: number) => Math.round(value * 100) / 100;
 export const num = (value: number) => String(round2(value));
+
+/** Display type is about this wide per character. */
+const DISPLAY_CHAR_WIDTH = 0.56;
+
+/** The biggest size up to `base` at which this many characters fit the width on one line. */
+export const fitSize = (base: number, characters: number, width: number) => Math.min(base, Math.floor(width / (Math.max(characters, 1) * DISPLAY_CHAR_WIDTH)));
 export const plural = (count: number, word: string) => `${count} ${word}${count === 1 ? '' : 's'}`;
 export const signed = (value: number) => `${value > 0 ? '+' : ''}${value}%`;
 export const signedPoints = (value: number) => `${value > 0 ? '+' : ''}${value}`;

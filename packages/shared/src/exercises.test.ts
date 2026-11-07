@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { CATALOG, findLift, liftWords, nearestLift, searchLifts } from './exercises';
+import { CATALOG, findLift, liftWords, muscleLoad, nearestLift, searchLifts } from './exercises';
 
 describe('the catalog', () => {
   it('gives every name and other name to exactly one lift', () => {
@@ -124,4 +124,16 @@ describe('the catalog', () => {
     expect(nearestLift('Tow')).toBeUndefined();
     expect(nearestLift('Zercher carry')).toBeUndefined();
   });
+
+  it('lights the muscles a session worked, against the one worked hardest', () => {
+    // Bench: chest, then triceps and shoulders at half. Pushdown: triceps.
+    expect(muscleLoad([{ name: 'Bench press', sets: 4 }, { name: 'Triceps pushdown', sets: 2 }])).toEqual({ chest: 1, triceps: 1, shoulders: 0.5 });
+    expect(muscleLoad([{ name: 'Lateral raise', sets: null }])).toEqual({ shoulders: 1 });
+  });
+
+  it('counts nothing for lifts it doesn’t know', () => {
+    expect(muscleLoad([{ name: 'Zercher carry', sets: 3 }])).toEqual({});
+    expect(muscleLoad([])).toEqual({});
+  });
 });
+

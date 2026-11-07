@@ -29,6 +29,7 @@ export default function LoggedWorkoutScreen() {
       <Row>
         <View style={styles.flex}><Button title="Edit" variant="ghost" onPress={() => void begin(() => startEdit(workout))} /></View>
         <View style={styles.flex}><Button title="Share" variant="ghost" onPress={() => router.push(`/share?loggedId=${workout.id}`)} /></View>
+        <View style={styles.flex}><Button title="Card" variant="ghost" onPress={() => router.push(`/card?loggedId=${workout.id}`)} /></View>
       </Row>
       <Button title="Delete session" variant="danger" onPress={() => {
         const undo = deleteLogged(workout);

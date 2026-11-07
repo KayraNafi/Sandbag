@@ -1,4 +1,4 @@
-import { kmText, runTime, type LoggedWorkout, type Run } from '@sandbag/shared';
+import { distancePoints, kmText, pacePoints, pbDistanceOf, personalBest, runTime, type LoggedWorkout, type Run } from '@sandbag/shared';
 
 /** Runs not deleted, newest first. */
 export function activeRuns(runs: Record<string, Run>): Run[] {
@@ -34,4 +34,19 @@ export function timeline(workouts: LoggedWorkout[], runs: Run[]): TimelineItem[]
     ...runs.map((run) => ({ kind: 'run' as const, date: run.date, updatedAt: run.updatedAt, run })),
   ];
   return items.sort((a, b) => b.date.localeCompare(a.date) || b.updatedAt - a.updatedAt);
+}
+
+export type Effort = Pick<Run, 'activity' | 'distanceKm' | 'seconds'>;
+
+/** What a run scores: points for the distance, and for a run, points for the pace. */
+export const pointsLine = (run: Effort) => `+${Math.round(distancePoints(run))} for the distance${run.activity === 'run' ? `, +${pacePoints(run)} for the pace` : ''}`;
+
+/** Where a run stands against the PB at its race distance among the others, if it's run at one. For reference: it scores nothing. */
+export function pbLine(run: Effort, others: Run[]): string | null {
+  const race = pbDistanceOf(run);
+  if (!race) return null;
+  const best = personalBest(others, race);
+  if (!best) return `Your first ${race.name} on record. That’s the PB to beat.`;
+  if (run.seconds < best.seconds) return `New ${race.name} PB, ${runTime(best.seconds - run.seconds)} faster than ${runTime(best.seconds)}.`;
+  return `${race.name} PB: ${runTime(best.seconds)}.`;
 }

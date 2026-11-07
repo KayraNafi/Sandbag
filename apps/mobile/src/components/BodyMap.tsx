@@ -15,8 +15,6 @@ const HEIGHT = 499;
 const TOP = -10;
 const SEAM = '#0f100c';
 const SKIN = '#3f4137';
-/** What the screen and any card around it take from the width. */
-const MARGINS = 104;
 /** Under this, lines and shine are just noise. */
 const DETAIL_FROM = 60;
 
@@ -243,15 +241,17 @@ function Figure({ shapes, lines, shine, foot, level, onPick, selected, size, del
  * Levels run from 0 to 1. Drawn for this app, so it can ship under its licence.
  * With onPick, a tapped muscle is picked and the selected one lights up in full.
  */
-export function BodyMap({ levels = {}, size = 96, onPick, selected }: {
+export function BodyMap({ levels = {}, size = 96, margins = 104, onPick, selected }: {
   levels?: Partial<Record<Muscle, number>>;
   size?: number;
+  /** What the screen and any card around it take from the width. 0 for something drawn at a fixed size. */
+  margins?: number;
   onPick?: (muscle: Muscle) => void;
   selected?: Muscle | null;
 }) {
   const { width } = useWindowDimensions();
   // Two figures, a gap, and the card and screen margins around them. Small phones still fit.
-  const fitted = Math.min(size, (Math.min(width, 640) - MARGINS) / 2);
+  const fitted = Math.min(size, (Math.min(width, 640) - margins) / 2);
   const level = (muscle: Muscle) => levels[muscle] ?? 0;
   const worked = MUSCLES.filter((muscle) => level(muscle) > 0).map((muscle) => MUSCLE_NAMES[muscle]);
   return (

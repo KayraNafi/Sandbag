@@ -2,7 +2,7 @@ import Svg, { Defs, G, Mask, Path, Polygon, Rect } from 'react-native-svg';
 import { colors } from '@/theme';
 
 /** Same drawing as assets/logo.svg: a training sandbag, handles up. */
-export function Logo({ size = 96 }: { size?: number }) {
+export function Logo({ size = 96, color = colors.volt }: { size?: number; color?: string }) {
   return (
     <Svg width={size} height={size} viewBox="0 0 1024 1024" accessibilityLabel="Sandbag logo">
       <Defs>
@@ -17,9 +17,9 @@ export function Logo({ size = 96 }: { size?: number }) {
       </Defs>
       {/* Rotated about its centre in SVG's own terms: an origin prop becomes an invalid DOM attribute on the web. */}
       <G transform="rotate(-9 512 512)">
-        <Path d="M300 372C300 262 440 262 440 372" fill="none" stroke={colors.volt} strokeWidth={40} />
-        <Path d="M584 372C584 262 724 262 724 372" fill="none" stroke={colors.volt} strokeWidth={40} />
-        <Rect x="110" y="356" width="804" height="372" rx="120" fill={colors.volt} mask="url(#cuts)" />
+        <Path d="M300 372C300 262 440 262 440 372" fill="none" stroke={color} strokeWidth={40} />
+        <Path d="M584 372C584 262 724 262 724 372" fill="none" stroke={color} strokeWidth={40} />
+        <Rect x="110" y="356" width="804" height="372" rx="120" fill={color} mask="url(#cuts)" />
       </G>
     </Svg>
   );

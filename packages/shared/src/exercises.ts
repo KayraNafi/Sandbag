@@ -183,3 +183,21 @@ export function nearestLift(name: string): Lift | undefined {
   }
   return nearest?.lift;
 }
+
+/** A muscle that helps a lift gets half a set for each set. */
+const HELPER_SHARE = 0.5;
+
+/**
+ * How hard each muscle was worked, from 0 to 1, against the one worked hardest. Each set counts in full for
+ * a lift's main muscle and half for the ones that help it. Lifts the catalog doesn't know count for nothing.
+ */
+export function muscleLoad(entries: readonly { name: string; sets?: number | null }[]): Partial<Record<Muscle, number>> {
+  const sets: Partial<Record<Muscle, number>> = {};
+  for (const entry of entries) {
+    findLift(entry.name)?.muscles.forEach((muscle, place) => {
+      sets[muscle] = (sets[muscle] ?? 0) + (entry.sets ?? 1) * (place === 0 ? 1 : HELPER_SHARE);
+    });
+  }
+  const most = Math.max(0, ...Object.values(sets));
+  return most ? Object.fromEntries(Object.entries(sets).map(([muscle, count]) => [muscle, count / most])) : {};
+}
