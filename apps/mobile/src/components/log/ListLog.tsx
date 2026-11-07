@@ -2,6 +2,7 @@ import { MAX_WEIGHT } from '@sandbag/shared';
 import { Stack } from 'expo-router';
 import { useMemo, useState, type ReactNode } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { LiftPicker } from '@/components/LiftPicker';
 import { feel } from '@/components/motion';
 import { Stepper } from '@/components/Stepper';
 import { toast } from '@/components/Toast';
@@ -13,7 +14,7 @@ import { agoText, backfillDates, dayLabel, num, summary } from '@/domain/format'
 import { activeLogged, buildHistory, lastLogged, recentWeights, type Draft, type DraftEntry } from '@/domain/history';
 import { canMarkDrops, canVary, hasDrops, perSetLists, varies, withDone, withLastDrop, withSetCount, withSetValue, withVarying } from '@/domain/sets';
 import { colors, fonts, radius, space } from '@/theme';
-import { AddLift, useWorkout } from './workout';
+import { useWorkout } from './workout';
 
 const NOTE_MAX = 200;
 
@@ -132,6 +133,7 @@ export function ListLog({ draft }: { draft: Draft }) {
   const workout = useWorkout(draft);
   const [openId, setOpenId] = useState<string | null>(null);
   const [reordering, setReordering] = useState(false);
+  const [picking, setPicking] = useState(false);
 
   const toggle = (entry: DraftEntry) => {
     const next = !entry.done;
@@ -202,7 +204,13 @@ export function ListLog({ draft }: { draft: Draft }) {
           </Card>
         );
       })}
-      <AddLift draft={draft} onAdd={(name) => setOpenId(workout.add(name))} />
+      <Button title="Add exercise" variant="ghost" onPress={() => setPicking(true)} />
+      <LiftPicker
+        visible={picking}
+        onClose={() => setPicking(false)}
+        exclude={draft.entries.map((entry) => entry.name)}
+        onPick={(name) => { setPicking(false); setOpenId(workout.add(name)); }}
+      />
       <Button title="Discard" variant="danger" onPress={() => void workout.discard()} />
     </Screen>
   );

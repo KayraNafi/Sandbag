@@ -52,7 +52,8 @@ export const CATALOG: readonly Lift[] = [
   lift('Dumbbell row', 'dumbbell', ['back', 'biceps'], { perSide: true, aka: ['db row', 'one arm row', 'single arm row'] }),
   lift('Lat pulldown', 'cable', ['back', 'biceps'], { aka: ['pulldown', 'lat pull down', 'cable bar pulldown'] }),
   lift('Neutral-grip lat pulldown', 'cable', ['back', 'biceps']),
-  lift('Seated cable row', 'cable', ['back', 'biceps'], { aka: ['cable row', 'seated row', 'low seated row', 'cable seated row with v bar', 'narrow grip cable row'] }),
+  lift('Seated cable row', 'cable', ['back', 'biceps'], { aka: ['cable row', 'seated row', 'low seated row', 'narrow grip cable row'] }),
+  lift('V-bar cable row', 'cable', ['back', 'biceps'], { aka: ['v bar row', 'cable seated row with v bar', 'seated row with v bar'] }),
   lift('Machine row', 'machine', ['back', 'biceps'], { aka: ['seated machine row', 'chest supported row'] }),
   lift('Wide machine row', 'machine', ['back', 'shoulders'], { aka: ['machine seated wide row'] }),
   lift('Narrow machine row', 'plate-loaded', ['back', 'biceps'], { aka: ['lever machine narrow row'] }),
@@ -79,7 +80,8 @@ export const CATALOG: readonly Lift[] = [
   lift('Cable curl', 'cable', ['biceps']),
   lift('Preacher curl', 'barbell', ['biceps']),
   lift('Machine preacher curl', 'machine', ['biceps'], { aka: ['preacher curl machine'] }),
-  lift('Triceps pushdown', 'cable', ['triceps'], { aka: ['tricep pushdown', 'pushdown', 'rope pushdown', 'cable pushdown triceps', 'cable press down', 'triceps pressdown'] }),
+  lift('Triceps pushdown', 'cable', ['triceps'], { aka: ['tricep pushdown', 'pushdown', 'cable pushdown triceps', 'cable press down', 'triceps pressdown'] }),
+  lift('Rope pushdown', 'cable', ['triceps'], { aka: ['rope triceps pushdown', 'triceps rope pushdown', 'triceps pushdown (ropes)'] }),
   lift('Machine triceps pushdown', 'machine', ['triceps'], { aka: ['triceps machine press down'] }),
   lift('Overhead triceps extension', 'cable', ['triceps'], { aka: ['triceps overhead extension', 'cable triceps extension', 'overhead cable triceps extension', 'overhead extension'] }),
   lift('Skull crusher', 'barbell', ['triceps'], { aka: ['lying triceps extension'] }),
@@ -132,7 +134,52 @@ for (const item of CATALOG) {
 
 /**
  * The catalog's lift for a name, if it's one it knows. Only exact names: a near miss is a different lift until someone says otherwise.
- * A note in brackets counts when it tells two lifts apart, as in "Cable pull (high)", and is skipped when it doesn't, as in "(ropes)".
+ * A note in brackets counts when it tells two lifts apart, as in "Triceps pushdown (ropes)", and is skipped when it doesn't, as in "Leg press (wide stance)".
  */
 export const findLift = (name: string): Lift | undefined =>
   byWords.get(liftWords(name)) ?? byWords.get(liftWords(name.replace(/\(.*?\)/g, ' ')));
+
+/** Every lift whose name, or another name for it, has a word starting with each word typed. Its own name matching comes first. */
+export function searchLifts(query: string): Lift[] {
+  const typed = liftWords(query).split(' ').filter(Boolean);
+  if (!typed.length) return [];
+  const fits = (name: string) => {
+    const words = liftWords(name).split(' ');
+    return typed.every((part) => words.some((word) => word.startsWith(part)));
+  };
+  const byName = CATALOG.filter((item) => fits(item.name));
+  const byOther = CATALOG.filter((item) => !byName.includes(item) && item.aka?.some(fits));
+  return [...byName, ...byOther];
+}
+
+/** Changes it takes to turn one name into the other, a swapped pair of letters counting as one. */
+function distance(a: string, b: string): number {
+  const rows = Array.from({ length: a.length + 1 }, (_, i) => Array.from({ length: b.length + 1 }, (_, j) => (i === 0 ? j : j === 0 ? i : 0)));
+  for (let i = 1; i <= a.length; i += 1) {
+    for (let j = 1; j <= b.length; j += 1) {
+      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+      let best = Math.min(rows[i - 1]![j]! + 1, rows[i]![j - 1]! + 1, rows[i - 1]![j - 1]! + cost);
+      if (i > 1 && j > 1 && a[i - 1] === b[j - 2] && a[i - 2] === b[j - 1]) best = Math.min(best, rows[i - 2]![j - 2]! + 1);
+      rows[i]![j] = best;
+    }
+  }
+  return rows[a.length]![b.length]!;
+}
+
+/** Short names get no slack: "row" one letter off is "tow", not a typo. */
+const typosAllowed = (length: number) => (length < 6 ? 0 : length < 14 ? 1 : 2);
+
+/**
+ * The lift a name was probably meant to be, as in "Hummer curls" for Hammer curl. Only ever a suggestion:
+ * nothing is renamed without asking. None when the name is already a lift, or nothing is close enough.
+ */
+export function nearestLift(name: string): Lift | undefined {
+  const words = liftWords(name);
+  if (!words || findLift(name)) return undefined;
+  let nearest: { lift: Lift; off: number } | undefined;
+  for (const [other, item] of byWords) {
+    const off = distance(words, other);
+    if (off <= typosAllowed(other.length) && (!nearest || off < nearest.off)) nearest = { lift: item, off };
+  }
+  return nearest?.lift;
+}

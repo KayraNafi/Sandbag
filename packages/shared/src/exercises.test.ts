@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { CATALOG, findLift, liftWords } from './exercises';
+import { CATALOG, findLift, liftWords, nearestLift, searchLifts } from './exercises';
 
 describe('the catalog', () => {
   it('gives every name and other name to exactly one lift', () => {
@@ -28,7 +28,7 @@ describe('the catalog', () => {
       'Cable Lateral Raises': 'Cable lateral raise',
       'Cable One Arm Lateral Raise': 'Cable lateral raise',
       'Cable Pushdown Triceps': 'Triceps pushdown',
-      'Cable Seated Row with V bar': 'Seated cable row',
+      'Cable Seated Row with V bar': 'V-bar cable row',
       'Calf Raises': 'Standing calf raise',
       'Deck Flyes': 'Pec deck',
       'Dumbbell Cross Body Hammer Curl': 'Cross-body hammer curl',
@@ -93,7 +93,7 @@ describe('the catalog', () => {
       'T-bar Row': 'T-bar row',
       'Triceps Machine Press Down': 'Machine triceps pushdown',
       'Triceps Pushdown': 'Triceps pushdown',
-      'Triceps Pushdown (Ropes)': 'Triceps pushdown',
+      'Triceps Pushdown (Ropes)': 'Rope pushdown',
       'Wrist Curls': 'Wrist curl',
     };
     for (const [name, expected] of Object.entries(logged)) expect(findLift(name)?.name, name).toBe(expected);
@@ -105,5 +105,23 @@ describe('the catalog', () => {
     expect(findLift('Overhead Cable Triceps Extension + Cable Pull Down')).toBeUndefined();
     expect(findLift('Leg press (wide stance)')?.name).toBe('Leg press');
     expect(findLift('Hack squat')?.name).not.toBe(findLift('Squat')?.name);
+  });
+
+  it('finds lifts by the start of each word, own names first', () => {
+    const names = (query: string) => searchLifts(query).map((item) => item.name);
+    expect(names('calf')).toEqual(['Standing calf raise', 'Seated calf raise']);
+    expect(names('lat pull')).toContain('Lat pulldown');
+    expect(names('rope')[0]).toBe('Rope pushdown');
+    expect(names('ohp')).toEqual(['Overhead press']);
+    expect(names('  ')).toEqual([]);
+  });
+
+  it('suggests the lift a typo was meant to be, and nothing for a real lift', () => {
+    expect(nearestLift('Hummer Curls')?.name).toBe('Hammer curl');
+    expect(nearestLift('coverging chest press')?.name).toBe('Converging chest press');
+    expect(nearestLift('Lat pulldwon')?.name).toBe('Lat pulldown');
+    expect(nearestLift('Hammer curls')).toBeUndefined();
+    expect(nearestLift('Tow')).toBeUndefined();
+    expect(nearestLift('Zercher carry')).toBeUndefined();
   });
 });

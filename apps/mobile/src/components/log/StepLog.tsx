@@ -11,7 +11,7 @@ import { HoldButton } from '@/components/HoldButton';
 import { Icon } from '@/components/icons';
 import { LoadView } from '@/components/LoadView';
 import { Burst, FadeIn, feel, GrowBar, Stamp } from '@/components/motion';
-import { Sheet } from '@/components/Sheet';
+import { LiftPicker } from '@/components/LiftPicker';
 import { Stepper } from '@/components/Stepper';
 import { toast } from '@/components/Toast';
 import { Button, Muted, Row, useKeyboardHeight } from '@/components/ui';
@@ -25,7 +25,7 @@ import { colors, fonts, space } from '@/theme';
 import { askForRestAlert, watchRest } from './restAlert';
 import { isFinished, LiftTrack, RestRing, SessionClock, SetPips, useSecondsTo } from './StepParts';
 import { JumpSheet, LiftSheet, WarmupSheet, WorkoutSheet } from './StepSheets';
-import { AddLift, useWorkout } from './workout';
+import { useWorkout } from './workout';
 
 const REST_SECONDS = 90;
 const REST_STEP = 30;
@@ -488,9 +488,7 @@ export function StepLog({ draft }: { draft: Draft }) {
       </ScrollView>
       {action ? <View style={[styles.action, { paddingBottom: keyboard ? space.md : insets.bottom + space.md }]}>{action}</View> : null}
 
-      <Sheet visible={picking} onClose={() => setPicking(false)} title="Add a lift">
-        <AddLift draft={draft} onAdd={add} />
-      </Sheet>
+      <LiftPicker visible={picking} onClose={() => setPicking(false)} exclude={draft.entries.map((entry) => entry.name)} onPick={add} />
       <LiftSheet
         entry={setupEntry}
         onChange={(changes) => setupEntry && workout.update(setupEntry.id, changes)}

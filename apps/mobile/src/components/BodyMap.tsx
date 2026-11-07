@@ -1,11 +1,11 @@
 import { MUSCLES, type Muscle } from '@sandbag/shared';
 import { useEffect, useId, useRef } from 'react';
-import { Animated, StyleSheet, useWindowDimensions, View } from 'react-native';
+import { Animated, Platform, StyleSheet, useWindowDimensions, View } from 'react-native';
 import Svg, { Defs, G, Path, RadialGradient, Stop } from 'react-native-svg';
 import { space } from '@/theme';
 import { EASE_OUT, NATIVE, prefersLessMotion } from './motion';
 
-const MUSCLE_NAMES: Record<Muscle, string> = {
+export const MUSCLE_NAMES: Record<Muscle, string> = {
   chest: 'Chest', back: 'Back', shoulders: 'Shoulders', biceps: 'Biceps', triceps: 'Triceps', forearms: 'Forearms',
   abs: 'Abs', glutes: 'Glutes', quads: 'Quads', hamstrings: 'Hamstrings', calves: 'Calves',
 };
@@ -33,6 +33,13 @@ const SHADES = [
 const shade = (amount: number) => (amount <= 0 ? 0 : amount < 0.3 ? 1 : amount < 0.6 ? 2 : amount < 0.9 ? 3 : 4);
 
 type Shape = readonly [Muscle, string];
+
+/**
+ * A tap on one shape. On the web, react-native-svg 15 turns onPress into touch props the DOM doesn't know,
+ * and copies onPress over onClick unless onPress is null. So there it gets a plain click and a null onPress.
+ * Its types list neither, hence the object.
+ */
+const pressable = (onPress: () => void): object => (Platform.OS === 'web' ? { onClick: onPress, onPress: null } : { onPress });
 
 type Mark = { d: string; fill?: string; stroke?: string; width?: number; o?: number };
 
@@ -157,12 +164,13 @@ const paint = (marks: Mark[]) => marks.map(({ d, fill, stroke, width, o = 1 }, i
   />
 ));
 
-function Layer({ shapes, lines, shine, foot, step, under, size }: {
+function Layer({ shapes, lines, shine, foot, step, onPick, under, size }: {
   shapes: Shape[];
   lines: string[];
   shine: string[];
   foot: Mark[];
   step: (muscle: Muscle) => number;
+  onPick?: ((muscle: Muscle) => void) | undefined;
   under?: boolean;
   size: number;
 }) {
@@ -177,7 +185,7 @@ function Layer({ shapes, lines, shine, foot, step, under, size }: {
       {shapes.map(([muscle, d]) => {
         const at = step(muscle);
         if (at < 0) return null;
-        return <Path key={d} d={d} fill={`url(#${scope}m${at})`} stroke={SEAM} strokeWidth={detail ? 1 : 0.6} strokeLinejoin="round" />;
+        return <Path key={d} d={d} fill={`url(#${scope}m${at})`} stroke={SEAM} strokeWidth={detail ? 1 : 0.6} strokeLinejoin="round" {...(onPick ? pressable(() => onPick(muscle)) : {})} />;
       })}
       {detail ? lines.map((d) => <Path key={d} d={d} fill="none" stroke={SEAM} strokeOpacity={0.45} strokeWidth={1} strokeLinecap="round" />) : null}
       {detail ? shine.map((d) => <Path key={d} d={d} fill="none" stroke="#ffffff" strokeOpacity={0.22} strokeWidth={1.6} strokeLinecap="round" />) : null}
@@ -201,12 +209,14 @@ function Layer({ shapes, lines, shine, foot, step, under, size }: {
   );
 }
 
-function Figure({ shapes, lines, shine, foot, level, size, delay }: {
+function Figure({ shapes, lines, shine, foot, level, onPick, selected, size, delay }: {
   shapes: Shape[];
   lines: string[];
   shine: string[];
   foot: Mark[];
   level: (muscle: Muscle) => number;
+  onPick?: ((muscle: Muscle) => void) | undefined;
+  selected?: Muscle | null | undefined;
   size: number;
   delay: number;
 }) {
@@ -215,12 +225,12 @@ function Figure({ shapes, lines, shine, foot, level, size, delay }: {
     if (prefersLessMotion()) return;
     Animated.timing(light, { toValue: 1, duration: 520, delay, easing: EASE_OUT, useNativeDriver: NATIVE }).start();
   }, [light, delay]);
-  const lit = (muscle: Muscle) => (level(muscle) > 0 ? shade(level(muscle)) : -1);
-  if (size <= DETAIL_FROM) return <Layer shapes={shapes} lines={lines} shine={shine} foot={foot} step={(muscle) => Math.max(0, lit(muscle))} under size={size} />;
+  const lit = (muscle: Muscle) => (selected === muscle ? 4 : level(muscle) > 0 ? shade(level(muscle)) : -1);
+  if (size <= DETAIL_FROM) return <Layer shapes={shapes} lines={lines} shine={shine} foot={foot} step={(muscle) => Math.max(0, lit(muscle))} onPick={onPick} under size={size} />;
   return (
     <View>
-      <Layer shapes={shapes} lines={lines} shine={shine} foot={foot} step={() => 0} under size={size} />
-      {/* The dark body first, then the work comes up on top of it. */}
+      <Layer shapes={shapes} lines={lines} shine={shine} foot={foot} step={() => 0} onPick={onPick} under size={size} />
+      {/* The dark body first, then the work comes up on top of it. Taps go through to the layer below. */}
       <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, { opacity: light }]}>
         <Layer shapes={shapes} lines={lines} shine={shine} foot={foot} step={lit} size={size} />
       </Animated.View>
@@ -231,20 +241,26 @@ function Figure({ shapes, lines, shine, foot, level, size, delay }: {
 /**
  * The front and back of a body, with muscles lit by how much they've been worked.
  * Levels run from 0 to 1. Drawn for this app, so it can ship under its licence.
+ * With onPick, a tapped muscle is picked and the selected one lights up in full.
  */
-export function BodyMap({ levels = {}, size = 96 }: { levels?: Partial<Record<Muscle, number>>; size?: number }) {
+export function BodyMap({ levels = {}, size = 96, onPick, selected }: {
+  levels?: Partial<Record<Muscle, number>>;
+  size?: number;
+  onPick?: (muscle: Muscle) => void;
+  selected?: Muscle | null;
+}) {
   const { width } = useWindowDimensions();
   // Two figures, a gap, and the card and screen margins around them. Small phones still fit.
   const fitted = Math.min(size, (Math.min(width, 640) - MARGINS) / 2);
   const level = (muscle: Muscle) => levels[muscle] ?? 0;
   const worked = MUSCLES.filter((muscle) => level(muscle) > 0).map((muscle) => MUSCLE_NAMES[muscle]);
   return (
-    <View style={styles.host} accessible accessibilityLabel={worked.length ? `Worked: ${worked.join(', ')}` : 'Body diagram'}>
+    <View style={styles.host} accessible={!onPick} accessibilityLabel={worked.length ? `Worked: ${worked.join(', ')}` : 'Body diagram'}>
       <View style={styles.side}>
-        <Figure shapes={FRONT} lines={LINES_FRONT} shine={SHINE_FRONT} foot={FOOT_FRONT} level={level} size={fitted} delay={120} />
+        <Figure shapes={FRONT} lines={LINES_FRONT} shine={SHINE_FRONT} foot={FOOT_FRONT} level={level} onPick={onPick} selected={selected} size={fitted} delay={120} />
       </View>
       <View style={styles.side}>
-        <Figure shapes={BACK} lines={LINES_BACK} shine={SHINE_BACK} foot={FOOT_BACK} level={level} size={fitted} delay={240} />
+        <Figure shapes={BACK} lines={LINES_BACK} shine={SHINE_BACK} foot={FOOT_BACK} level={level} onPick={onPick} selected={selected} size={fitted} delay={240} />
       </View>
     </View>
   );

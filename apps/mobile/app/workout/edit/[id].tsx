@@ -1,32 +1,28 @@
 import type { SavedExercise } from '@sandbag/shared';
 import { useLocalSearchParams } from 'expo-router';
-import { useMemo, useState } from 'react';
-import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
-import { Button, Card, Chip, Field, Label, MoveButtons, Muted, NumberField, Row, Screen } from '@/components/ui';
+import { useState } from 'react';
+import { Pressable, StyleSheet, Text } from 'react-native';
+import { LiftPicker } from '@/components/LiftPicker';
+import { Button, Card, Chip, Field, MoveButtons, Muted, NumberField, Row, Screen } from '@/components/ui';
 import { leave } from '@/nav';
 import { createSaved, updateSaved } from '@/data/actions';
 import { useData } from '@/data/store';
-import { activeLogged, buildHistory, moveItem } from '@/domain/history';
-import { exerciseKey } from '@sandbag/shared';
-import { colors, fonts, radius, space } from '@/theme';
+import { moveItem } from '@/domain/history';
+import { colors, fonts } from '@/theme';
 
 const NAME_MAX = 40;
 
 export default function EditSavedWorkout() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const existing = useData((state) => (id && id !== 'new' ? state.saved[id] : undefined));
-  const logged = useData((state) => state.logged);
   const [name, setName] = useState(existing?.name ?? '');
   const [exercises, setExercises] = useState<SavedExercise[]>(existing?.exercises ?? []);
-  const [newName, setNewName] = useState('');
+  const [picking, setPicking] = useState(false);
   const [error, setError] = useState<string>();
-  const known = useMemo(() => [...buildHistory(activeLogged(logged)).values()].map((item) => item.name), [logged]);
 
-  const add = (raw: string) => {
-    const value = raw.trim();
-    if (!value) return;
-    setExercises((current) => [...current, { name: value, kind: 'strength', sets: null, reps: null }]);
-    setNewName('');
+  const add = (name: string) => {
+    setExercises((current) => [...current, { name, kind: 'strength', sets: null, reps: null }]);
+    setPicking(false);
   };
   const change = (index: number, changes: Partial<SavedExercise>) =>
     setExercises((current) => current.map((item, position) => (position === index ? { ...item, ...changes } : item)));
@@ -40,10 +36,6 @@ export default function EditSavedWorkout() {
     else createSaved(name, exercises);
     leave();
   };
-
-  const query = exerciseKey(newName);
-  const used = new Set(exercises.map((item) => exerciseKey(item.name)));
-  const suggestions = known.filter((item) => !used.has(exerciseKey(item)) && (!query || exerciseKey(item).includes(query))).slice(0, 8);
 
   return (
     <Screen padTop={false} footer={<Button title="Save workout" onPress={save} />}>
@@ -68,26 +60,8 @@ export default function EditSavedWorkout() {
           ) : null}
         </Card>
       ))}
-      <Label>Add exercise</Label>
-      <View style={styles.addRow}>
-        <TextInput
-          accessibilityLabel="Exercise name"
-          placeholder="Lat pulldown"
-          placeholderTextColor={colors.ink3}
-          maxLength={100}
-          value={newName}
-          onChangeText={setNewName}
-          onSubmitEditing={() => add(newName)}
-          returnKeyType="done"
-          style={styles.input}
-        />
-        <Button title="Add" variant="ghost" disabled={!newName.trim()} onPress={() => add(newName)} />
-      </View>
-      {suggestions.length ? (
-        <Row style={styles.wrap}>
-          {suggestions.map((item) => <Chip key={item} title={item} onPress={() => add(item)} />)}
-        </Row>
-      ) : null}
+      <Button title="Add exercise" variant="ghost" onPress={() => setPicking(true)} />
+      <LiftPicker visible={picking} onClose={() => setPicking(false)} exclude={exercises.map((item) => item.name)} onPick={add} />
     </Screen>
   );
 }
@@ -96,7 +70,4 @@ const styles = StyleSheet.create({
   name: { flex: 1, fontFamily: fonts.bodyStrong, fontSize: 16, color: colors.ink },
   icon: { width: 44, height: 44, borderRadius: 10, backgroundColor: colors.surface2, alignItems: 'center', justifyContent: 'center' },
   remove: { color: colors.danger, fontSize: 22 },
-  addRow: { flexDirection: 'row', gap: space.sm },
-  input: { flex: 1, minHeight: 52, backgroundColor: colors.surface2, borderWidth: 1, borderColor: colors.line, borderRadius: radius.md, paddingHorizontal: space.md, color: colors.ink, fontFamily: fonts.body, fontSize: 16 },
-  wrap: { flexWrap: 'wrap' },
 });
