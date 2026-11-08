@@ -8,6 +8,7 @@ import { HttpError } from './errors';
 import { authRoutes } from './modules/auth';
 import { feedRoutes } from './modules/feed';
 import { friendRoutes } from './modules/friends';
+import { integrationRoutes } from './integrations/routes';
 import { notificationRoutes } from './modules/notifications';
 import { pushRoutes } from './modules/push';
 import { rankingRoutes } from './modules/rankings';
@@ -33,6 +34,8 @@ export interface AppConfig {
   logger?: boolean;
   /** Turns on notifications for the web app. The private half stays with the push worker. */
   webPushPublicKey?: string;
+  /** Turns on importing from other apps. The private half stays with the import worker. */
+  integrationPublicKey?: string;
 }
 
 export async function buildApp(db: Db, config: AppConfig = {}): Promise<FastifyInstance> {
@@ -78,5 +81,6 @@ export async function buildApp(db: Db, config: AppConfig = {}): Promise<FastifyI
   pushRoutes(app, db, config.webPushPublicKey);
   apiKeyRoutes(app, db);
   publicApiRoutes(app, db);
+  integrationRoutes(app, db, config.integrationPublicKey);
   return app;
 }

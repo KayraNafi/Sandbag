@@ -65,6 +65,21 @@ For Android:
 3. Generate a service account key in Firebase and save it as `deploy/.firebase/admin.json`, readable by uid 1000 only.
 4. Set `COMPOSE_PROFILES=push` in `deploy/.env` and run `docker compose up -d --build`.
 
+## Importing from other apps
+
+Optional. People who log in another app, like Lyfta, connect it under **Settings → Connected apps** with that app's
+own API key, and their sessions come in by themselves and count like any other. Import only: nothing goes back.
+
+1. Run `npm run sealing-keys -w @sandbag/api` and put both lines in `deploy/.env`. The API gets the public half and can
+   only lock the keys people paste in. Only the `imports` worker can open them.
+2. Set `IMPORTS_DB_PASSWORD` in `deploy/.env`. A database made before this needs the account added by hand, before the
+   API that brings the import tables first starts, since that's when they're granted to it:
+   `docker compose exec db psql -U sandbag -c "CREATE ROLE sandbag_imports LOGIN PASSWORD '...'"`.
+3. Add `imports` to `COMPOSE_PROFILES`, like `COMPOSE_PROFILES=push,imports`, and run `docker compose up -d --build`.
+
+Each app is a provider: an entry in `packages/shared/src/providers.ts` that maps its workouts to sessions, and a fetcher
+in `apps/api/src/integrations/fetchers.ts` that pulls them. The tables, routes, worker and screens are shared.
+
 ## Contributing
 
 See [CONTRIBUTING.md](CONTRIBUTING.md), and [SECURITY.md](SECURITY.md) for anything sensitive.

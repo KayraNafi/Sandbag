@@ -73,6 +73,8 @@ export default function RootLayout() {
             <Stack.Screen name="avatar" options={{ title: 'Pick your character' }} />
             <Stack.Screen name="trophies" options={{ title: 'Trophies' }} />
             <Stack.Screen name="api-keys" options={{ title: 'API keys' }} />
+            <Stack.Screen name="connected-apps" options={{ title: 'Connected apps' }} />
+            <Stack.Screen name="connect/[provider]" options={{ title: 'Connect' }} />
           </Stack.Protected>
           <Stack.Protected guard={status !== 'signedIn'}>
             <Stack.Screen name="(auth)" options={{ headerShown: false }} />

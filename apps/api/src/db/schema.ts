@@ -1,4 +1,4 @@
-import type { Activity, AvatarId, CallStatus, Entry, GoalChange, NotificationKind, PostedRun, SavedExercise } from '@sandbag/shared';
+import type { Activity, AvatarId, CallStatus, Entry, GoalChange, IntegrationId, IntegrationStatus, NotificationKind, PostedRun, SavedExercise } from '@sandbag/shared';
 import { sql } from 'drizzle-orm';
 import {
   bigint, boolean, check, date, doublePrecision, foreignKey, index, integer, jsonb, pgSequence, pgTable, primaryKey, real, text, timestamp, uuid,
@@ -233,3 +233,38 @@ export const userTrophies = pgTable('user_trophies', {
   trophyId: text('trophy_id').notNull(),
   earnedAt: createdAt(),
 }, (t) => [primaryKey({ columns: [t.userId, t.trophyId] })]);
+
+/** Another app someone imports their sessions from. See packages/shared/src/integrations.ts. */
+export const integrations = pgTable('integrations', {
+  userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  provider: text('provider').$type<IntegrationId>().notNull(),
+  // The provider's key, sealed to the import worker: the API can lock it, only the worker can open it.
+  sealedKey: text('sealed_key').notNull(),
+  // The provider's own settings, checked against its schema when they're saved.
+  settings: jsonb('settings').notNull(),
+  status: text('status').$type<IntegrationStatus>().notNull().default('connecting'),
+  // The last import that worked. Null until the first one, which takes the whole history.
+  syncedAt: timestamp('synced_at', { withTimezone: true }),
+  // The worker's last try, worked or not, so it leaves each account a while between turns.
+  checkedAt: timestamp('checked_at', { withTimezone: true }),
+  createdAt: createdAt(),
+}, (t) => [primaryKey({ columns: [t.userId, t.provider] })]);
+
+/**
+ * The worker's inbox: each workout as the provider sent it. The API turns new and changed ones into sessions,
+ * so the worker never writes a session itself. A null payload is one the provider stopped listing: deleted there.
+ */
+export const integrationImports = pgTable('integration_imports', {
+  userId: uuid('user_id').notNull(),
+  provider: text('provider').$type<IntegrationId>().notNull(),
+  externalId: text('external_id').notNull(),
+  performedAt: timestamp('performed_at', { withTimezone: true }).notNull(),
+  payload: jsonb('payload'),
+  fetchedAt: timestamp('fetched_at', { withTimezone: true }).notNull().defaultNow(),
+  // Null until the API has made it a session, and again whenever the payload changes.
+  importedAt: timestamp('imported_at', { withTimezone: true }),
+}, (t) => [
+  primaryKey({ columns: [t.userId, t.provider, t.externalId] }),
+  foreignKey({ columns: [t.userId, t.provider], foreignColumns: [integrations.userId, integrations.provider] }).onDelete('cascade'),
+  index('integration_imports_pending').on(t.fetchedAt).where(sql`${t.importedAt} is null`),
+]);

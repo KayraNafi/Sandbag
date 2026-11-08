@@ -1,7 +1,7 @@
 import { Platform } from 'react-native';
 import type {
   ApiKeyView, TrophyView, AuthResponse, AvatarId, CallView, InviteSummary, Me, NotificationView, PostRef, PostView, PublicUser, RankingPeriod, RankingRow,
-  DataExport, NewPost, ReplyView, SavedWorkout, SyncRequest, SyncResponse,
+  DataExport, IntegrationId, IntegrationsResponse, IntegrationView, NewPost, ReplyView, SavedWorkout, SyncRequest, SyncResponse,
 } from '@sandbag/shared';
 
 // The web app is served beside the API, so it needs no address and no CORS.
@@ -80,6 +80,9 @@ export const api = {
   apiKeys: () => request<ApiKeyView[]>('GET', '/me/api-keys'),
   createApiKey: (name: string, password: string) => request<ApiKeyView & { key: string }>('POST', '/me/api-keys', { name, password }),
   deleteApiKey: (id: string) => request<void>('DELETE', `/me/api-keys/${id}`),
+  integrations: () => request<IntegrationsResponse>('GET', '/me/integrations'),
+  connectIntegration: (provider: IntegrationId, key: string, settings: unknown) => request<IntegrationView>('PUT', `/me/integrations/${provider}`, { key, settings }),
+  disconnectIntegration: (provider: IntegrationId, removeWorkouts: boolean) => request<void>('DELETE', `/me/integrations/${provider}`, { removeWorkouts }),
 };
 
 export function errorText(error: unknown): string {

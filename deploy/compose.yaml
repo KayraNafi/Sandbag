@@ -1,6 +1,6 @@
 # Nothing here publishes a port. `web` is the one way in, through your tunnel's network.
-# Each service reaches only what it needs: web talks to api, api and push talk to db,
-# and only `push`, which is optional, can reach the internet or read the Firebase key.
+# Each service reaches only what it needs: web talks to api, api and the workers talk to db,
+# and only the optional workers, `push` and `imports`, can reach the internet.
 name: sandbag
 
 x-logging: &logging
@@ -17,6 +17,8 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set in .env}
       APP_DB_PASSWORD: ${APP_DB_PASSWORD:?set in .env}
       PUSH_DB_PASSWORD: ${PUSH_DB_PASSWORD:?set in .env}
+      # Optional: without one, the imports account is made but can't sign in.
+      IMPORTS_DB_PASSWORD: ${IMPORTS_DB_PASSWORD:-}
     volumes:
       - ./data/postgres:/var/lib/postgresql/data
       - ./db-init.sh:/docker-entrypoint-initdb.d/roles.sh:ro
@@ -41,6 +43,7 @@ services:
       TRUSTED_PROXIES: "1"
       PORT: "8080"
       WEB_PUSH_PUBLIC_KEY: ${WEB_PUSH_PUBLIC_KEY:-}
+      INTEGRATION_PUBLIC_KEY: ${INTEGRATION_PUBLIC_KEY:-}
     networks: [app, data]
     mem_limit: 384m
     read_only: true
@@ -64,6 +67,25 @@ services:
       WEB_PUSH_SUBJECT: ${WEB_PUSH_SUBJECT:-}
     volumes:
       - ./.firebase/admin.json:/run/firebase/admin.json:ro
+    networks: [data, egress]
+    mem_limit: 256m
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    logging: *logging
+
+  # Fetches from the apps people connect, like Lyfta, into an inbox the API imports from.
+  imports:
+    build: ..
+    profiles: [imports]
+    command: ["node", "dist/importWorker.js"]
+    restart: unless-stopped
+    depends_on:
+      db: { condition: service_healthy }
+      api: { condition: service_started }
+    environment:
+      DATABASE_URL: postgres://sandbag_imports:${IMPORTS_DB_PASSWORD}@db:5432/sandbag
+      INTEGRATION_PRIVATE_KEY: ${INTEGRATION_PRIVATE_KEY:-}
     networks: [data, egress]
     mem_limit: 256m
     read_only: true

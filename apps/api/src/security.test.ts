@@ -119,6 +119,7 @@ describe('getting in without an invite', () => {
       ['PUT', `/posts/${id}/respect`], ['DELETE', `/posts/${id}/respect`], ['POST', `/posts/${id}/replies`], ['POST', `/posts/${id}/save`], ['POST', `/posts/${id}/calls`],
       ['GET', '/calls'], ['GET', '/rankings'], ['GET', '/friends'], ['POST', '/friends'], ['DELETE', `/friends/${id}`], ['GET', '/invites'],
       ['GET', '/notifications'], ['POST', '/notifications/read'], ['GET', '/trophies'],
+      ['GET', '/me/integrations'], ['PUT', '/me/integrations/lyfta'], ['DELETE', '/me/integrations/lyfta'],
       ['GET', '/v1/me'], ['GET', '/v1/workouts'], ['POST', '/v1/workouts'], ['DELETE', `/v1/workouts/${id}`], ['GET', '/v1/saved-workouts'], ['POST', '/v1/saved-workouts'], ['DELETE', `/v1/saved-workouts/${id}`],
     ];
     const founder = await signUp('founder', BOOTSTRAP);

@@ -174,6 +174,7 @@ export default function Settings() {
       </ListGroup>
       <ListGroup>
         <ListRow icon="download" title="Export your data" body={busy === 'export' ? 'Getting it ready' : 'Workouts and posts, as one JSON file'} onPress={() => run('export', exportData)} />
+        <ListRow icon="link" title="Connected apps" body="Bring in sessions you log in Lyfta" onPress={() => router.push('/connected-apps')} />
         <ListRow icon="key" title="API keys" body="For your own scripts and tools" onPress={() => router.push('/api-keys')} />
       </ListGroup>
       <ListGroup>
