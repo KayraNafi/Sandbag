@@ -61,6 +61,7 @@ export default function RootLayout() {
             <Stack.Screen name="run/[id]" options={{ title: 'Run' }} />
             <Stack.Screen name="run/finished" options={{ title: 'Logged', headerBackVisible: false, headerLeft: () => null, gestureEnabled: false }} />
             <Stack.Screen name="card" options={{ title: 'Make a card' }} />
+            <Stack.Screen name="scoring" options={{ title: 'How points work' }} />
             <Stack.Screen name="share" options={{ title: 'Share', presentation: 'modal' }} />
             <Stack.Screen name="post/[id]" options={{ title: 'Post' }} />
             <Stack.Screen name="exercise/[key]" options={{ title: 'Progress' }} />
