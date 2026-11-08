@@ -1,5 +1,5 @@
-import { MUSCLES, type Muscle } from '@sandbag/shared';
-import { useEffect, useId, useRef } from 'react';
+import { muscleLoad, MUSCLES, type Muscle } from '@sandbag/shared';
+import { useEffect, useId, useMemo, useRef } from 'react';
 import { Animated, Platform, StyleSheet, useWindowDimensions, View } from 'react-native';
 import Svg, { Defs, G, Path, RadialGradient, Stop } from 'react-native-svg';
 import { space } from '@/theme';
@@ -264,6 +264,12 @@ export function BodyMap({ levels = {}, size = 96, margins = 104, onPick, selecte
       </View>
     </View>
   );
+}
+
+/** What a session worked, at a glance. Nothing at all when none of its lifts are in the catalog, or it's a run. */
+export function MusclesWorked({ entries, size }: { entries: readonly { name: string; sets?: number | null }[]; size: number }) {
+  const levels = useMemo(() => muscleLoad(entries), [entries]);
+  return Object.keys(levels).length ? <BodyMap levels={levels} size={size} margins={0} /> : null;
 }
 
 const styles = StyleSheet.create({

@@ -1,6 +1,7 @@
 import { exerciseKey } from '@sandbag/shared';
 import { router, useLocalSearchParams } from 'expo-router';
 import { StyleSheet, Text, View } from 'react-native';
+import { MusclesWorked } from '@/components/BodyMap';
 import { toast } from '@/components/Toast';
 import { begin, leave } from '@/nav';
 import { Button, Card, Muted, Row, Screen, Title } from '@/components/ui';
@@ -17,8 +18,13 @@ export default function LoggedWorkoutScreen() {
 
   return (
     <Screen padTop={false} footer={<Button title="Do this again" onPress={() => void begin(() => startRepeat(workout))} />}>
-      <Title>{workout.title}</Title>
-      <Muted>{formatLongDate(workout.date)}</Muted>
+      <Row style={styles.hero}>
+        <View style={styles.flex}>
+          <Title>{workout.title}</Title>
+          <Muted>{formatLongDate(workout.date)}</Muted>
+        </View>
+        <MusclesWorked entries={workout.entries} size={72} />
+      </Row>
       <SupersetList items={workout.entries} keyOf={(entry) => entry.id}>{(entry) => (
         <Card label={`${entry.name} progress`} onPress={() => router.push(`/exercise/${encodeURIComponent(exerciseKey(entry.name))}`)}>
           <Text style={styles.name}>{entry.name}</Text>
@@ -42,5 +48,6 @@ export default function LoggedWorkoutScreen() {
 
 const styles = StyleSheet.create({
   flex: { flex: 1 },
+  hero: { alignItems: 'flex-start' },
   name: { fontFamily: fonts.bodyStrong, fontSize: 17, color: colors.ink },
 });

@@ -6,6 +6,7 @@ import { StyleSheet, Text, View } from 'react-native';
 import { api, ApiError, errorText } from '@/api/client';
 import { leave } from '@/nav';
 import { useSession } from '@/auth/session';
+import { MusclesWorked } from '@/components/BodyMap';
 import { confirm } from '@/components/confirm';
 import { PostActions, PostBody } from '@/components/PostCard';
 import { toast } from '@/components/Toast';
@@ -116,8 +117,13 @@ export default function PostScreen() {
           <Muted>{agoLong(data.createdAt)}</Muted>
         </View>
       </Row>
-      <Heading>{data.title}</Heading>
-      {data.caption ? <Text style={styles.caption}>{data.caption}</Text> : null}
+      <Row style={styles.hero}>
+        <View style={[styles.flex, styles.heading]}>
+          <Heading>{data.title}</Heading>
+          {data.caption ? <Text style={styles.caption}>{data.caption}</Text> : null}
+        </View>
+        <MusclesWorked entries={data.entries} size={72} />
+      </Row>
       <Card><PostBody post={data} /></Card>
       <Row style={styles.wrap}>
         <PostActions post={data} />
@@ -171,6 +177,8 @@ export default function PostScreen() {
 
 const styles = StyleSheet.create({
   flex: { flex: 1 },
+  hero: { alignItems: 'flex-start' },
+  heading: { gap: space.sm },
   wrap: { flexWrap: 'wrap' },
   author: { fontFamily: fonts.bodyStrong, fontSize: 15, color: colors.ink },
   live: { color: colors.warn },

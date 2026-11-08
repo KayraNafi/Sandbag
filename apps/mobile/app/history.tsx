@@ -1,7 +1,8 @@
 import { kmText, voice } from '@sandbag/shared';
 import { router } from 'expo-router';
-import { Fragment, useMemo } from 'react';
+import { Fragment, useMemo, type ReactNode } from 'react';
 import { Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { MusclesWorked } from '@/components/BodyMap';
 import { CountUp, FadeIn, feel } from '@/components/motion';
 import { Button, Empty, Label, Muted, Screen, ShowMore, Title, useShowMore } from '@/components/ui';
 import { useData } from '@/data/store';
@@ -16,7 +17,7 @@ const DIGIT_WIDTH = 0.56;
 const SIDES = 32;
 
 /** One session: the date big enough to find, then what it was and what it moved. */
-function SessionRow({ date, title, detail, delay, onPress }: { date: string; title: string; detail: string; delay: number; onPress: () => void }) {
+function SessionRow({ date, title, detail, delay, onPress, right }: { date: string; title: string; detail: string; delay: number; onPress: () => void; right?: ReactNode }) {
   const [day, month] = formatDate(date).split(' ');
   return (
     <FadeIn delay={delay}>
@@ -37,6 +38,7 @@ function SessionRow({ date, title, detail, delay, onPress }: { date: string; tit
           <Text numberOfLines={1} style={styles.title}>{title.toUpperCase()}</Text>
           <Text numberOfLines={1} style={styles.detail}>{detail}</Text>
         </View>
+        {right}
       </Pressable>
     </FadeIn>
   );
@@ -101,6 +103,7 @@ export default function History() {
               detail={`${plural(workout.entries.length, 'lift')}${moved ? ` · ${moved.toLocaleString('en-US')} kg` : ''}`}
               delay={delay}
               onPress={() => router.push(`/workout/logged/${workout.id}`)}
+              right={<MusclesWorked entries={workout.entries} size={44} />}
             />
           </Fragment>
         );

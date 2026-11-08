@@ -7,6 +7,7 @@ import { api } from '@/api/client';
 import { agoShort, setsReps, summary } from '@/domain/format';
 import { pace } from '@/domain/runs';
 import { Avatar } from './Avatar';
+import { MusclesWorked } from './BodyMap';
 import { Icon, type IconName } from './icons';
 import { Burst, feel, Stamp } from './motion';
 import { colors, fonts, space } from '@/theme';
@@ -104,9 +105,14 @@ export function PostCard({ post }: { post: PostView }) {
           </View>
           {called ? <Stamp delay={300}><Text style={styles.stamp}>CALLED</Text></Stamp> : null}
         </Row>
-        <Text style={styles.title}>{post.title.toUpperCase()}</Text>
-        {post.caption ? <Text style={styles.caption}>{post.caption}</Text> : null}
-        <PostBody post={post} limit={PREVIEW} />
+        <Row style={styles.top}>
+          <View style={styles.content}>
+            <Text style={styles.title}>{post.title.toUpperCase()}</Text>
+            {post.caption ? <Text style={styles.caption}>{post.caption}</Text> : null}
+            <PostBody post={post} limit={PREVIEW} />
+          </View>
+          <MusclesWorked entries={post.entries} size={44} />
+        </Row>
       </Pressable>
       <Row style={styles.footer}>
         <PostActions post={post} />
@@ -122,6 +128,8 @@ export function PostCard({ post }: { post: PostView }) {
 const styles = StyleSheet.create({
   flex: { flex: 1 },
   link: { gap: space.sm },
+  top: { alignItems: 'flex-start' },
+  content: { flex: 1, gap: space.sm },
   pressed: { opacity: 0.75 },
   author: { fontFamily: fonts.bodyStrong, fontSize: 15, color: colors.ink },
   title: { fontFamily: fonts.display, fontSize: 28, lineHeight: 30, color: colors.ink },
