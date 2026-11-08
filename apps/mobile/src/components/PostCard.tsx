@@ -105,14 +105,15 @@ export function PostCard({ post }: { post: PostView }) {
           </View>
           {called ? <Stamp delay={300}><Text style={styles.stamp}>CALLED</Text></Stamp> : null}
         </Row>
+        {/* Only the title sits beside the body: the lifts keep the full width, or long numbers squeeze their names away. */}
         <Row style={styles.top}>
           <View style={styles.content}>
             <Text style={styles.title}>{post.title.toUpperCase()}</Text>
             {post.caption ? <Text style={styles.caption}>{post.caption}</Text> : null}
-            <PostBody post={post} limit={PREVIEW} />
           </View>
           <MusclesWorked entries={post.entries} size={44} />
         </Row>
+        <PostBody post={post} limit={PREVIEW} />
       </Pressable>
       <Row style={styles.footer}>
         <PostActions post={post} />
@@ -136,7 +137,8 @@ const styles = StyleSheet.create({
   caption: { fontFamily: fonts.body, fontSize: 15, color: colors.ink },
   entries: { gap: space.xs },
   entry: { flexDirection: 'row', justifyContent: 'space-between', gap: space.md },
-  entryName: { flex: 1, fontFamily: fonts.bodyStrong, fontSize: 14, color: colors.ink },
+  // Grows into what the numbers leave, but never below a third, however long the numbers get.
+  entryName: { flex: 1, minWidth: '33%', fontFamily: fonts.bodyStrong, fontSize: 14, color: colors.ink },
   entryValue: { flexShrink: 1, textAlign: 'right' },
   footer: { marginTop: space.xs },
   run: { gap: space.sm },
