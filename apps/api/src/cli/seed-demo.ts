@@ -106,25 +106,26 @@ for (const [index, one] of crew.entries()) {
 const startWeight = (name: string) => 20 + (createHash('md5').update(name).digest()[0]! % 8) * 5;
 
 if (firstRun) {
-  // Your history: on the saved workouts you already have, plus a Lower to rotate through.
+  // Your history: the saved workouts you already have, plus a push, pull and lower day you don't, to rotate through.
   const mySaved = await db.select().from(schema.savedWorkouts).where(eq(schema.savedWorkouts.ownerId, me.id));
   const active = mySaved.filter((row) => !row.deleted && row.exercises.length);
-  const lower: SavedWorkout = {
-    id: randomUUID(), name: 'Lower', position: mySaved.reduce((max, row) => Math.max(max, row.position + 1), 0),
-    exercises: [
-      { name: 'Squat', kind: 'strength', sets: 3, reps: 8 },
-      { name: 'Romanian deadlift', kind: 'strength', sets: 3, reps: 10 },
-      { name: 'Leg press', kind: 'strength', sets: 3, reps: 12 },
-    ] satisfies SavedExercise[],
-    savedFrom: null, updatedAt: Date.now(), deleted: false,
-  };
-  const plans = [...active, lower];
+  const strength = (name: string, sets: number, reps: number): SavedExercise => ({ name, kind: 'strength', sets, reps });
+  const split: [string, SavedExercise[]][] = [
+    ['Push', [strength('Bench press', 3, 8), strength('Overhead press', 3, 8), strength('Lateral raise', 3, 15), strength('Triceps pushdown', 3, 12)]],
+    ['Pull', [strength('Deadlift', 3, 5), strength('Lat pulldown', 3, 10), strength('Seated cable row', 3, 10), strength('Dumbbell curl', 3, 12)]],
+    ['Lower', [strength('Squat', 3, 8), strength('Romanian deadlift', 3, 10), strength('Leg press', 3, 12)]],
+  ];
+  const firstFree = mySaved.reduce((max, row) => Math.max(max, row.position + 1), 0);
+  const added: SavedWorkout[] = split
+    .filter(([name]) => !active.some((row) => row.name.toLowerCase() === name.toLowerCase()))
+    .map(([name, exercises], index) => ({ id: randomUUID(), name, position: firstFree + index, exercises, savedFrom: null, updatedAt: Date.now(), deleted: false }));
+  const plans = [...active, ...added];
   const days = [27, 25, 22, 20, 18, 15, 13, 11, 8, 6, 3, 1];
   const myHistory = days.map((day, index) => {
     const plan = plans[index % plans.length]!;
     return session(plan.name, day, plan.exercises.map((exercise) => lift(exercise.name, startWeight(exercise.name) + 2.5 * Math.floor(index / plans.length))), plan.id);
   });
-  await sync(myToken, myHistory, [lower]);
+  await sync(myToken, myHistory, added);
 
   const myLast = myHistory.at(-1)!;
   const myPost = await post(myToken, 'workout', myLast.title, 'Felt light. Suspiciously light.', myLast.entries);
