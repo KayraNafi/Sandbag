@@ -2,7 +2,7 @@
   "expo": {
     "name": "Sandbag",
     "slug": "sandbag",
-    "version": "1.0.4",
+    "version": "1.0.5",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",
@@ -19,7 +19,7 @@
       },
       "predictiveBackGestureEnabled": false,
       "package": "dev.novaden.sandbag",
-      "versionCode": 5,
+      "versionCode": 6,
       "blockedPermissions": [
         "android.permission.SYSTEM_ALERT_WINDOW",
         "android.permission.READ_EXTERNAL_STORAGE",
