@@ -3,6 +3,7 @@ import type { LoggedWorkout, Me, NewPost, Run, SavedWorkout, SyncResponse } from
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
 import type { Draft } from '@/domain/history';
+import { mergeDocs } from './merge';
 
 /**
  * The phone is the working copy, so logging never waits on the network.
@@ -39,24 +40,6 @@ function withDirty(list: string[], id: string): string[] {
   return list.includes(id) ? list : [...list, id];
 }
 
-/** A newer local edit made while a request was in flight must stay queued. */
-function mergeDocs<T extends { id: string; updatedAt: number }>(
-  local: Record<string, T>, dirty: string[], incoming: T[], sent: Map<string, number>,
-): { docs: Record<string, T>; dirty: string[] } {
-  const docs = { ...local };
-  for (const doc of incoming) {
-    const mine = docs[doc.id];
-    if (!mine || doc.updatedAt > mine.updatedAt) docs[doc.id] = doc;
-  }
-  return {
-    docs,
-    dirty: dirty.filter((id) => {
-      const stamp = sent.get(id);
-      return stamp === undefined || docs[id]?.updatedAt !== stamp;
-    }),
-  };
-}
-
 export const useData = create<DataState>()(persist((set) => ({
   ...empty,
   // An expired session keeps unsynced work for the same person; anyone else starts clean.
@@ -90,10 +73,11 @@ export const useData = create<DataState>()(persist((set) => ({
 }), {
   name: 'sandbag.data.v1',
   storage: createJSONStorage(() => AsyncStorage),
-  version: 1,
-  // Version 1 added runs. An older app on another phone moved the cursor past runs it couldn't read,
-  // so everything is fetched once more. Merging keeps the newest copy of each document.
-  migrate: (persisted, version) => (version < 1 ? { ...(persisted as object), cursor: 0 } : persisted) as DataState,
+  version: 2,
+  // Each version fetches everything once more, and merging keeps anything not yet sent. 1 added runs, which an older
+  // app on another phone had moved the cursor past. 2 takes the server's copy under the same stamp, which older apps
+  // ignored, so lift names fixed on the server (migration 0012) never reached them.
+  migrate: (persisted, version) => (version < 2 ? { ...(persisted as object), cursor: 0 } : persisted) as DataState,
 }));
 
 export const nextPosition = (saved: Record<string, SavedWorkout>) =>
