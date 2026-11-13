@@ -3,7 +3,7 @@ import type { ReactNode } from 'react';
 import { View } from 'react-native';
 import Svg, { Circle, Ellipse, G, Path, Rect } from 'react-native-svg';
 import { colors } from '@/theme';
-import { bahgat, INK, shakal } from './portraits';
+import { bahgat, bombom, cd_og, fady, gb8, haigan, INK, obama, qodwa, shabab, shakal, shokran } from './portraits';
 
 interface Look {
   bg: string;
@@ -116,6 +116,15 @@ const DRAWINGS: Record<AvatarId, ReactNode> = {
   </>} />,
   bahgat,
   shakal,
+  fady,
+  cd_og,
+  haigan,
+  shabab,
+  qodwa,
+  obama,
+  bombom,
+  gb8,
+  shokran,
 };
 
 export const AVATAR_NAMES: Record<AvatarId, string> = {
@@ -135,6 +144,15 @@ export const AVATAR_NAMES: Record<AvatarId, string> = {
   frog: 'Skips Nothing',
   bahgat: 'Bahgat Saber',
   shakal: 'Adel Shakal',
+  fady: 'Fady Muscles',
+  cd_og: 'Your CD OG',
+  haigan: 'Ana Haigan',
+  shabab: 'Ana Mot Ya Shabab',
+  qodwa: 'El Qodwa',
+  obama: 'Obama el Masry',
+  bombom: 'Your CD You BomBom',
+  gb8: '8 GB',
+  shokran: 'Shokran',
 };
 
 export const AVATAR_IDS = AVATARS;

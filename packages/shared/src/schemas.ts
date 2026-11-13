@@ -123,7 +123,10 @@ const STARTERS = [
   'bull', 'gorilla', 'potato', 'sandbag', 'dumbbell', 'frog',
 ] as const;
 /** New characters go at the end, and only by choice. */
-export const AVATARS = [...STARTERS, 'bahgat', 'shakal'] as const;
+export const AVATARS = [
+  ...STARTERS, 'bahgat', 'shakal',
+  'fady', 'cd_og', 'haigan', 'shabab', 'qodwa', 'obama', 'bombom', 'gb8', 'shokran',
+] as const;
 export type AvatarId = (typeof AVATARS)[number];
 
 /** Everyone starts as a random character, stable per account. */
