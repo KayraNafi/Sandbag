@@ -3,7 +3,7 @@ import type { ReactNode } from 'react';
 import { View } from 'react-native';
 import Svg, { Circle, Ellipse, G, Path, Rect } from 'react-native-svg';
 import { colors } from '@/theme';
-import { baddie, bahgat, bombom, cd_og, fady, gb8, haigan, INK, obama, qodwa, shabab, shakal, shokran, ten_cm } from './portraits';
+import { baddie, bahgat, basyef, bombom, cd_og, fady, gb8, google_emp, haigan, INK, nini, obama, qodwa, referee, shabab, shakal, shokran, ten_cm } from './portraits';
 
 interface Look {
   bg: string;
@@ -127,6 +127,10 @@ const DRAWINGS: Record<AvatarId, ReactNode> = {
   shokran,
   baddie,
   ten_cm,
+  referee,
+  google_emp,
+  basyef,
+  nini,
 };
 
 export const AVATAR_NAMES: Record<AvatarId, string> = {
@@ -157,6 +161,10 @@ export const AVATAR_NAMES: Record<AvatarId, string> = {
   shokran: 'Shokran',
   baddie: '10 baddie',
   ten_cm: '10cm above asim',
+  referee: 'referee no fair',
+  google_emp: 'Google Employee',
+  basyef: 'break 3ashan basyef',
+  nini: 'nini nini nih',
 };
 
 export const AVATAR_IDS = AVATARS;

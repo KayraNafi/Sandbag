@@ -127,6 +127,7 @@ export const AVATARS = [
   ...STARTERS, 'bahgat', 'shakal',
   'fady', 'cd_og', 'haigan', 'shabab', 'qodwa', 'obama', 'bombom', 'gb8', 'shokran',
   'baddie', 'ten_cm',
+  'referee', 'google_emp', 'basyef', 'nini',
 ] as const;
 export type AvatarId = (typeof AVATARS)[number];
 
