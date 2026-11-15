@@ -126,6 +126,7 @@ const STARTERS = [
 export const AVATARS = [
   ...STARTERS, 'bahgat', 'shakal',
   'fady', 'cd_og', 'haigan', 'shabab', 'qodwa', 'obama', 'bombom', 'gb8', 'shokran',
+  'baddie', 'ten_cm',
 ] as const;
 export type AvatarId = (typeof AVATARS)[number];
 
