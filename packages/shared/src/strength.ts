@@ -1,7 +1,7 @@
 import type { Entry } from './schemas';
 
-/** Past this many reps the estimate stops meaning much, and 50 light reps shouldn't look like a heavy single. */
-const MAX_ESTIMATE_REPS = 12;
+/** Past this many reps the estimate stops meaning much, and 50 light reps shouldn't look like a heavy single. High enough that a 12-to-15 rep block still shows its progress. */
+const MAX_ESTIMATE_REPS = 20;
 /** Above every record on purpose, so nobody real is ever doubted. Past it, a number is a joke or a typo. */
 const BELIEVABLE_MAX = 1500;
 /** 500 kg for 40 reps, in one set. */

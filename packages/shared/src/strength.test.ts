@@ -7,9 +7,10 @@ const entry = (name: string, weight: number | null, reps: number | null, extra: 
 });
 
 describe('estimatedMax', () => {
-  it('counts more reps at the same weight as stronger, up to 12', () => {
+  it('counts more reps at the same weight as stronger, up to 20', () => {
     expect(estimatedMax(60, 10)).toBeGreaterThan(estimatedMax(60, 8));
-    expect(estimatedMax(60, 20)).toBe(estimatedMax(60, 12));
+    expect(estimatedMax(100, 15)).toBeGreaterThan(estimatedMax(100, 12));
+    expect(estimatedMax(60, 50)).toBe(estimatedMax(60, 20));
     expect(estimatedMax(100, 1)).toBe(100);
     expect(estimatedMax(100, null)).toBe(100);
   });
