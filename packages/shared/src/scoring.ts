@@ -222,9 +222,14 @@ export function weekStreak(dates: string[], goals: Goals, today: string): Streak
 
 /** All of a week's bonuses together can't add more than this, so habits never outweigh training. */
 export const MAX_WEEK_BONUS = 15;
-/** Streak lengths that pay, longest first, and what each pays by goal. Bigger goals earn a little more. */
+/** Streak lengths that pay, longest first, and what each pays. */
 const STREAK_WEEKS = [12, 8, 4, 2];
-const STREAK_PAY: Record<number, number[]> = { 2: [4, 3, 2, 1], 3: [6, 4, 3, 1], 4: [8, 6, 4, 2] };
+/**
+ * The same from a goal of 3 up: three full-body days are as much training as a six-day split,
+ * so more days a week earn no more. A goal under 3 really is less training, and earns less.
+ */
+const STREAK_PAY = [6, 4, 3, 1];
+const SMALL_GOAL_STREAK_PAY = [4, 3, 2, 1];
 const COMEBACK_BONUS = 3;
 const OVER_GOAL_BONUS = 2;
 const NEW_BEST_BONUS = 2;
@@ -234,7 +239,7 @@ const NEW_BEST_HISTORY = 2;
 
 export function streakBonus(weeks: number, goal: number): number {
   const tier = STREAK_WEEKS.findIndex((length) => weeks >= length);
-  return tier < 0 ? 0 : STREAK_PAY[Math.min(Math.max(goal, 2), 4)]![tier]!;
+  return tier < 0 ? 0 : (goal < MIN_GOAL ? SMALL_GOAL_STREAK_PAY : STREAK_PAY)[tier]!;
 }
 
 export interface WeekBonuses {

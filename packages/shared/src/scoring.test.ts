@@ -202,12 +202,14 @@ describe('weekBonuses', () => {
     expect(weekBonuses(caughtUp, 3, TODAY).streak).toBe(0);
   });
 
-  it('pays a streak more the longer it runs and the bigger the goal', () => {
+  it('pays a streak more the longer it runs, the same for any goal from 3 up', () => {
     expect(streakBonus(1, 3)).toBe(0);
     expect(streakBonus(2, 3)).toBe(1);
     expect(streakBonus(4, 3)).toBe(3);
     expect(streakBonus(12, 3)).toBe(6);
-    expect(streakBonus(4, 4)).toBe(4);
+    expect(streakBonus(4, 6)).toBe(3);
+    expect(streakBonus(12, 6)).toBe(6);
+    expect(streakBonus(4, 2)).toBe(2);
   });
 
   it('pays a comeback after a missed week, but not to someone brand new', () => {
@@ -231,12 +233,13 @@ describe('weekBonuses', () => {
   });
 
   it('caps the total', () => {
-    const long = trained(['2026-08-03', '2026-08-10', '2026-08-17', '2026-08-24', '2026-08-31', '2026-09-07', '2026-09-14', '2026-09-21', '2026-09-28', '2026-10-05', '2026-10-12', '2026-10-19']
+    // Twelve weeks on target, then a missed week a shield saves: a long streak and a comeback at once.
+    const long = trained(['2026-07-27', '2026-08-03', '2026-08-10', '2026-08-17', '2026-08-24', '2026-08-31', '2026-09-07', '2026-09-14', '2026-09-21', '2026-09-28', '2026-10-05', '2026-10-12']
       .flatMap((monday) => week(monday, 4)));
     const threeLifts = (date: string, weight: number) => ({ date, entries: ['Bench', 'Squat', 'Row'].map((name) => ({ ...lift(weight), id: name, name })) });
     const history = long.map((workout) => threeLifts(workout.date, 50));
     const bonuses = weekBonuses([...history, ...week('2026-10-26', 5).map((date) => threeLifts(date, 60))], 4, TODAY);
-    expect(bonuses.streak + bonuses.overGoal + bonuses.newBests).toBeGreaterThan(15);
+    expect(bonuses.streak + bonuses.comeback + bonuses.overGoal + bonuses.newBests).toBeGreaterThan(15);
     expect(bonuses.total).toBe(15);
   });
 });
