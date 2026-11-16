@@ -70,8 +70,8 @@ describe('runningStats', () => {
   });
 
   it('pays nothing for a run logged more than 2 days late', () => {
-    expect(runningStats([{ ...run('2026-10-26', 10, 50), loggedOn: '2026-10-29' }], '2026-10-26', TODAY).km).toBe(0);
-    expect(runningStats([{ ...run('2026-10-26', 10, 50), loggedOn: '2026-10-28' }], '2026-10-26', TODAY).km).toBe(10);
+    expect(runningStats([{ ...run('2026-12-14', 10, 50), loggedOn: '2026-12-17' }], '2026-12-14', '2026-12-18').km).toBe(0);
+    expect(runningStats([{ ...run('2026-12-14', 10, 50), loggedOn: '2026-12-16' }], '2026-12-14', '2026-12-18').km).toBe(10);
   });
 
   it('leaves out the impossible', () => {

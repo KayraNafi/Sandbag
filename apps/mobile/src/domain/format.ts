@@ -1,4 +1,4 @@
-import { DAY_MS, hasSetWeights, setsOf, type Entry } from '@sandbag/shared';
+import { DAY_MS, hasSetWeights, ON_TIME_DAYS, onTime, setsOf, type Entry } from '@sandbag/shared';
 
 const pad = (value: number) => String(value).padStart(2, '0');
 
@@ -23,6 +23,13 @@ export function backfillDates(from: string = today()): string[] {
   return Array.from({ length: BACKFILL_DAYS + 1 }, (_, back) =>
     toIsoDate(new Date(start.getFullYear(), start.getMonth(), start.getDate() - back)));
 }
+
+/** Older days can still be logged, for the history, but only these few earn points. */
+export const PICK_DAY = `Forgot to log one? Pick the day you trained. Up to ${ON_TIME_DAYS} days back still earns points.`;
+export const HISTORY_ONLY = 'History only: logged this late, it earns no points.';
+
+/** Whether something for that day, logged today, will score. */
+export const earnsPoints = (iso: string, from: string = today()) => onTime(iso, from);
 
 export function dayLabel(iso: string, from: string = today()): string {
   const [current, yesterday] = backfillDates(from);

@@ -9,7 +9,7 @@ import { SupersetList } from '@/components/Superset';
 import { Button, Chip, Field, Label, Muted, Row } from '@/components/ui';
 import { jumpFor, JUMPS, usePrefs } from '@/data/prefs';
 import { useData } from '@/data/store';
-import { backfillDates, dayLabel, num } from '@/domain/format';
+import { backfillDates, dayLabel, earnsPoints, HISTORY_ONLY, num, PICK_DAY } from '@/domain/format';
 import { activeLogged, buildHistory, recentWeights, type Draft, type DraftEntry } from '@/domain/history';
 import { setAt, ticksOf, warmupSets, withSetCount, withSetValue } from '@/domain/sets';
 import { colors, fonts, radius, space } from '@/theme';
@@ -147,10 +147,11 @@ export function WorkoutSheet({ visible, draft, finishLabel, onFinish, onRename, 
       {!draft.editing ? (
         <>
           <Label>Which day?</Label>
-          <Muted>Forgot to log one? Pick the day you trained.</Muted>
+          <Muted>{PICK_DAY}</Muted>
           <Row style={styles.wrap}>
             {backfillDates().map((date) => <Chip key={date} title={dayLabel(date)} active={date === draft.date} onPress={() => onRedate(date)} />)}
           </Row>
+          {earnsPoints(draft.date) ? null : <Muted>{HISTORY_ONLY}</Muted>}
         </>
       ) : null}
       {draft.entries.length > 1 ? (

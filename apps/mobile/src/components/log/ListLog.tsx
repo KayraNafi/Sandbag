@@ -11,7 +11,7 @@ import { Button, Card, Chip, Field, Label, MoveButtons, Muted, NumberField, Row,
 import { reactionTo } from '@/data/actions';
 import { jumpFor, usePrefs } from '@/data/prefs';
 import { useData } from '@/data/store';
-import { agoText, backfillDates, dayLabel, num, summary } from '@/domain/format';
+import { agoText, backfillDates, dayLabel, earnsPoints, HISTORY_ONLY, num, PICK_DAY, summary } from '@/domain/format';
 import { activeLogged, buildHistory, lastLogged, recentWeights, type Draft, type DraftEntry } from '@/domain/history';
 import { canMarkDrops, canVary, hasDrops, perSetLists, varies, withDone, withLastDrop, withSetCount, withSetValue, withVarying } from '@/domain/sets';
 import { colors, fonts, radius, space } from '@/theme';
@@ -56,7 +56,7 @@ function WorkoutHeader({ draft, done, chips, onRename, onRedate }: {
       </Row>
       {pickingDate ? (
         <>
-          <Muted>Forgot to log one? Pick the day you trained.</Muted>
+          <Muted>{PICK_DAY}</Muted>
           <Row style={styles.wrap}>
             {backfillDates().map((date) => (
               <Chip key={date} title={dayLabel(date)} active={date === draft.date} onPress={() => {
@@ -67,6 +67,7 @@ function WorkoutHeader({ draft, done, chips, onRename, onRedate }: {
           </Row>
         </>
       ) : null}
+      {!draft.editing && !earnsPoints(draft.date) ? <Muted>{HISTORY_ONLY}</Muted> : null}
     </>
   );
 }

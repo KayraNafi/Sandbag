@@ -6,7 +6,7 @@ import { toast } from '@/components/Toast';
 import { Button, Chip, Field, Label, Muted, NumberField, Row, Screen, Segmented, Title } from '@/components/ui';
 import { deleteRun, saveRun } from '@/data/actions';
 import { useData } from '@/data/store';
-import { backfillDates, dayLabel, today } from '@/domain/format';
+import { backfillDates, dayLabel, earnsPoints, HISTORY_ONLY, today } from '@/domain/format';
 import { activeRuns, fromSeconds, pace, pbLine, pointsLine, runTitle, toSeconds, type Effort } from '@/domain/runs';
 import { leave } from '@/nav';
 import { colors, fonts, space } from '@/theme';
@@ -101,6 +101,8 @@ export default function RunScreen() {
         <Row style={styles.wrap}>
           {dates.map((day) => <Chip key={day} title={dayLabel(day)} active={day === date} onPress={() => setDate(day)} />)}
         </Row>
+        {/* The phone doesn't know when an old run first reached the server, so only a new one is judged here. */}
+        {!existing && !earnsPoints(date) ? <Muted>{HISTORY_ONLY}</Muted> : null}
       </View>
 
       <Field label="Note" placeholder="Route, weather, excuses" maxLength={200} value={note} onChangeText={setNote} />

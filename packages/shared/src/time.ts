@@ -8,8 +8,12 @@ export const daysBetween = (fromIso: string, toIso: string) => Math.round(dayNum
 /** How many days after its date a session or run can still be logged and earn points: last night's is fine, a week's catch-up isn't. */
 export const ON_TIME_DAYS = 2;
 
+/** The day the rule began. Whatever was already in by then scores as it did when it was logged, since the app allowed it. */
+export const ON_TIME_FROM = '2026-11-16';
+
 /** Logged by the end of the second day after its date, on the owner's calendar. With no server date to go by, it's on time. */
-export const onTime = (date: string, loggedOn?: string | null) => loggedOn == null || daysBetween(date, loggedOn) <= ON_TIME_DAYS;
+export const onTime = (date: string, loggedOn?: string | null) =>
+  loggedOn == null || loggedOn < ON_TIME_FROM || daysBetween(date, loggedOn) <= ON_TIME_DAYS;
 
 export const addDays = (iso: string, days: number) => new Date(Date.parse(`${iso}T00:00:00Z`) + days * DAY_MS).toISOString().slice(0, 10);
 

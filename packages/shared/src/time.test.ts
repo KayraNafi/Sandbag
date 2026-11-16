@@ -1,5 +1,19 @@
 import { describe, expect, it } from 'vitest';
-import { canonicalZone, dateIn, dayOfWeek, mondayOf } from './time';
+import { canonicalZone, dateIn, dayOfWeek, mondayOf, onTime } from './time';
+
+describe('onTime', () => {
+  it('allows 2 days after the date', () => {
+    expect(onTime('2026-12-15', '2026-12-17')).toBe(true);
+    expect(onTime('2026-12-15', '2026-12-18')).toBe(false);
+  });
+
+  it('leaves alone whatever was logged before the rule began, and anything the server never dated', () => {
+    expect(onTime('2026-11-03', '2026-11-10')).toBe(true);
+    expect(onTime('2026-11-03', '2026-11-15')).toBe(true);
+    expect(onTime('2026-11-03', '2026-11-16')).toBe(false);
+    expect(onTime('2026-11-03')).toBe(true);
+  });
+});
 
 describe('dateIn', () => {
   const lateSundayInNewYork = new Date('2026-11-02T01:00:00Z');
