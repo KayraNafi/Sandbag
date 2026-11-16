@@ -21,10 +21,12 @@ const CALL_LOOKBACK_DAYS = 32;
 export async function crewTable(db: DbOrTx, userId: string, period: RankingPeriod): Promise<RankingRow[]> {
   const crew = [userId, ...(await friendIds(db, userId))];
   const people = await db.select().from(users).where(inArray(users.id, crew));
-  const workouts = await db.select({ ownerId: loggedWorkouts.ownerId, date: loggedWorkouts.date, entries: loggedWorkouts.entries, recordedAt: loggedWorkouts.recordedAt })
+  const workouts = await db.select({
+    ownerId: loggedWorkouts.ownerId, date: loggedWorkouts.date, entries: loggedWorkouts.entries, loggedAt: loggedWorkouts.loggedAt, recordedAt: loggedWorkouts.recordedAt,
+  })
     .from(loggedWorkouts)
     .where(and(inArray(loggedWorkouts.ownerId, crew), eq(loggedWorkouts.deleted, false)));
-  const crewRuns = await db.select({ ownerId: runs.ownerId, date: runs.date, activity: runs.activity, distanceKm: runs.distanceKm, seconds: runs.seconds })
+  const crewRuns = await db.select({ ownerId: runs.ownerId, date: runs.date, activity: runs.activity, distanceKm: runs.distanceKm, seconds: runs.seconds, loggedAt: runs.loggedAt })
     .from(runs)
     .where(and(inArray(runs.ownerId, crew), eq(runs.deleted, false)));
   const now = new Date();
@@ -33,9 +35,12 @@ export async function crewTable(db: DbOrTx, userId: string, period: RankingPerio
   const rows = people.map((person) => {
     const day = dateIn(person.timeZone, now);
     const goals = goalsOf(person);
+    // Read on their own calendar, so on time means by their own midnight.
+    const on = (at: Date) => dateIn(person.timeZone, at);
     const own = {
-      workouts: workouts.filter((workout) => workout.ownerId === person.id),
-      runs: crewRuns.filter((run) => run.ownerId === person.id),
+      workouts: workouts.filter((workout) => workout.ownerId === person.id)
+        .map((workout) => ({ date: workout.date, entries: workout.entries, loggedOn: on(workout.loggedAt), recordedOn: on(workout.recordedAt) })),
+      runs: crewRuns.filter((run) => run.ownerId === person.id).map((run) => ({ ...run, loggedOn: on(run.loggedAt) })),
     };
     // Running has no goal, so only the gym makes a streak, and only the gym counts days trained.
     const streak = weekStreak(trainedDates(own.workouts), goals, day);

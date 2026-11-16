@@ -69,6 +69,11 @@ describe('runningStats', () => {
     expect(runningStats(lastWeekToo, '2026-10-01', TODAY).pace).toBe(40);
   });
 
+  it('pays nothing for a run logged more than 2 days late', () => {
+    expect(runningStats([{ ...run('2026-10-26', 10, 50), loggedOn: '2026-10-29' }], '2026-10-26', TODAY).km).toBe(0);
+    expect(runningStats([{ ...run('2026-10-26', 10, 50), loggedOn: '2026-10-28' }], '2026-10-26', TODAY).km).toBe(10);
+  });
+
   it('leaves out the impossible', () => {
     expect(runningStats([run('2026-10-27', 10, 10)], '2026-10-26', TODAY)).toEqual({ km: 0, distance: 0, pace: 0, points: 0 });
   });

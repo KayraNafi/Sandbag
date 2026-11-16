@@ -5,6 +5,12 @@ const dayNumber = (iso: string) => Date.parse(`${iso}T00:00:00Z`) / DAY_MS;
 
 export const daysBetween = (fromIso: string, toIso: string) => Math.round(dayNumber(toIso) - dayNumber(fromIso));
 
+/** How many days after its date a session or run can still be logged and earn points: last night's is fine, a week's catch-up isn't. */
+export const ON_TIME_DAYS = 2;
+
+/** Logged by the end of the second day after its date, on the owner's calendar. With no server date to go by, it's on time. */
+export const onTime = (date: string, loggedOn?: string | null) => loggedOn == null || daysBetween(date, loggedOn) <= ON_TIME_DAYS;
+
 export const addDays = (iso: string, days: number) => new Date(Date.parse(`${iso}T00:00:00Z`) + days * DAY_MS).toISOString().slice(0, 10);
 
 /** Days so far in that day's Monday-to-Sunday week: 1 on a Monday, 7 on a Sunday. */

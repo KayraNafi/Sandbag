@@ -183,7 +183,9 @@ await callSandbag(dex.token, roccoPost.id, 'Cable curls', 'With that note? Do it
 
 // The crew's history arrived just now through sync, but in the story it was logged on the day.
 const crewIds = (await db.select({ id: schema.users.id }).from(schema.users).where(inArray(schema.users.username, CREW.map((person) => person.username)))).map((row) => row.id);
-await db.update(schema.loggedWorkouts).set({ recordedAt: sql`${schema.loggedWorkouts.date}::timestamptz` }).where(inArray(schema.loggedWorkouts.ownerId, crewIds));
+await db.update(schema.loggedWorkouts).set({ loggedAt: sql`${schema.loggedWorkouts.date}::timestamptz`, recordedAt: sql`${schema.loggedWorkouts.date}::timestamptz` })
+  .where(inArray(schema.loggedWorkouts.ownerId, crewIds));
+await db.update(schema.runs).set({ loggedAt: sql`${schema.runs.date}::timestamptz` }).where(inArray(schema.runs.ownerId, crewIds));
 
 const table = await call<RankingRow[]>('GET', '/rankings?period=week', myToken);
 for (const row of table) console.log(row.rank, row.user.displayName, `${row.score} pts`, `progress ${row.progress}%`, `${row.workouts}/${row.target}`, `streak ${row.streak}`, row.wearingSandbag ? 'SANDBAG' : '');

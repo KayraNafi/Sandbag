@@ -32,7 +32,8 @@ export async function saveLogged(tx: Tx, user: { id: string; displayName: string
       continue;
     }
     const unchanged = existing && numbersOf(existing.entries) === numbersOf(doc.entries);
-    const values = { ...doc, ownerId: user.id, seq: nextSeq(), recordedAt: unchanged ? existing.recordedAt : new Date() };
+    const now = new Date();
+    const values = { ...doc, ownerId: user.id, seq: nextSeq(), loggedAt: existing?.loggedAt ?? now, recordedAt: unchanged ? existing.recordedAt : now };
     await tx.insert(loggedWorkouts).values(values).onConflictDoUpdate({ target: [loggedWorkouts.ownerId, loggedWorkouts.id], set: values });
     written += 1;
     await callsOnSave(tx, user, existing ? toLogged(existing) : null, doc);

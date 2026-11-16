@@ -55,7 +55,9 @@ export const loggedWorkouts = pgTable('logged_workouts', {
   updatedAt: bigint('updated_at', { mode: 'number' }).notNull(),
   deleted: boolean('deleted').notNull().default(false),
   seq: bigint('seq', { mode: 'number' }).notNull(),
-  // The server's clock, unlike updatedAt: when these numbers last changed. Written up long after its date, a session can't set a best.
+  // The server's clock, unlike updatedAt: when the session first arrived. Logged too long after its date, it earns no points.
+  loggedAt: timestamp('logged_at', { withTimezone: true }).notNull().defaultNow(),
+  // When these numbers last changed. Written up too long after its date, a session can't set a best.
   recordedAt: timestamp('recorded_at', { withTimezone: true }).notNull().defaultNow(),
 }, (t) => [
   primaryKey({ columns: [t.ownerId, t.id] }),
@@ -73,6 +75,8 @@ export const runs = pgTable('runs', {
   note: text('note').notNull(),
   updatedAt: bigint('updated_at', { mode: 'number' }).notNull(),
   deleted: boolean('deleted').notNull().default(false),
+  // The server's clock: when the run first arrived. Logged too long after its date, it earns no points.
+  loggedAt: timestamp('logged_at', { withTimezone: true }).notNull().defaultNow(),
   seq: bigint('seq', { mode: 'number' }).notNull(),
 }, (t) => [
   primaryKey({ columns: [t.ownerId, t.id] }),

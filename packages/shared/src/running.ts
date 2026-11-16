@@ -1,12 +1,15 @@
 import type { Activity, Run } from './schemas';
-import { mondayOf } from './time';
+import { mondayOf, onTime } from './time';
 
 /**
  * Running is scored apart from the gym. It has no goal, no streak and no consistency: people run when
  * there's a race or a long run, not on a schedule. It pays when it happens, for the distance and for the
  * pace, and unlike lifting the pace is scored as it is, not against your own history.
  */
-export type ScoringRun = Pick<Run, 'date' | 'activity' | 'distanceKm' | 'seconds'>;
+export type ScoringRun = Pick<Run, 'date' | 'activity' | 'distanceKm' | 'seconds'> & {
+  /** The owner's date when the server first saw the run. Logged late, it's history and pays nothing. */
+  loggedOn?: string | null;
+};
 /** What one run is, whatever day it was. */
 type Effort = Pick<Run, 'activity' | 'distanceKm' | 'seconds'>;
 
@@ -70,7 +73,7 @@ export function runningStats(runs: ScoringRun[], from: string | null, to: string
   const weeks = new Map<string, { distance: number; pace: number }>();
   let km = 0;
   for (const run of runs) {
-    if ((from !== null && run.date < from) || run.date > to || !believable(run)) continue;
+    if ((from !== null && run.date < from) || run.date > to || !believable(run) || !onTime(run.date, run.loggedOn)) continue;
     km += run.distanceKm;
     const week = weeks.get(mondayOf(run.date)) ?? { distance: 0, pace: 0 };
     weeks.set(mondayOf(run.date), { distance: week.distance + distancePoints(run), pace: week.pace + pacePoints(run) });

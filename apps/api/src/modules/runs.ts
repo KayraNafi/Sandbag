@@ -19,7 +19,7 @@ export async function saveRuns(tx: Tx, userId: string, docs: Run[]): Promise<{ r
       if (existing.updatedAt > doc.updatedAt) rejected.push(toRun(existing));
       continue;
     }
-    const values = { ...doc, ownerId: userId, seq: nextSeq() };
+    const values = { ...doc, ownerId: userId, seq: nextSeq(), loggedAt: existing?.loggedAt ?? new Date() };
     await tx.insert(runs).values(values).onConflictDoUpdate({ target: [runs.ownerId, runs.id], set: values });
     written += 1;
   }

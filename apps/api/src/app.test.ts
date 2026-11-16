@@ -1,6 +1,6 @@
 import { PGlite } from '@electric-sql/pglite';
 import { addDays, mondayOf, type ApiKeyView, type AuthResponse, type CallView, type NotificationView, type TrophyView, type Entry, type InviteSummary, type DataExport, type LoggedWorkout, type Me, type PostRef, type PostView, type RankingRow, type Run, type SyncResponse } from '@sandbag/shared';
-import { eq } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/pglite';
 import { migrate } from 'drizzle-orm/pglite/migrator';
 import type { FastifyInstance } from 'fastify';
@@ -668,11 +668,29 @@ describe('goals and time zones', () => {
     const founder = await register('founder', BOOTSTRAP);
     const weeksAgo = addDays(todayIso(), -21);
     await sync(founder.token, 0, [logged('old', [entry('Row', 50)], { date: weeksAgo }), logged('new', [entry('Row', 50)])]);
+    await loggedOnTheDay();
     const [week] = (await call<RankingRow[]>('GET', '/rankings?period=week', founder.token)).body;
     const [all] = (await call<RankingRow[]>('GET', '/rankings?period=all', founder.token)).body;
     expect(all?.workouts).toBe(2);
     expect(all?.bonuses).toBeNull();
     expect(all?.score).toBeGreaterThan(week?.score ?? 0);
+  });
+});
+
+/** History that arrived just now through sync but, in the story, was logged on the day it claims. */
+const loggedOnTheDay = () => db.update(schema.loggedWorkouts)
+  .set({ loggedAt: sql`${schema.loggedWorkouts.date}::timestamptz`, recordedAt: sql`${schema.loggedWorkouts.date}::timestamptz` });
+
+describe('logged late', () => {
+  it('scores a session only when it arrived within 2 days of its date, and an edit can’t change that', async () => {
+    const founder = await register('founder', BOOTSTRAP);
+    const days = async () => (await call<RankingRow[]>('GET', '/rankings?period=month', founder.token)).body[0]?.workouts;
+    const caughtUp = logged('w3', [entry('Row', 50)], { date: addDays(todayIso(), -3), updatedAt: 1000 });
+    await sync(founder.token, 0, [logged('w2', [entry('Row', 50)], { date: addDays(todayIso(), -2) }), caughtUp]);
+    expect(await days()).toBe(1);
+    await db.update(schema.loggedWorkouts).set({ loggedAt: sql`${schema.loggedWorkouts.date}::timestamptz` }).where(eq(schema.loggedWorkouts.id, 'w3'));
+    await sync(founder.token, 0, [{ ...caughtUp, entries: [entry('Row', 55)], updatedAt: 2000 }]);
+    expect(await days()).toBe(2);
   });
 });
 
@@ -710,6 +728,7 @@ describe('streaks and trophies', () => {
     // Three days last week. Three sessions in one day would be one day trained.
     const lastMonday = addDays(mondayOf(todayIso()), -7);
     await sync(founder.token, 0, ['a', 'b', 'c'].map((id, day) => logged(id, [entry('Curl', 10)], { date: addDays(lastMonday, day) })));
+    await loggedOnTheDay();
     const rows = await call<RankingRow[]>('GET', '/rankings?period=week', founder.token);
     expect(rows.body[0]?.streak).toBe(1);
   });

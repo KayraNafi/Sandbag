@@ -1,4 +1,4 @@
-import { CALL_POINTS, MAX_WEEK_BONUS, MAX_WEEK_DISTANCE_POINTS, MAX_WEEK_PACE_POINTS, MAX_WEEKLY_CALL_POINTS, WEEKS_PER_SHIELD } from '@sandbag/shared';
+import { CALL_POINTS, MAX_WEEK_BONUS, MAX_WEEK_DISTANCE_POINTS, MAX_WEEK_PACE_POINTS, MAX_WEEKLY_CALL_POINTS, ON_TIME_DAYS, WEEKS_PER_SHIELD } from '@sandbag/shared';
 import { StyleSheet, Text, View } from 'react-native';
 import { Card, Heading, Muted, Screen } from '@/components/ui';
 import { signedPoints } from '@/domain/format';
@@ -52,6 +52,14 @@ const SECTIONS: { title: string; note?: string; lines: string[] }[] = [
       `Double for getting caught: ${signedPoints(CALL_POINTS.caught.target)}.`,
       `${signedPoints(CALL_POINTS.cleared.caller)} for calling someone wrong.`,
       'Counted in the period the call settles.',
+    ],
+  },
+  {
+    title: 'Logging late',
+    lines: [
+      `A session or run earns points only if it's logged within ${ON_TIME_DAYS} days of its date.`,
+      'Logged later, it stays in your history and earns nothing.',
+      `New numbers written into a session after those ${ON_TIME_DAYS} days can't set a best.`,
     ],
   },
   {

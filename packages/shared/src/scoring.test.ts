@@ -12,7 +12,7 @@ describe('periodStats', () => {
   const lift = (name: string, weight: number | null, extra: Partial<Entry> = {}): Entry => ({
     id: name, name, kind: 'strength', sets: 3, reps: 8, weight, perSide: false, rpe: null, minutes: null, note: '', ...extra,
   });
-  const session = (date: string, entries: Entry[], recordedAt?: Date): ScoringWorkout => ({ date, entries, ...(recordedAt ? { recordedAt } : {}) });
+  const session = (date: string, entries: Entry[], stamps: Pick<ScoringWorkout, 'loggedOn' | 'recordedOn'> = {}): ScoringWorkout => ({ date, entries, ...stamps });
   /** Three ordinary weeks of a lift before this one, so no new-lift cap applies. */
   const history = (name: string, weight: number) => ['2026-10-06', '2026-10-13', '2026-10-20'].map((date) => session(date, [lift(name, weight)]));
   const progressOf = (workouts: ScoringWorkout[]) => periodStats(workouts, 'week', 3, TODAY).progress;
@@ -50,11 +50,19 @@ describe('periodStats', () => {
     expect(progressOf([...perSide, session('2026-10-27', [lift('Bench', 100)])])).toBe(0);
   });
 
-  it('doesn’t let a session written up long after its day set a best or a baseline', () => {
-    const late = session('2026-10-27', [lift('Bench', 150)], new Date('2026-11-06T12:00:00Z'));
+  it('doesn’t let numbers written down more than 2 days after their day set a best or a baseline', () => {
+    const late = session('2026-10-27', [lift('Bench', 150)], { recordedOn: '2026-10-30' });
     expect(progressOf([...history('Bench', 100), late])).toBe(0);
-    const lateBase = session('2026-10-13', [lift('Bench', 200)], new Date('2026-10-29T12:00:00Z'));
+    const lateBase = session('2026-10-13', [lift('Bench', 200)], { recordedOn: '2026-10-29' });
     expect(progressOf([...history('Bench', 100), lateBase, session('2026-10-27', [lift('Bench', 105)])])).toBe(5);
+    expect(progressOf([...history('Bench', 100), session('2026-10-27', [lift('Bench', 105)], { recordedOn: '2026-10-29' })])).toBe(5);
+  });
+
+  it('counts a day trained only when it was logged within 2 days', () => {
+    const days = (loggedOn: string) => periodStats([session('2026-10-27', [lift('Row', 50)], { loggedOn })], 'week', 3, TODAY).workouts;
+    expect(days('2026-10-27')).toBe(1);
+    expect(days('2026-10-29')).toBe(1);
+    expect(days('2026-10-30')).toBe(0);
   });
 
   it('runs Monday to Sunday', () => {
@@ -186,6 +194,13 @@ describe('weekBonuses', () => {
     return date.toISOString().slice(0, 10);
   });
   const TODAY = '2026-10-30';
+
+  it('builds no streak from a week caught up all at once', () => {
+    const onTime = [...trained(week('2026-10-19', 3)), ...trained(week('2026-10-26', 3))];
+    expect(weekBonuses(onTime, 3, TODAY).streak).toBe(1);
+    const caughtUp = onTime.map((workout) => (workout.date < '2026-10-26' ? { ...workout, loggedOn: '2026-10-26' } : workout));
+    expect(weekBonuses(caughtUp, 3, TODAY).streak).toBe(0);
+  });
 
   it('pays a streak more the longer it runs and the bigger the goal', () => {
     expect(streakBonus(1, 3)).toBe(0);

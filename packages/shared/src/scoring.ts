@@ -1,7 +1,7 @@
 import { weekRunning, type ScoringRun } from './running';
 import type { Entry, Period } from './schemas';
 import { entryMax, entrySetup, hasWork } from './strength';
-import { addDays, DAY_MS, daysBetween, dayOfWeek, mondayOf } from './time';
+import { addDays, daysBetween, dayOfWeek, mondayOf, onTime } from './time';
 
 export const PERIOD_DAYS: Record<Period, number> = { week: 7, month: 30 };
 
@@ -12,8 +12,6 @@ const MAX_LIFT_CHANGE = 25;
 const NEW_LIFT_CHANGE = [5, 5, 10];
 /** Your best of these days before the period is the number to beat, so a tanked week can't set up an easy gain. */
 const BASELINE_DAYS = 28;
-/** The app can backfill a week. A number written down later than this can't be anyone's best. */
-const MAX_BACKDATE_DAYS = 8;
 /** Consistency is measured against at least this many days a week, so a goal of 1 can't be full marks. */
 const MIN_GOAL = 3;
 
@@ -58,8 +56,10 @@ export const periodDays = (period: Period, today: string) => (period === 'week' 
 
 export interface ScoringWorkout {
   date: string;
-  /** When the server last saw these numbers change. Phones can't set it. */
-  recordedAt?: Date | null;
+  /** The owner's date when the server first saw this session. Phones can't set it. */
+  loggedOn?: string | null;
+  /** The owner's date when the server last saw these numbers change. */
+  recordedOn?: string | null;
   entries: Entry[];
 }
 
@@ -82,15 +82,13 @@ export function exerciseKey(name: string): string {
 
 const roundOne = (value: number) => Math.round(value * 10) / 10;
 
-/** The days someone really trained, once each however many sessions a day held. */
-export function trainedDates(workouts: Pick<ScoringWorkout, 'date' | 'entries'>[]): string[] {
-  return [...new Set(workouts.filter((workout) => workout.entries.some(hasWork)).map((workout) => workout.date))];
+/** The days someone really trained, once each however many sessions a day held. A session logged late is history, not a day that scores. */
+export function trainedDates(workouts: Pick<ScoringWorkout, 'date' | 'entries' | 'loggedOn'>[]): string[] {
+  return [...new Set(workouts.filter((workout) => workout.entries.some(hasWork) && onTime(workout.date, workout.loggedOn)).map((workout) => workout.date))];
 }
 
-/** Written up long after the day it claims, so it can't set a best or a baseline. */
-function backdated(workout: ScoringWorkout): boolean {
-  return workout.recordedAt != null && workout.recordedAt.getTime() - Date.parse(`${workout.date}T00:00:00Z`) > MAX_BACKDATE_DAYS * DAY_MS;
-}
+/** Numbers written down late, by a late log or a late edit, can't set a best, a baseline or a gain. */
+const numbersOnTime = (workout: ScoringWorkout) => onTime(workout.date, workout.recordedOn);
 
 /**
  * Raw weight is unfair across gyms and machines, so progress is the average change in
@@ -105,13 +103,14 @@ export function periodStats(workouts: ScoringWorkout[], period: Period, goals: G
   const inPeriod = (date: string) => daysBetween(date, today) < days && daysBetween(date, today) >= -1;
   const inBaseline = (date: string) => daysBetween(date, today) >= days && daysBetween(date, today) < days + BASELINE_DAYS;
 
-  const logs = new Map<string, { date: string; max: number; setup: string; trusted: boolean }[]>();
+  const logs = new Map<string, { date: string; max: number; setup: string }[]>();
   for (const workout of ordered) {
+    if (!numbersOnTime(workout)) continue;
     for (const entry of workout.entries) {
       const max = entryMax(entry);
       if (max === null) continue;
       const key = exerciseKey(entry.name);
-      logs.set(key, [...(logs.get(key) ?? []), { date: workout.date, max, setup: entrySetup(entry), trusted: !backdated(workout) }]);
+      logs.set(key, [...(logs.get(key) ?? []), { date: workout.date, max, setup: entrySetup(entry) }]);
     }
   }
 
@@ -120,7 +119,7 @@ export function periodStats(workouts: ScoringWorkout[], period: Period, goals: G
     const latest = log.filter((item) => inPeriod(item.date)).at(-1);
     if (!latest) continue;
     // Only weights weighed the same way compare.
-    const alike = log.filter((item) => item.setup === latest.setup && item.trusted);
+    const alike = log.filter((item) => item.setup === latest.setup);
     const before = alike.filter((item) => daysBetween(item.date, today) >= days);
     const recent = before.filter((item) => inBaseline(item.date));
     const during = alike.filter((item) => inPeriod(item.date));
@@ -264,7 +263,7 @@ export function weekBonuses(workouts: ScoringWorkout[], goals: Goals, today: str
   const bests = new Map<string, { max: number; sessions: number }>();
   const beaten = new Set<string>();
   for (const workout of [...workouts].sort((a, b) => a.date.localeCompare(b.date))) {
-    if (workout.date > today || backdated(workout)) continue;
+    if (workout.date > today || !numbersOnTime(workout)) continue;
     // A lift logged twice in one session is still one session of history.
     const session = new Map<string, { lift: string; max: number }>();
     for (const entry of workout.entries) {
