@@ -51,6 +51,7 @@ export const voice = {
   overLimit: (limit: string) => `Capped at ${limit}. We still don’t believe you.`,
   finished: () => 'Logged. Screenshots or it didn’t happen, except we have the data.',
   noBest: () => 'No new bests. A very safe day at the office.',
+  wrappedReady: () => 'See what you actually did, not what you told people.',
   quiet: (days: number) => `It’s been ${days} days. The machines have stopped asking about you.`,
   overtaken: (name: string) => `${name} just overtook you. Thought you’d want to know.`,
   callCleared: (name: string, exercise: string) => `${name} beat your call on ${exercise}. Awkward.`,

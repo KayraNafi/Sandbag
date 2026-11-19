@@ -1,6 +1,6 @@
 import type { Entry, LoggedWorkout, Run } from '@sandbag/shared';
 import { describe, expect, it } from 'vitest';
-import { runCard, streakOn, workoutCard } from './card';
+import { runCard, streakOn, workoutCard, wrappedCard } from './card';
 import { buildHistory } from './history';
 
 const entry = (name: string, weight: number | null, extra: Partial<Entry> = {}): Entry => ({
@@ -61,5 +61,25 @@ describe('the streak on a card', () => {
     const weeks = ['2026-10-20', '2026-10-21', '2026-10-27', '2026-10-28', '2026-11-03', '2026-11-04'].map((date) => logged(date, date, [entry('Squat', 100)]));
     expect(streakOn(weeks, 2, '2026-10-28')).toBe(2);
     expect(streakOn(weeks, 2, '2026-11-04')).toBe(3);
+  });
+});
+
+describe('a month’s wrapped', () => {
+  const all = [
+    logged('Old', '2026-10-20', [entry('Bench press', 80)]),
+    logged('A', '2026-11-02', [entry('Bench press', 85), entry('Squat', 100)]),
+    logged('B', '2026-11-09', [entry('Bench press', 82.5)]),
+  ];
+  const card = wrappedCard('2026-11', all, [run('r1', '2026-11-05', { distanceKm: 5 }), run('r0', '2026-10-05')]);
+
+  it('adds up only that month, with the sessions and the distance on foot', () => {
+    expect(card.title).toBe('November wrapped');
+    expect(card.headline).toEqual({ value: '6,420', label: 'KG MOVED' });
+    expect(card.facts).toEqual([{ value: '2', label: 'SESSIONS' }, { value: '9', label: 'SETS' }, { value: '5', label: 'KM ON FOOT' }]);
+  });
+
+  it('lists the most-done lifts first with their best, and names what beat everything before the month', () => {
+    expect(card.lines).toEqual([{ name: 'Bench press', value: '85 × 8 · 2×' }, { name: 'Squat', value: '100 × 8 · 1×' }]);
+    expect(card.bests).toEqual(['Bench press']);
   });
 });

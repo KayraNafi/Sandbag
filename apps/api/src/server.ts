@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { buildApp } from './app';
 import { connect } from './db/client';
 import { startImporting } from './integrations/inbox';
+import { startAnnouncingWrapped } from './modules/wrapped';
 
 const env = z.object({
   DATABASE_URL: z.string().min(1),
@@ -19,9 +20,12 @@ const { db, close } = await connect(env.DATABASE_URL, migrationsFolder);
 const app = await buildApp(db, { bootstrapInviteCode: env.BOOTSTRAP_INVITE_CODE, trustedProxies: env.TRUSTED_PROXIES, webPushPublicKey: env.WEB_PUSH_PUBLIC_KEY, integrationPublicKey: env.INTEGRATION_PUBLIC_KEY, logger: true });
 // What the import worker fetched becomes sessions here, where the rules for saving live.
 const stopImporting = startImporting(db, (error) => app.log.error(error));
+// A month's Wrapped is announced once it's over.
+const stopWrapped = startAnnouncingWrapped(db, (error) => app.log.error(error));
 
 async function shutdown() {
   stopImporting();
+  stopWrapped();
   await app.close();
   await close();
   process.exit(0);

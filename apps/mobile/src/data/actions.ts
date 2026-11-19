@@ -4,6 +4,7 @@ import { today } from '@/domain/format';
 import { activeLogged, buildHistory, draftEntryFor, lastLogged, type Draft, type DraftEntry } from '@/domain/history';
 import { num, round2 } from '@/domain/format';
 import { toEntry } from '@/domain/sets';
+import { STICKERS, stickerFor, type Sticker } from '@/domain/stickers';
 import { nextPosition, useData } from './store';
 
 export const newId = () => randomUUID();
@@ -43,15 +44,16 @@ export function addExerciseToDraft(draft: Draft, name: string): Draft {
   return { ...draft, entries: [...draft.entries, draftEntryFor(history(), exercise, newId)] };
 }
 
-/** The line that shows when a lift is ticked off. Null when there's nothing to say. */
-export function reactionTo(entry: DraftEntry, date: string): string | null {
-  if (entry.rpe === 10) return voice.rpeTen();
-  if (entry.kind !== 'strength' || entry.weight === null) return null;
-  const previous = lastLogged(history(), entry.name, date)?.weight ?? null;
-  if (previous === null) return null;
-  if (entry.weight > previous) return voice.weightUp(num(round2(entry.weight - previous)));
-  if (entry.weight < previous) return voice.weightDown();
-  return voice.sameWeight(num(entry.weight));
+/** The sticker and line that show when a lift is ticked off. Null when there's nothing to say. */
+export function reactionTo(entry: DraftEntry, date: string): Sticker | null {
+  const previous = entry.kind === 'strength' ? lastLogged(history(), entry.name, date)?.weight ?? null : null;
+  const kind = stickerFor(entry, entry.kind === 'strength' ? previous : null);
+  if (!kind) return null;
+  const emoji = STICKERS[kind];
+  if (kind === 'limit') return { emoji, line: voice.rpeTen() };
+  const gain = entry.weight !== null && previous !== null ? entry.weight - previous : 0;
+  if (kind === 'up' || kind === 'jump') return { emoji, line: voice.weightUp(num(round2(gain))) };
+  return { emoji, line: kind === 'down' ? voice.weightDown() : voice.sameWeight(num(entry.weight ?? 0)) };
 }
 
 /** Validated here against the API's schema, so one bad value can't block every later sync. */

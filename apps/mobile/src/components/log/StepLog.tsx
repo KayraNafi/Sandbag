@@ -168,7 +168,7 @@ export function StepLog({ draft }: { draft: Draft }) {
     }
     if (isFinished(ticked)) {
       const reaction = reactionTo(ticked, draft.date);
-      if (reaction) toast(reaction);
+      if (reaction) toast(reaction.line, null, reaction.emoji);
     }
   };
 

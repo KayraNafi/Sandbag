@@ -8,6 +8,7 @@ import { randomUUID } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { buildApp } from './app';
+import { announceWrapped, wrappedMonthFor } from './modules/wrapped';
 import { deliverPending, type PushMessage, type WebPushTarget } from './modules/push';
 import type { Db } from './db/client';
 import * as schema from './db/schema';
@@ -284,6 +285,67 @@ describe('reactions', () => {
     const after = (await call<{ replies: { reactions: { emoji: string; byMe: boolean }[] }[] }>('GET', `/posts/${id}`, founder.token)).body.replies[0]!;
     expect(after.reactions).toMatchObject([{ emoji: '😂', byMe: true }]);
     expect((await call('PUT', `/posts/${id}/replies/${randomUUID()}/reaction`, founder.token, { emoji: '😂' })).status).toBe(404);
+  });
+});
+
+describe('reaction notifications', () => {
+  it('tell the author once, and never tell you about yourself', async () => {
+    const { founder, friend } = await crew();
+    const id = (await post(founder.token)).body.id;
+    const news = async () => (await call<{ kind: string; title: string; body: string; route: string }[]>('GET', '/notifications', founder.token)).body.filter((item) => item.kind === 'reaction');
+    await call('PUT', `/posts/${id}/reaction`, founder.token, { emoji: '🔥' });
+    expect(await news()).toEqual([]);
+    await call('PUT', `/posts/${id}/reaction`, friend.token, { emoji: '🍑' });
+    // Taking it back and giving it again is the same news.
+    await call('DELETE', `/posts/${id}/reaction`, friend.token);
+    await call('PUT', `/posts/${id}/reaction`, friend.token, { emoji: '🍑' });
+    const [item, ...rest] = await news();
+    expect(rest).toEqual([]);
+    expect(item).toMatchObject({ title: `${friend.user.displayName} reacted 🍑`, route: `post/${id}` });
+    // A different emoji is new news.
+    await call('PUT', `/posts/${id}/reaction`, friend.token, { emoji: '🥒' });
+    expect(await news()).toHaveLength(2);
+  });
+
+  it('go to whoever wrote the reply', async () => {
+    const { founder, friend } = await crew();
+    const id = (await post(founder.token)).body.id;
+    await call('POST', `/posts/${id}/replies`, friend.token, { text: 'Easy' });
+    const [reply] = (await call<{ replies: { id: string }[] }>('GET', `/posts/${id}`, founder.token)).body.replies;
+    await call('PUT', `/posts/${id}/replies/${reply!.id}/reaction`, founder.token, { emoji: '😂' });
+    const mine = (await call<{ kind: string; body: string }[]>('GET', '/notifications', friend.token)).body.filter((item) => item.kind === 'reaction');
+    expect(mine).toMatchObject([{ body: 'to your reply “Easy”' }]);
+  });
+});
+
+describe('wrapped', () => {
+  it('is announced in the morning of the next month, once, to whoever trained in it', async () => {
+    const { founder, friend } = await crew();
+    await sync(founder.token, 0, [logged('w1', [entry('Bench press', 80)], { date: '2026-11-12' })]);
+    await sync(friend.token, 0, [], [ran('r1', 5, 25, { date: '2026-10-30' })]);
+    const wrapped = async (token: string) => (await call<NotificationView[]>('GET', '/notifications', token)).body.filter((item) => item.kind === 'wrapped');
+
+    expect(await announceWrapped(db as unknown as Db, new Date('2026-12-01T07:00:00Z'))).toBe(0);
+    expect(await announceWrapped(db as unknown as Db, new Date('2026-12-01T09:30:00Z'))).toBe(1);
+    expect(await announceWrapped(db as unknown as Db, new Date('2026-12-02T12:00:00Z'))).toBe(0);
+    expect(await wrapped(founder.token)).toMatchObject([{ title: 'Your November Wrapped is ready', route: 'wrapped/2026-11' }]);
+    expect(await wrapped(friend.token)).toEqual([]);
+  });
+
+  it('leaves out a month that was only deleted, and waits for the middle of the month to pass', async () => {
+    const { founder } = await crew();
+    await sync(founder.token, 0, [logged('w1', [entry('Bench press', 80)], { date: '2026-11-12', deleted: true })]);
+    expect(await announceWrapped(db as unknown as Db, new Date('2026-12-03T10:00:00Z'))).toBe(0);
+    await sync(founder.token, 0, [logged('w2', [entry('Bench press', 80)], { date: '2026-11-13' })]);
+    expect(await announceWrapped(db as unknown as Db, new Date('2026-12-20T10:00:00Z'))).toBe(0);
+  });
+
+  it('goes by the month and morning where each person is', () => {
+    expect(wrappedMonthFor(null, new Date('2027-01-02T10:00:00Z'))).toBe('2026-12');
+    // Still 8 am on the 1st in Los Angeles, already 4 pm in Tokyo.
+    expect(wrappedMonthFor('America/Los_Angeles', new Date('2026-12-01T16:00:00Z'))).toBeNull();
+    expect(wrappedMonthFor('Asia/Tokyo', new Date('2026-12-01T07:00:00Z'))).toBe('2026-11');
+    expect(wrappedMonthFor(null, new Date('2026-12-08T10:00:00Z'))).toBeNull();
   });
 });
 

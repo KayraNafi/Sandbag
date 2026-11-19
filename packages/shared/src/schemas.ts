@@ -297,7 +297,7 @@ export interface RankingRow {
 }
 
 /** What a notification is about, so the app can show it at a glance without reading the title. */
-export type NotificationKind = 'call' | 'answered' | 'confirmed' | 'watching' | 'honest' | 'reply' | 'saved' | 'recruit' | 'overtaken' | 'trophy' | 'nudge';
+export type NotificationKind = 'call' | 'answered' | 'confirmed' | 'watching' | 'honest' | 'reply' | 'reaction' | 'saved' | 'recruit' | 'overtaken' | 'trophy' | 'nudge' | 'wrapped';
 
 export interface NotificationView {
   id: string;

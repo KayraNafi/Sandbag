@@ -145,7 +145,7 @@ export function ListLog({ draft }: { draft: Draft }) {
     if (openId === entry.id) setOpenId(null);
     feel.tick();
     const reaction = reactionTo(entry, draft.date);
-    if (reaction) toast(reaction);
+    if (reaction) toast(reaction.line, null, reaction.emoji);
   };
 
   return (

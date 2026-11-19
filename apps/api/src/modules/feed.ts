@@ -12,7 +12,7 @@ import { badRequest, conflict, forbidden, notFound } from '../errors';
 import { requireUser, toPublic } from './auth';
 import { expireCalls } from './calls';
 import { friendIds } from './friends';
-import { notify } from './notifications';
+import { notify, notifyReaction } from './notifications';
 
 const FEED_PAGE = 30;
 // Each of these notifies someone, so a friend can't turn them into a flood.
@@ -246,8 +246,11 @@ export function feedRoutes(app: FastifyInstance, db: Db): void {
     const user = await requireUser(db, request);
     const post = await loadVisiblePost(db, request.params.id, user.id);
     const { emoji } = reactSchema.parse(request.body);
-    await db.insert(postReactions).values({ postId: post.id, userId: user.id, emoji })
-      .onConflictDoUpdate({ target: [postReactions.postId, postReactions.userId], set: { emoji } });
+    await db.transaction(async (tx) => {
+      await tx.insert(postReactions).values({ postId: post.id, userId: user.id, emoji })
+        .onConflictDoUpdate({ target: [postReactions.postId, postReactions.userId], set: { emoji } });
+      await notifyReaction(tx, { id: post.authorId }, user, emoji, { body: `to your post “${post.title}”`, route: `post/${post.id}` });
+    });
     reply.code(204);
   });
 
@@ -262,7 +265,7 @@ export function feedRoutes(app: FastifyInstance, db: Db): void {
   const loadVisibleReply = async (postId: string, replyId: string, userId: string) => {
     const post = await loadVisiblePost(db, postId, userId);
     if (!UUID.test(replyId)) throw notFound();
-    const [found] = await db.select({ id: postReplies.id }).from(postReplies).where(and(eq(postReplies.id, replyId), eq(postReplies.postId, post.id)));
+    const [found] = await db.select({ id: postReplies.id, postId: postReplies.postId, authorId: postReplies.authorId, text: postReplies.text }).from(postReplies).where(and(eq(postReplies.id, replyId), eq(postReplies.postId, post.id)));
     if (!found) throw notFound();
     return found;
   };
@@ -271,8 +274,11 @@ export function feedRoutes(app: FastifyInstance, db: Db): void {
     const user = await requireUser(db, request);
     const found = await loadVisibleReply(request.params.id, request.params.replyId, user.id);
     const { emoji } = reactSchema.parse(request.body);
-    await db.insert(replyReactions).values({ replyId: found.id, userId: user.id, emoji })
-      .onConflictDoUpdate({ target: [replyReactions.replyId, replyReactions.userId], set: { emoji } });
+    await db.transaction(async (tx) => {
+      await tx.insert(replyReactions).values({ replyId: found.id, userId: user.id, emoji })
+        .onConflictDoUpdate({ target: [replyReactions.replyId, replyReactions.userId], set: { emoji } });
+      await notifyReaction(tx, { id: found.authorId }, user, emoji, { body: `to your reply “${found.text}”`, route: `post/${found.postId}` });
+    });
     reply.code(204);
   });
 

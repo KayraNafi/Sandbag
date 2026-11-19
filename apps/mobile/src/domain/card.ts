@@ -1,6 +1,6 @@
-import { bestSet, voice, muscleLoad, setsOf, newPbOf, runTime, trainedDates, weekStreak, type LoggedWorkout, type Muscle, type Goals, type Run } from '@sandbag/shared';
-import { num } from './format';
-import { bestBefore, metricOf, volumeOf, type ExerciseHistory } from './history';
+import { bestSet, exerciseKey, kmText, voice, muscleLoad, setsOf, newPbOf, runTime, trainedDates, weekStreak, type LoggedWorkout, type Muscle, type Goals, type Run } from '@sandbag/shared';
+import { formatMonth, num, toIsoDate, today } from './format';
+import { bestBefore, buildHistory, metricOf, volumeOf, type ExerciseHistory } from './history';
 import { pace, speed } from './runs';
 
 /** One number with what it counts. */
@@ -82,5 +82,55 @@ export function runCard(run: Run, others: Run[]): CardData {
     lines: [],
     bests: race ? [`${race.name} PB`] : [],
     load: null,
+  };
+}
+
+const LIFTS_SHOWN = 8;
+
+/**
+ * A month looked back on, as a card like any other. `workouts` is everything logged, since a new best
+ * only means something against what came before the month began.
+ */
+export function wrappedCard(month: string, workouts: LoggedWorkout[], runs: Run[]): CardData {
+  const sessions = workouts.filter((workout) => workout.date.startsWith(month));
+  const walked = runs.filter((run) => run.date.startsWith(month));
+  const moved = sessions.reduce((sum, workout) => sum + volumeOf(workout), 0);
+  const km = walked.reduce((sum, run) => sum + run.distanceKm, 0);
+  const sets = sessions.reduce((sum, workout) => sum + workout.entries.reduce((count, entry) => count + (entry.kind === 'strength' ? setsOf(entry).length : 0), 0), 0);
+
+  // Each lift's best of the month, and how many days it was done.
+  const lifts = new Map<string, { name: string; days: Set<string>; best: LoggedWorkout['entries'][number] }>();
+  for (const workout of sessions) {
+    for (const entry of workout.entries) {
+      const key = exerciseKey(entry.name);
+      const seen = lifts.get(key) ?? { name: entry.name, days: new Set<string>(), best: entry };
+      seen.days.add(workout.date);
+      if ((metricOf(entry) ?? -1) > (metricOf(seen.best) ?? -1)) seen.best = entry;
+      lifts.set(key, seen);
+    }
+  }
+  const ranked = [...lifts.values()].sort((a, b) => b.days.size - a.days.size || (metricOf(b.best) ?? 0) - (metricOf(a.best) ?? 0));
+  const index = buildHistory(workouts);
+  const bests = ranked.filter((lift) => {
+    const value = metricOf(lift.best);
+    const before = bestBefore(index, lift.name, `${month}-01`);
+    return value !== null && before !== null && value > before;
+  }).map((lift) => lift.name);
+
+  const [year, monthNumber] = month.split('-').map(Number) as [number, number];
+  const lastDay = toIsoDate(new Date(year, monthNumber, 0));
+  return {
+    title: `${formatMonth(`${month}-01`).split(' ')[0]} wrapped`,
+    date: lastDay < today() ? lastDay : today(),
+    headline: moved ? { value: kilos(moved), label: 'KG MOVED' } : { value: String(sessions.length), label: sessions.length === 1 ? 'SESSION' : 'SESSIONS' },
+    quip: moved ? voice.lifted(moved) : null,
+    facts: [
+      ...(moved ? [{ value: String(sessions.length), label: sessions.length === 1 ? 'SESSION' : 'SESSIONS' }] : []),
+      ...(sets ? [{ value: String(sets), label: setWord(sets) }] : []),
+      ...(km ? [{ value: kmText(km).replace(' km', ''), label: 'KM ON FOOT' }] : []),
+    ],
+    lines: ranked.slice(0, LIFTS_SHOWN).map((lift) => ({ name: lift.name, value: `${topSet(lift.best)} · ${lift.days.size}×` })),
+    bests,
+    load: muscleLoad(sessions.flatMap((workout) => workout.entries)),
   };
 }

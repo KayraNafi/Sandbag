@@ -44,6 +44,18 @@ function SessionRow({ date, title, detail, delay, onPress, right }: { date: stri
   );
 }
 
+/** A month's name, with the way into looking back on it. */
+function MonthHeading({ month, iso }: { month: string; iso: string }) {
+  return (
+    <View style={styles.monthRow}>
+      <Label>{month}</Label>
+      <Pressable accessibilityRole="button" accessibilityLabel={`${month} wrapped`} hitSlop={8} onPress={() => { feel.tap(); router.push(`/card?month=${iso}`); }}>
+        <Text style={styles.wrapped}>WRAPPED ›</Text>
+      </Pressable>
+    </View>
+  );
+}
+
 export default function History() {
   const logged = useData((state) => state.logged);
   const allRuns = useData((state) => state.runs);
@@ -87,7 +99,7 @@ export default function History() {
         if (item.kind === 'run') {
           return (
             <Fragment key={`run-${item.run.id}`}>
-              {newMonth ? <Label style={styles.month}>{month}</Label> : null}
+              {newMonth ? <MonthHeading month={month} iso={date.slice(0, 7)} /> : null}
               <SessionRow date={date} title={runTitle(item.run)} detail={runSummary(item.run)} delay={delay} onPress={() => router.push(`/run/${item.run.id}`)} />
             </Fragment>
           );
@@ -96,7 +108,7 @@ export default function History() {
         const moved = volumeOf(workout);
         return (
           <Fragment key={workout.id}>
-            {newMonth ? <Label style={styles.month}>{month}</Label> : null}
+            {newMonth ? <MonthHeading month={month} iso={date.slice(0, 7)} /> : null}
             <SessionRow
               date={date}
               title={workout.title}
@@ -119,7 +131,8 @@ const styles = StyleSheet.create({
   total: { fontFamily: fonts.display, color: colors.volt },
   unit: { fontFamily: fonts.label, fontSize: 13, letterSpacing: 2, color: colors.ink3 },
   line: { fontFamily: fonts.bodyStrong, fontSize: 17, lineHeight: 23, color: colors.ink, marginTop: space.sm },
-  month: { marginTop: space.md },
+  monthRow: { marginTop: space.md, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  wrapped: { fontFamily: fonts.label, fontSize: 13, letterSpacing: 1, color: colors.volt },
   session: { flexDirection: 'row', alignItems: 'center', gap: space.md, minHeight: 72, padding: space.sm, borderRadius: radius.lg, backgroundColor: colors.surface },
   pressed: { opacity: 0.75 },
   date: { width: 52, height: 56, alignItems: 'center', justifyContent: 'center', borderRadius: radius.md, backgroundColor: colors.surface2 },

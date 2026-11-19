@@ -9,18 +9,18 @@ const SHOWN_MS = 3500;
 // Long enough to notice the mistake and reach for the button.
 const UNDO_MS = 7000;
 
-type ToastState = { text: string | null; stamp: number; undo: (() => void) | null };
+type ToastState = { text: string | null; stamp: number; undo: (() => void) | null; sticker: string | null };
 
-const useToast = create<ToastState>(() => ({ text: null, stamp: 0, undo: null }));
-const dismiss = () => useToast.setState({ text: null, undo: null });
+const useToast = create<ToastState>(() => ({ text: null, stamp: 0, undo: null, sticker: null }));
+const dismiss = () => useToast.setState({ text: null, undo: null, sticker: null });
 
-/** Shows a message at the top. With undo, it stays longer and offers to take the action back. */
-export function toast(text: string, undo: (() => void) | null = null): void {
-  useToast.setState({ text, stamp: Date.now(), undo });
+/** Shows a message at the top. With undo, it stays longer and offers to take the action back. A sticker is the big emoji beside it. */
+export function toast(text: string, undo: (() => void) | null = null, sticker: string | null = null): void {
+  useToast.setState({ text, stamp: Date.now(), undo, sticker });
 }
 
 export function ToastHost() {
-  const { text, stamp, undo } = useToast();
+  const { text, stamp, undo, sticker } = useToast();
   const insets = useSafeAreaInsets();
   useEffect(() => {
     if (!text) return undefined;
@@ -32,6 +32,7 @@ export function ToastHost() {
     <View pointerEvents="box-none" style={[styles.host, { top: insets.top + space.sm }]}>
       <Pop key={stamp}>
         <View accessibilityLiveRegion="polite" style={styles.toast}>
+          {sticker ? <Text style={styles.sticker}>{sticker}</Text> : null}
           <Text textBreakStrategy="simple" style={styles.text}>{text}</Text>
           {undo ? (
             <Pressable accessibilityRole="button" accessibilityLabel="Undo" hitSlop={space.md} onPress={() => { undo(); dismiss(); }}>
@@ -48,5 +49,6 @@ const styles = StyleSheet.create({
   host: { position: 'absolute', left: space.lg, right: space.lg },
   toast: { backgroundColor: colors.volt, borderRadius: radius.md, paddingVertical: space.md, paddingHorizontal: space.lg, alignSelf: 'stretch', flexDirection: 'row', alignItems: 'center', gap: space.md },
   text: { flex: 1, fontFamily: fonts.bodyStrong, fontSize: 15, color: colors.voltInk },
+  sticker: { fontSize: 32, lineHeight: 38 },
   undo: { fontFamily: fonts.display, fontSize: 17, color: colors.voltInk },
 });
