@@ -116,7 +116,7 @@ describe('getting in without an invite', () => {
       ['GET', '/me'], ['PATCH', '/me'], ['DELETE', '/me'], ['POST', '/me/password'], ['GET', '/me/export'],
       ['GET', '/me/api-keys'], ['POST', '/me/api-keys'], ['DELETE', `/me/api-keys/${id}`], ['PUT', '/me/push-token'], ['PUT', '/me/web-push'], ['GET', '/push/web-key'],
       ['POST', '/sync'], ['GET', '/feed'], ['POST', '/posts'], ['GET', `/posts/${id}`], ['DELETE', `/posts/${id}`],
-      ['PUT', `/posts/${id}/respect`], ['DELETE', `/posts/${id}/respect`], ['POST', `/posts/${id}/replies`], ['POST', `/posts/${id}/save`], ['POST', `/posts/${id}/calls`],
+      ['PUT', `/posts/${id}/reaction`], ['DELETE', `/posts/${id}/reaction`], ['PUT', `/posts/${id}/replies/${id}/reaction`], ['DELETE', `/posts/${id}/replies/${id}/reaction`], ['POST', `/posts/${id}/replies`], ['POST', `/posts/${id}/save`], ['POST', `/posts/${id}/calls`],
       ['GET', '/calls'], ['GET', '/rankings'], ['GET', '/friends'], ['POST', '/friends'], ['DELETE', `/friends/${id}`], ['GET', '/invites'],
       ['GET', '/notifications'], ['POST', '/notifications/read'], ['GET', '/trophies'],
       ['GET', '/me/integrations'], ['PUT', '/me/integrations/lyfta'], ['DELETE', '/me/integrations/lyfta'],
@@ -139,7 +139,7 @@ describe('seeing or changing someone else’s data', () => {
     const share = await post(alice.token, { kind: 'share' });
     const token = mallory.token;
     expect((await call('GET', `/posts/${share.id}`, { token })).status).toBe(404);
-    expect((await call('PUT', `/posts/${share.id}/respect`, { token })).status).toBe(404);
+    expect((await call('PUT', `/posts/${share.id}/reaction`, { token, body: { emoji: '🔥' } })).status).toBe(404);
     expect((await call('POST', `/posts/${share.id}/replies`, { token, body: { text: 'hi' } })).status).toBe(404);
     expect((await call('POST', `/posts/${share.id}/save`, { token })).status).toBe(404);
     expect((await call('POST', `/posts/${share.id}/calls`, { token, body: { exercise: 'Bench press', line: 'x' } })).status).toBe(404);
@@ -375,7 +375,7 @@ describe('bad input', () => {
     const odd = ['1', '../../etc/passwd', "'; DROP TABLE users; --", '%00', '%27', 'a'.repeat(5000), '00000000-0000-0000-0000-000000000000'];
     for (const value of odd) {
       for (const [method, url] of [
-        ['GET', `/posts/${value}`], ['DELETE', `/posts/${value}`], ['PUT', `/posts/${value}/respect`], ['DELETE', `/posts/${value}/respect`],
+        ['GET', `/posts/${value}`], ['DELETE', `/posts/${value}`], ['PUT', `/posts/${value}/reaction`], ['DELETE', `/posts/${value}/reaction`], ['PUT', `/posts/${value}/replies/${value}/reaction`], ['DELETE', `/posts/${value}/replies/${value}/reaction`],
         ['DELETE', `/friends/${value}`], ['DELETE', `/me/api-keys/${value}`], ['GET', `/feed?before=${value}`], ['GET', `/rankings?period=${value}`],
       ] as const) {
         expect((await call(method, url, { token })).status, `${method} ${url.slice(0, 60)}`).toBeLessThan(500);

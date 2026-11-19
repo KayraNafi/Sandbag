@@ -7,11 +7,15 @@ export function activeRuns(runs: Record<string, Run>): Run[] {
     .sort((a, b) => b.date.localeCompare(a.date) || b.updatedAt - a.updatedAt);
 }
 
-/** Minutes per kilometre, the way runners say it: 5:15 /km. */
-export const pace = (run: Pick<Run, 'distanceKm' | 'seconds'>) => `${runTime(run.seconds / run.distanceKm)} /km`;
+/** How fast a walk went, in km/h. A walker thinks in speed, and 12:30 /km reads like a typo. */
+export const speed = (run: Pick<Run, 'distanceKm' | 'seconds'>) => (run.distanceKm / (run.seconds / 3600)).toFixed(1);
 
-/** What a run was, in one line: "10 km · 52:30 · 5:15 /km". */
-export const runSummary = (run: Pick<Run, 'distanceKm' | 'seconds'>) => `${kmText(run.distanceKm)} · ${runTime(run.seconds)} · ${pace(run)}`;
+/** How fast it went, the way each says it: a run in minutes per kilometre (5:15 /km), a walk in km/h (4.8 km/h). */
+export const pace = (run: Pick<Run, 'activity' | 'distanceKm' | 'seconds'>) =>
+  (run.activity === 'run' ? `${runTime(run.seconds / run.distanceKm)} /km` : `${speed(run)} km/h`);
+
+/** What a run was, in one line: "10 km · 52:30 · 5:15 /km", or "5 km · 1:00:00 · 5.0 km/h" for a walk. */
+export const runSummary = (run: Pick<Run, 'activity' | 'distanceKm' | 'seconds'>) => `${kmText(run.distanceKm)} · ${runTime(run.seconds)} · ${pace(run)}`;
 
 export const runTitle = (run: Pick<Run, 'activity'>) => (run.activity === 'run' ? 'Run' : 'Walk');
 

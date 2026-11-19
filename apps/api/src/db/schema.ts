@@ -1,4 +1,4 @@
-import type { Activity, AvatarId, CallStatus, Entry, GoalChange, IntegrationId, IntegrationStatus, NotificationKind, PostedRun, SavedExercise } from '@sandbag/shared';
+import type { Activity, AvatarId, CallStatus, Entry, GoalChange, IntegrationId, IntegrationStatus, NotificationKind, PostedRun, Reaction, SavedExercise } from '@sandbag/shared';
 import { sql } from 'drizzle-orm';
 import {
   bigint, boolean, check, date, doublePrecision, foreignKey, index, integer, jsonb, pgSequence, pgTable, primaryKey, real, text, timestamp, uuid,
@@ -130,9 +130,12 @@ export const posts = pgTable('posts', {
   foreignKey({ columns: [t.authorId, t.runId], foreignColumns: [runs.ownerId, runs.id] }),
 ]);
 
-export const postRespects = pgTable('post_respects', {
+// One reaction each, so reacting again with another emoji changes it.
+export const postReactions = pgTable('post_reactions', {
   postId: uuid('post_id').notNull().references(() => posts.id, { onDelete: 'cascade' }),
   userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  emoji: text('emoji').$type<Reaction>().notNull(),
+  createdAt: createdAt(),
 }, (t) => [primaryKey({ columns: [t.postId, t.userId] })]);
 
 export const postSaves = pgTable('post_saves', {
@@ -147,6 +150,13 @@ export const postReplies = pgTable('post_replies', {
   text: text('text').notNull(),
   createdAt: createdAt(),
 }, (t) => [index('post_replies_post').on(t.postId, t.createdAt)]);
+
+export const replyReactions = pgTable('reply_reactions', {
+  replyId: uuid('reply_id').notNull().references(() => postReplies.id, { onDelete: 'cascade' }),
+  userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  emoji: text('emoji').$type<Reaction>().notNull(),
+  createdAt: createdAt(),
+}, (t) => [primaryKey({ columns: [t.replyId, t.userId] })]);
 
 export const sandbagCalls = pgTable('sandbag_calls', {
   id: uuid('id').primaryKey().defaultRandom(),

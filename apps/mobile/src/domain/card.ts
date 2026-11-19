@@ -1,7 +1,7 @@
 import { bestSet, voice, muscleLoad, setsOf, newPbOf, runTime, trainedDates, weekStreak, type LoggedWorkout, type Muscle, type Goals, type Run } from '@sandbag/shared';
 import { num } from './format';
 import { bestBefore, metricOf, volumeOf, type ExerciseHistory } from './history';
-import { pace } from './runs';
+import { pace, speed } from './runs';
 
 /** One number with what it counts. */
 export interface CardStat {
@@ -78,7 +78,7 @@ export function runCard(run: Run, others: Run[]): CardData {
     date: run.date,
     headline: { value: num(run.distanceKm), label: 'KM' },
     quip: null,
-    facts: [{ value: runTime(run.seconds), label: 'TIME' }, { value: pace(run).replace(' /km', ''), label: 'MIN/KM' }],
+    facts: [{ value: runTime(run.seconds), label: 'TIME' }, run.activity === 'run' ? { value: pace(run).replace(' /km', ''), label: 'MIN/KM' } : { value: speed(run), label: 'KM/H' }],
     lines: [],
     bests: race ? [`${race.name} PB`] : [],
     load: null,

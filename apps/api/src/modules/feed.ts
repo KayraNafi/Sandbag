@@ -1,13 +1,13 @@
 import {
-  CALL_DAYS, CALL_POINTS, CALLABLE_DAYS, bestSet, createCallSchema, createPostSchema, createReplySchema, DAY_MS, exerciseKey, LIVE_CALLS, MAX_OPEN_CALLS, newPbOf,
-  runHeadline, savedExercisesOf, voice, type CallView, type CreatePost, type Entry, type PostRef, type PostView, type ReplyView, type SavedWorkout,
+  CALL_DAYS, CALL_POINTS, CALLABLE_DAYS, bestSet, createCallSchema, createPostSchema, createReplySchema, DAY_MS, exerciseKey, LIVE_CALLS, MAX_OPEN_CALLS, newPbOf, reactSchema, sortReactions,
+  runHeadline, savedExercisesOf, voice, type CallView, type CreatePost, type Entry, type PostRef, type PostView, type Reaction, type ReactionGroup, type ReplyView, type SavedWorkout,
 } from '@sandbag/shared';
 import { randomUUID } from 'node:crypto';
 import { and, desc, eq, inArray, lt, or, sql, type SQL } from 'drizzle-orm';
 import { alias } from 'drizzle-orm/pg-core';
 import type { FastifyInstance } from 'fastify';
 import type { Db, DbOrTx } from '../db/client';
-import { loggedWorkouts, postReplies, postRespects, posts, postSaves, runs, sandbagCalls, savedWorkouts, syncSeq, users } from '../db/schema';
+import { loggedWorkouts, postReactions, postReplies, posts, postSaves, replyReactions, runs, sandbagCalls, savedWorkouts, syncSeq, users } from '../db/schema';
 import { badRequest, conflict, forbidden, notFound } from '../errors';
 import { requireUser, toPublic } from './auth';
 import { expireCalls } from './calls';
@@ -100,28 +100,40 @@ async function callViews(db: DbOrTx, where: SQL | undefined, viewerId: string, l
   });
 }
 
+/** Who reacted with what, grouped per post or reply and in the order of the picker. */
+function groupReactions(rows: { key: string; emoji: Reaction; user: typeof users.$inferSelect }[], viewerId: string): Map<string, ReactionGroup[]> {
+  const byKey = new Map<string, ReactionGroup[]>();
+  for (const { key, emoji, user } of rows) {
+    const groups = byKey.get(key) ?? [];
+    const group = groups.find((item) => item.emoji === emoji) ?? (groups[groups.push({ emoji, byMe: false, users: [] }) - 1])!;
+    group.users.push(toPublic(user));
+    if (user.id === viewerId) group.byMe = true;
+    byKey.set(key, groups);
+  }
+  return new Map([...byKey].map(([key, groups]) => [key, sortReactions(groups)]));
+}
+
 async function toViews(db: DbOrTx, rows: Post[], viewerId: string): Promise<PostView[]> {
   if (!rows.length) return [];
   const ids = rows.map((row) => row.id);
-  const countBy = async (table: typeof postRespects | typeof postSaves) => {
-    const counts = await db.select({ postId: table.postId, total: sql<number>`count(*)::int` }).from(table).where(inArray(table.postId, ids)).groupBy(table.postId);
-    return new Map(counts.map((row) => [row.postId, row.total]));
-  };
-  const respects = await countBy(postRespects);
-  const saves = await countBy(postSaves);
+  const saveCounts = await db.select({ postId: postSaves.postId, total: sql<number>`count(*)::int` }).from(postSaves).where(inArray(postSaves.postId, ids)).groupBy(postSaves.postId);
+  const saves = new Map(saveCounts.map((row) => [row.postId, row.total]));
+  const reacted = await db.select({ postId: postReactions.postId, emoji: postReactions.emoji, user: users }).from(postReactions)
+    .innerJoin(users, eq(users.id, postReactions.userId))
+    .where(inArray(postReactions.postId, ids))
+    .orderBy(postReactions.createdAt);
+  const reactions = groupReactions(reacted.map((row) => ({ key: row.postId, emoji: row.emoji, user: row.user })), viewerId);
   const replyCounts = await db.select({ postId: postReplies.postId, total: sql<number>`count(*)::int` }).from(postReplies).where(inArray(postReplies.postId, ids)).groupBy(postReplies.postId);
   const callCounts = await db.select({
     postId: sandbagCalls.postId,
     total: sql<number>`count(*)::int`,
     live: sql<number>`(count(*) filter (where ${inArray(sandbagCalls.status, LIVE_CALLS)}))::int`,
   }).from(sandbagCalls).where(inArray(sandbagCalls.postId, ids)).groupBy(sandbagCalls.postId);
-  const mine = await db.select({ postId: postRespects.postId }).from(postRespects).where(and(inArray(postRespects.postId, ids), eq(postRespects.userId, viewerId)));
   const mySaves = await db.select({ postId: postSaves.postId }).from(postSaves).where(and(inArray(postSaves.postId, ids), eq(postSaves.userId, viewerId)));
   const authors = await db.select().from(users).where(inArray(users.id, rows.map((row) => row.authorId)));
   const authorById = new Map(authors.map((author) => [author.id, author]));
   const replyMap = new Map(replyCounts.map((row) => [row.postId, row.total]));
   const callMap = new Map(callCounts.map((row) => [row.postId, row]));
-  const mineSet = new Set(mine.map((row) => row.postId));
   const mySaveSet = new Set(mySaves.map((row) => row.postId));
   return rows.map((row) => ({
     id: row.id,
@@ -133,8 +145,7 @@ async function toViews(db: DbOrTx, rows: Post[], viewerId: string): Promise<Post
     entries: visibleEntries(row, viewerId),
     run: row.run,
     createdAt: row.createdAt.toISOString(),
-    respects: respects.get(row.id) ?? 0,
-    respectedByMe: mineSet.has(row.id),
+    reactions: reactions.get(row.id) ?? [],
     replyCount: replyMap.get(row.id) ?? 0,
     callCount: callMap.get(row.id)?.total ?? 0,
     liveCalls: callMap.get(row.id)?.live ?? 0,
@@ -208,10 +219,17 @@ export function feedRoutes(app: FastifyInstance, db: Db): void {
       .innerJoin(users, eq(users.id, postReplies.authorId))
       .where(eq(postReplies.postId, post.id))
       .orderBy(postReplies.createdAt);
+    const reacted = rows.length ? await db.select({ replyId: replyReactions.replyId, emoji: replyReactions.emoji, user: users }).from(replyReactions)
+      .innerJoin(users, eq(users.id, replyReactions.userId))
+      .where(inArray(replyReactions.replyId, rows.map(({ reply }) => reply.id)))
+      .orderBy(replyReactions.createdAt) : [];
+    const reactions = groupReactions(reacted.map((row) => ({ key: row.replyId, emoji: row.emoji, user: row.user })), user.id);
     return {
       ...view!,
       calls,
-      replies: rows.map(({ reply, author }) => ({ id: reply.id, author: toPublic(author), text: reply.text, createdAt: reply.createdAt.toISOString() })),
+      replies: rows.map(({ reply, author }) => ({
+        id: reply.id, author: toPublic(author), text: reply.text, createdAt: reply.createdAt.toISOString(), reactions: reactions.get(reply.id) ?? [],
+      })),
     };
   });
 
@@ -223,17 +241,45 @@ export function feedRoutes(app: FastifyInstance, db: Db): void {
     reply.code(204);
   });
 
-  app.put<{ Params: { id: string } }>('/posts/:id/respect', async (request, reply) => {
+  // One reaction each: reacting again with another emoji changes yours.
+  app.put<{ Params: { id: string } }>('/posts/:id/reaction', WRITE_LIMIT, async (request, reply) => {
     const user = await requireUser(db, request);
     const post = await loadVisiblePost(db, request.params.id, user.id);
-    await db.insert(postRespects).values({ postId: post.id, userId: user.id }).onConflictDoNothing();
+    const { emoji } = reactSchema.parse(request.body);
+    await db.insert(postReactions).values({ postId: post.id, userId: user.id, emoji })
+      .onConflictDoUpdate({ target: [postReactions.postId, postReactions.userId], set: { emoji } });
     reply.code(204);
   });
 
-  app.delete<{ Params: { id: string } }>('/posts/:id/respect', async (request, reply) => {
+  app.delete<{ Params: { id: string } }>('/posts/:id/reaction', async (request, reply) => {
     const user = await requireUser(db, request);
     if (!UUID.test(request.params.id)) throw notFound();
-    await db.delete(postRespects).where(and(eq(postRespects.postId, request.params.id), eq(postRespects.userId, user.id)));
+    await db.delete(postReactions).where(and(eq(postReactions.postId, request.params.id), eq(postReactions.userId, user.id)));
+    reply.code(204);
+  });
+
+  // A reply is only as visible as its post.
+  const loadVisibleReply = async (postId: string, replyId: string, userId: string) => {
+    const post = await loadVisiblePost(db, postId, userId);
+    if (!UUID.test(replyId)) throw notFound();
+    const [found] = await db.select({ id: postReplies.id }).from(postReplies).where(and(eq(postReplies.id, replyId), eq(postReplies.postId, post.id)));
+    if (!found) throw notFound();
+    return found;
+  };
+
+  app.put<{ Params: { id: string; replyId: string } }>('/posts/:id/replies/:replyId/reaction', WRITE_LIMIT, async (request, reply) => {
+    const user = await requireUser(db, request);
+    const found = await loadVisibleReply(request.params.id, request.params.replyId, user.id);
+    const { emoji } = reactSchema.parse(request.body);
+    await db.insert(replyReactions).values({ replyId: found.id, userId: user.id, emoji })
+      .onConflictDoUpdate({ target: [replyReactions.replyId, replyReactions.userId], set: { emoji } });
+    reply.code(204);
+  });
+
+  app.delete<{ Params: { id: string; replyId: string } }>('/posts/:id/replies/:replyId/reaction', async (request, reply) => {
+    const user = await requireUser(db, request);
+    const found = await loadVisibleReply(request.params.id, request.params.replyId, user.id);
+    await db.delete(replyReactions).where(and(eq(replyReactions.replyId, found.id), eq(replyReactions.userId, user.id)));
     reply.code(204);
   });
 

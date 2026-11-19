@@ -243,11 +243,12 @@ describe('runs', () => {
     expect(theirs.status).toBe(400);
   });
 
-  it('can be respected and replied to, but not called or saved', async () => {
+  it('can be reacted and replied to, but not called or saved', async () => {
     const { founder, friend } = await crew();
     await sync(founder.token, 0, [], [ran('r1', 10, 50)]);
     const { body: post } = await call<PostView>('POST', '/posts', founder.token, { id: randomUUID(), kind: 'run', runId: 'r1', caption: '', recipientIds: [] });
-    expect((await call('PUT', `/posts/${post.id}/respect`, friend.token)).status).toBe(204);
+    expect((await call('PUT', `/posts/${post.id}/reaction`, friend.token, { emoji: '🍑' })).status).toBe(204);
+    expect((await call('PUT', `/posts/${post.id}/reaction`, friend.token, { emoji: '🍕' })).status).toBe(400);
     expect((await call('POST', `/posts/${post.id}/replies`, friend.token, { text: 'Fast' })).status).toBe(201);
     expect((await call('POST', `/posts/${post.id}/calls`, friend.token, { exercise: 'Run', line: 'Downhill' })).status).toBe(400);
     expect((await call('POST', `/posts/${post.id}/save`, friend.token)).status).toBe(400);
@@ -261,6 +262,31 @@ describe('runs', () => {
   });
 });
 
+describe('reactions', () => {
+  it('say who reacted, keep one each, and work on replies too', async () => {
+    const { founder, friend } = await crew();
+    const created = await post(founder.token);
+    const id = created.body.id;
+    await call('PUT', `/posts/${id}/reaction`, founder.token, { emoji: '🔥' });
+    await call('PUT', `/posts/${id}/reaction`, friend.token, { emoji: '🔥' });
+    await call('PUT', `/posts/${id}/reaction`, friend.token, { emoji: '🥒' });
+    const seen = (await call<PostView>('GET', `/posts/${id}`, friend.token)).body;
+    expect(seen.reactions.map((group) => [group.emoji, group.byMe, group.users.map((user) => user.id)])).toEqual([
+      ['🔥', false, [founder.user.id]],
+      ['🥒', true, [friend.user.id]],
+    ]);
+    await call('DELETE', `/posts/${id}/reaction`, friend.token);
+    expect((await call<PostView>('GET', `/posts/${id}`, friend.token)).body.reactions.map((group) => group.emoji)).toEqual(['🔥']);
+
+    await call('POST', `/posts/${id}/replies`, friend.token, { text: 'Easy' });
+    const [reply] = (await call<{ replies: { id: string; reactions: unknown[] }[] }>('GET', `/posts/${id}`, founder.token)).body.replies;
+    expect((await call('PUT', `/posts/${id}/replies/${reply!.id}/reaction`, founder.token, { emoji: '😂' })).status).toBe(204);
+    const after = (await call<{ replies: { reactions: { emoji: string; byMe: boolean }[] }[] }>('GET', `/posts/${id}`, founder.token)).body.replies[0]!;
+    expect(after.reactions).toMatchObject([{ emoji: '😂', byMe: true }]);
+    expect((await call('PUT', `/posts/${id}/replies/${randomUUID()}/reaction`, founder.token, { emoji: '😂' })).status).toBe(404);
+  });
+});
+
 describe('feed privacy', () => {
   it('hides posts from people outside the crew', async () => {
     const { founder } = await crew();
@@ -268,7 +294,7 @@ describe('feed privacy', () => {
     const stranger = await outsider(founder.user.inviteCode);
     expect((await call<PostView[]>('GET', '/feed', stranger.token)).body).toEqual([]);
     expect((await call('GET', `/posts/${created.body.id}`, stranger.token)).status).toBe(404);
-    expect((await call('PUT', `/posts/${created.body.id}/respect`, stranger.token)).status).toBe(404);
+    expect((await call('PUT', `/posts/${created.body.id}/reaction`, stranger.token, { emoji: '🔥' })).status).toBe(404);
   });
 
   it('strips hidden weights and notes on the server', async () => {

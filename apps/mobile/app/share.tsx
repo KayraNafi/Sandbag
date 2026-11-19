@@ -38,7 +38,7 @@ function useShared(): Shared | null {
     return {
       kind: 'run',
       title: runHeadline(run),
-      about: `${runSummary(run)}. Friends can respect it and reply to it.`,
+      about: `${runSummary(run)}. Friends can react to it and reply to it.`,
       thing: { runId: run.id },
       post: (base) => ({ ...base, kind: 'run', runId: run.id }),
     };
@@ -47,7 +47,7 @@ function useShared(): Shared | null {
     return {
       kind: 'workout',
       title: logged.title,
-      about: 'Friends can respect it, reply to it, or call sandbag on it.',
+      about: 'Friends can react to it, reply to it, or call sandbag on it.',
       thing: { loggedWorkoutId: logged.id },
       post: (base, showWeights) => ({ ...base, kind: 'workout', title: logged.title, showWeights, entries: logged.entries, loggedWorkoutId: logged.id }),
     };

@@ -135,6 +135,7 @@ export function ListLog({ draft }: { draft: Draft }) {
   const workout = useWorkout(draft);
   const [openId, setOpenId] = useState<string | null>(null);
   const [reordering, setReordering] = useState(false);
+  const [linking, setLinking] = useState(false);
   const [picking, setPicking] = useState(false);
 
   const toggle = (entry: DraftEntry) => {
@@ -157,13 +158,21 @@ export function ListLog({ draft }: { draft: Draft }) {
         onRename={workout.rename}
         onRedate={workout.redate}
         chips={draft.entries.length > 1 ? (
-          <Chip title={reordering ? 'Done reordering' : 'Reorder'} active={reordering} onPress={() => {
-            setOpenId(null);
-            setReordering(!reordering);
-          }} />
+          <>
+            <Chip title={reordering ? 'Done reordering' : 'Reorder'} active={reordering} onPress={() => {
+              setOpenId(null);
+              setReordering(!reordering);
+              setLinking(false);
+            }} />
+            <Chip title={linking ? 'Done with supersets' : 'Supersets'} active={linking} onPress={() => {
+              setOpenId(null);
+              setLinking(!linking);
+              setReordering(false);
+            }} />
+          </>
         ) : null}
       />
-      <SupersetList items={draft.entries} keyOf={(entry) => entry.id} onLink={reordering ? undefined : workout.link}>{(entry) => {
+      <SupersetList items={draft.entries} keyOf={(entry) => entry.id} onLink={linking ? workout.link : undefined}>{(entry) => {
         const position = draft.entries.indexOf(entry);
         const open = openId === entry.id;
         if (reordering) {

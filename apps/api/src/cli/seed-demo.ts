@@ -62,7 +62,7 @@ const post = (token: string, kind: 'workout' | 'share', title: string, caption: 
   });
 
 const reply = (token: string, id: string, text: string) => call('POST', `/posts/${id}/replies`, token, { text });
-const respect = (token: string, id: string) => call('PUT', `/posts/${id}/respect`, token);
+const respect = (token: string, id: string) => call('PUT', `/posts/${id}/reaction`, token, { emoji: '🫡' });
 const callSandbag = (token: string, id: string, exercise: string, line: string) => call('POST', `/posts/${id}/calls`, token, { exercise, line });
 
 const AVATARS = ['flat_top', 'bull', 'moustache', 'sandbag', 'potato'] as const;

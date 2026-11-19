@@ -91,6 +91,11 @@ const DISPLAY_CHAR_WIDTH = 0.56;
 
 /** The biggest size up to `base` at which this many characters fit the width on one line. */
 export const fitSize = (base: number, characters: number, width: number) => Math.min(base, Math.floor(width / (Math.max(characters, 1) * DISPLAY_CHAR_WIDTH)));
+/**
+ * Someone else's words, kept apart from the sentence they sit in. Without it, Arabic inside an English line
+ * drags the quote marks and whatever follows it to the wrong side. FSI picks the direction from the words themselves.
+ */
+export const isolate = (text: string) => `\u2068${text}\u2069`;
 export const plural = (count: number, word: string) => `${count} ${word}${count === 1 ? '' : 's'}`;
 export const signed = (value: number) => `${value > 0 ? '+' : ''}${value}%`;
 export const signedPoints = (value: number) => `${value > 0 ? '+' : ''}${value}`;

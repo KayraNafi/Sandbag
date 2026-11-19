@@ -12,7 +12,7 @@ import { moveSaved, startBlank } from '@/data/actions';
 import { useData } from '@/data/store';
 import { begin, beginSaved } from '@/nav';
 import { syncNow } from '@/data/sync';
-import { agoLong, agoText, daysLeft, formatDate, num, plural, signedPoints } from '@/domain/format';
+import { agoLong, agoText, daysLeft, formatDate, isolate, num, plural, signedPoints } from '@/domain/format';
 import { activeLogged, activeSaved, nextWorkout } from '@/domain/history';
 import { activeRuns, runSummary, runTitle, timeline } from '@/domain/runs';
 import { useWeek } from '@/domain/week';
@@ -115,7 +115,7 @@ export default function Train() {
           <Muted>
             {call.status === 'watching'
               ? `You were just short, at your limit. Lift ${HONEST_MARGIN * 100}% past it before the watch ends and it was a sandbag. ${daysLeft(call.deadlineAt!)}.`
-              : `“${call.line}” Your next session of this lift settles it. ${daysLeft(call.deadlineAt!)}.`}
+              : `“${isolate(call.line)}” Your next session of this lift settles it. ${daysLeft(call.deadlineAt!)}.`}
           </Muted>
         </Card>
       ))}
@@ -128,7 +128,7 @@ export default function Train() {
               <View key={call.id} style={[styles.myCall, index > 0 && styles.myCallDivider]}>
                 <Text style={styles.name}>{call.target.displayName} · {call.exercise}{targetText(call) ? ` ${targetText(call)}` : ''}</Text>
                 <Text style={[styles.verdict, call.points > 0 && styles.verdictWon, call.points < 0 && styles.verdictLost]}>{standing(call)}</Text>
-                <Muted>“{call.line}” · {agoLong(call.createdAt)}</Muted>
+                <Muted>“{isolate(call.line)}” · {agoLong(call.createdAt)}</Muted>
               </View>
             ))}
           </Card>

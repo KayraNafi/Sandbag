@@ -2,6 +2,7 @@ export * from './calls';
 export * from './exercises';
 export * from './integrations';
 export * from './providers';
+export * from './reactions';
 export * from './lyfta';
 export * from './supersets';
 export * from './running';

@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import type { CallStatus } from './calls';
+import type { Reaction } from './reactions';
 import type { RunningStats } from './running';
 import type { GoalChange, WeekBonuses } from './scoring';
 import { canonicalZone } from './time';
@@ -235,8 +236,7 @@ export interface PostView {
   /** Set on a run post, and only there. */
   run: PostedRun | null;
   createdAt: string;
-  respects: number;
-  respectedByMe: boolean;
+  reactions: ReactionGroup[];
   replyCount: number;
   callCount: number;
   /** Calls still waiting on a verdict, which is when a post stands out in the feed. */
@@ -245,11 +245,19 @@ export interface PostView {
   savedByMe: boolean;
 }
 
+/** Everyone who answered a post or reply with one emoji. One reaction each, so a person is in one group at most. */
+export interface ReactionGroup {
+  emoji: Reaction;
+  byMe: boolean;
+  users: PublicUser[];
+}
+
 export interface ReplyView {
   id: string;
   author: PublicUser;
   text: string;
   createdAt: string;
+  reactions: ReactionGroup[];
 }
 
 export interface CallView {

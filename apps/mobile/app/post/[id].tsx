@@ -1,4 +1,4 @@
-import { CALL_DAYS, CALLABLE_DAYS, DAY_MS, type CallStatus, type CallView } from '@sandbag/shared';
+import { CALL_DAYS, CALLABLE_DAYS, DAY_MS, type CallStatus, type CallView, type ReplyView } from '@sandbag/shared';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
@@ -9,10 +9,11 @@ import { useSession } from '@/auth/session';
 import { MusclesWorked } from '@/components/BodyMap';
 import { confirm } from '@/components/confirm';
 import { PostActions, PostBody } from '@/components/PostCard';
+import { Reactions, useReacting } from '@/components/Reactions';
 import { toast } from '@/components/Toast';
 import { Button, Card, Chip, Field, Heading, Loading, Muted, Row, Screen } from '@/components/ui';
 import { useData } from '@/data/store';
-import { agoLong, agoShort, daysLeft } from '@/domain/format';
+import { agoLong, agoShort, daysLeft, isolate } from '@/domain/format';
 import { Avatar } from '@/components/Avatar';
 import { colors, fonts, space } from '@/theme';
 
@@ -35,8 +36,22 @@ function CallRow({ call }: { call: CallView }) {
       <Avatar user={call.caller} size={30} />
       <View style={styles.flex}>
         <Text style={styles.author}>{call.caller.displayName} called {call.exercise} <Text style={styles.time}>{agoShort(call.createdAt)}</Text></Text>
-        <Text style={styles.caption}>“{call.line}”</Text>
+        <Text style={styles.caption}>“{isolate(call.line)}”</Text>
         <Muted style={call.deadlineAt ? styles.live : undefined}>{call.deadlineAt ? `${verdict} · ${daysLeft(call.deadlineAt)}` : verdict}</Muted>
+      </View>
+    </Row>
+  );
+}
+
+function ReplyRow({ postId, reply }: { postId: string; reply: ReplyView }) {
+  const { groups, react } = useReacting(reply.reactions, (emoji) => api.reactToReply(postId, reply.id, emoji), [['post', postId]]);
+  return (
+    <Row style={styles.reply}>
+      <Avatar user={reply.author} size={30} />
+      <View style={[styles.flex, styles.heading]}>
+        <Text style={styles.author}>{reply.author.displayName} <Text style={styles.time}>{agoShort(reply.createdAt)}</Text></Text>
+        <Text style={styles.caption}>{reply.text}</Text>
+        <Reactions groups={groups} onReact={react} who />
       </View>
     </Row>
   );
@@ -125,10 +140,8 @@ export default function PostScreen() {
         <MusclesWorked entries={data.entries} size={72} />
       </Row>
       <Card><PostBody post={data} /></Card>
-      <Row style={styles.wrap}>
-        <PostActions post={data} />
-        {data.kind === 'share' ? <Muted>{data.saveCount} saved</Muted> : null}
-      </Row>
+      <PostActions post={data} who />
+      {data.kind === 'share' ? <Muted>{data.saveCount} saved</Muted> : null}
 
       {data.kind === 'share' && !mine ? (
         <Button title={data.savedByMe ? 'Already in your workouts' : 'Save to my workouts'} disabled={data.savedByMe} busy={save.isPending} onPress={() => save.mutate()} />
@@ -155,20 +168,12 @@ export default function PostScreen() {
 
       <Heading>Replies</Heading>
       {data.replies.length ? null : <Muted>Nobody’s said anything yet. Be the problem.</Muted>}
-      {data.replies.map((item) => (
-        <Row key={item.id} style={styles.reply}>
-          <Avatar user={item.author} size={30} />
-          <View style={styles.flex}>
-            <Text style={styles.author}>{item.author.displayName} <Text style={styles.time}>{agoShort(item.createdAt)}</Text></Text>
-            <Text style={styles.caption}>{item.text}</Text>
-          </View>
-        </Row>
-      ))}
+      {data.replies.map((item) => <ReplyRow key={item.id} postId={data.id} reply={item} />)}
       <Field label="Reply" maxLength={LINE_MAX} value={reply} onChangeText={setReply} />
       <Button title="Send" variant="ghost" disabled={!reply.trim()} busy={sendReply.isPending} onPress={() => sendReply.mutate()} />
       {mine ? (
         <Button title="Delete post" variant="danger" busy={remove.isPending} onPress={async () => {
-          if (await confirm('Delete this post?', 'Replies and respect go with it. Your logged session stays.', 'Delete')) remove.mutate();
+          if (await confirm('Delete this post?', 'Replies and reactions go with it. Your logged session stays.', 'Delete')) remove.mutate();
         }} />
       ) : null}
     </Screen>

@@ -1,7 +1,5 @@
 import type { PostView } from '@sandbag/shared';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { router } from 'expo-router';
-import { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { api } from '@/api/client';
 import { agoShort, setsReps, summary } from '@/domain/format';
@@ -9,41 +7,18 @@ import { pace } from '@/domain/runs';
 import { Avatar } from './Avatar';
 import { MusclesWorked } from './BodyMap';
 import { Icon, type IconName } from './icons';
-import { Burst, feel, Stamp } from './motion';
+import { Stamp } from './motion';
 import { colors, fonts, space } from '@/theme';
 import { Card, Muted, Row } from './ui';
+import { Reactions, useReacting } from './Reactions';
 import { SupersetList } from './Superset';
 
 const PREVIEW = 4;
 
-export function PostActions({ post }: { post: PostView }) {
-  const client = useQueryClient();
-  const respect = useMutation({
-    mutationFn: () => api.respect(post.id, !post.respectedByMe),
-    onSettled: () => Promise.all([client.invalidateQueries({ queryKey: ['feed'] }), client.invalidateQueries({ queryKey: ['post', post.id] })]),
-  });
-  const [fire, setFire] = useState(0);
-  const on = respect.isPending ? !post.respectedByMe : post.respectedByMe;
-  const count = post.respects + (on === post.respectedByMe ? 0 : on ? 1 : -1);
-  return (
-    <View>
-      <Pressable
-        accessibilityRole="button"
-        accessibilityState={{ selected: on }}
-        accessibilityLabel={`Respect, ${count}`}
-        onPress={() => {
-          feel.tick();
-          // Giving it is the moment worth celebrating. Taking it back is quiet.
-          if (!on) setFire((shot) => shot + 1);
-          respect.mutate();
-        }}
-        style={[styles.action, on && styles.actionOn]}
-      >
-        <Text style={[styles.actionText, on && styles.actionTextOn]}>Respect {count}</Text>
-      </Pressable>
-      <Burst fire={fire} spread={0.45} />
-    </View>
-  );
+/** A post's reactions, with who gave them on the post page. */
+export function PostActions({ post, who = false }: { post: PostView; who?: boolean }) {
+  const { groups, react } = useReacting(post.reactions, (emoji) => api.react(post.id, emoji), [['feed'], ['post', post.id]]);
+  return <Reactions groups={groups} onReact={react} who={who} />;
 }
 
 export function PostEntries({ post, limit }: { post: PostView; limit?: number }) {
@@ -95,7 +70,7 @@ export function PostCard({ post }: { post: PostView }) {
   const called = post.kind === 'workout' && post.liveCalls > 0;
   return (
     <Card style={called ? styles.called : undefined}>
-      {/* Respect sits below the link, not inside it: a button can't hold other buttons. */}
+      {/* Reactions sit below the link, not inside it: a button can't hold other buttons. */}
       <Pressable accessibilityRole="button" accessibilityLabel={`${post.author.displayName}: ${post.title}`} onPress={() => router.push(`/post/${post.id}`)} style={({ pressed }) => [styles.link, pressed && styles.pressed]}>
         <Row>
           <Avatar user={post.author} />
@@ -115,8 +90,8 @@ export function PostCard({ post }: { post: PostView }) {
         </Row>
         <PostBody post={post} limit={PREVIEW} />
       </Pressable>
+      <PostActions post={post} />
       <Row style={styles.footer}>
-        <PostActions post={post} />
         <View style={styles.flex} />
         <Stat icon="reply" count={post.replyCount} label={post.replyCount === 1 ? 'reply' : 'replies'} />
         {post.kind === 'share' ? <Stat icon="share" count={post.saveCount} label="saved" /> : null}
@@ -148,8 +123,4 @@ const styles = StyleSheet.create({
   stamp: { paddingHorizontal: space.sm, borderWidth: 2, borderColor: colors.warn, borderRadius: 4, fontFamily: fonts.display, fontSize: 17, lineHeight: 22, color: colors.warn },
   stat: { flexDirection: 'row', alignItems: 'center', gap: space.xs },
   statText: { fontFamily: fonts.label, fontSize: 15, color: colors.ink2 },
-  action: { minHeight: 44, paddingHorizontal: space.md, borderRadius: 22, justifyContent: 'center', backgroundColor: colors.surface2, borderWidth: 1, borderColor: colors.line },
-  actionOn: { backgroundColor: colors.volt, borderColor: colors.volt },
-  actionText: { fontFamily: fonts.label, fontSize: 14, color: colors.ink },
-  actionTextOn: { color: colors.voltInk },
 });

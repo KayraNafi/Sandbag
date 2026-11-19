@@ -7,9 +7,11 @@ const run = (id: string, date: string, extra: Partial<Run> = {}): Run => ({
 });
 
 describe('runs', () => {
-  it('gives pace per kilometre', () => {
-    expect(pace({ distanceKm: 10, seconds: 3150 })).toBe('5:15 /km');
-    expect(runSummary({ distanceKm: 42.195, seconds: 4 * 3600 })).toBe('42.2 km · 4:00:00 · 5:41 /km');
+  it('gives a run its pace per kilometre and a walk its speed', () => {
+    expect(pace({ activity: 'run', distanceKm: 10, seconds: 3150 })).toBe('5:15 /km');
+    expect(runSummary({ activity: 'run', distanceKm: 42.195, seconds: 4 * 3600 })).toBe('42.2 km · 4:00:00 · 5:41 /km');
+    expect(pace({ activity: 'walk', distanceKm: 12, seconds: 9000 })).toBe('4.8 km/h');
+    expect(runSummary({ activity: 'walk', distanceKm: 5, seconds: 3600 })).toBe('5 km · 1:00:00 · 5.0 km/h');
   });
 
   it('turns typed hours, minutes and seconds into seconds and back', () => {

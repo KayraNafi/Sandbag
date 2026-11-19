@@ -1,7 +1,7 @@
 import { Platform } from 'react-native';
 import type {
   ApiKeyView, TrophyView, AuthResponse, AvatarId, CallView, InviteSummary, Me, NotificationView, PostRef, PostView, PublicUser, RankingPeriod, RankingRow,
-  DataExport, IntegrationId, IntegrationsResponse, IntegrationView, NewPost, ReplyView, SavedWorkout, SyncRequest, SyncResponse,
+  DataExport, IntegrationId, IntegrationsResponse, IntegrationView, NewPost, Reaction, ReplyView, SavedWorkout, SyncRequest, SyncResponse,
 } from '@sandbag/shared';
 
 // The web app is served beside the API, so it needs no address and no CORS.
@@ -59,7 +59,10 @@ export const api = {
   createPost: (input: NewPost) => request<PostView>('POST', '/posts', input),
   postsAbout: (thing: { loggedWorkoutId: string } | { runId: string }) => request<PostRef[]>('GET', `/posts?${new URLSearchParams(thing)}`),
   deletePost: (id: string) => request<void>('DELETE', `/posts/${id}`),
-  respect: (id: string, on: boolean) => request<void>(on ? 'PUT' : 'DELETE', `/posts/${id}/respect`),
+  react: (id: string, emoji: Reaction | null) => (emoji ? request<void>('PUT', `/posts/${id}/reaction`, { emoji }) : request<void>('DELETE', `/posts/${id}/reaction`)),
+  reactToReply: (id: string, replyId: string, emoji: Reaction | null) => (
+    emoji ? request<void>('PUT', `/posts/${id}/replies/${replyId}/reaction`, { emoji }) : request<void>('DELETE', `/posts/${id}/replies/${replyId}/reaction`)
+  ),
   reply: (id: string, text: string) => request<unknown>('POST', `/posts/${id}/replies`, { text }),
   saveFromPost: (id: string) => request<SavedWorkout>('POST', `/posts/${id}/save`),
   callSandbag: (id: string, exercise: string, line: string) => request<unknown>('POST', `/posts/${id}/calls`, { exercise, line }),
