@@ -44,6 +44,7 @@ function Chase({ rows, myId }: { rows: RankingRow[]; myId: string | undefined })
 
 // Tallest in the middle, the way a real podium stands.
 const PODIUM_ORDER = [1, 0, 2];
+// Indexed by rank, not by slot: people tied on points share a step.
 const PODIUM_HEIGHT = [120, 88, 64];
 
 function Podium({ rows, onPick }: { rows: RankingRow[]; onPick: (row: RankingRow) => void }) {
@@ -52,15 +53,17 @@ function Podium({ rows, onPick }: { rows: RankingRow[]; onPick: (row: RankingRow
       {PODIUM_ORDER.map((place) => {
         const row = rows[place];
         if (!row) return <View key={place} style={styles.step} />;
+        const tier = row.rank - 1;
+        const first = tier === 0;
         return (
           <Pressable key={row.user.id} accessibilityRole="button" accessibilityLabel={`${row.rank}. ${row.user.displayName}, ${row.score} points`} onPress={() => onPick(row)} style={styles.step}>
-            <Avatar user={row.user} size={place === 0 ? 64 : 52} />
+            <Avatar user={row.user} size={first ? 64 : 52} />
             <Text numberOfLines={1} style={styles.podiumName}>{row.user.displayName}</Text>
             {row.wearingSandbag ? <Stamp delay={500}><Text style={styles.badge}>SANDBAG</Text></Stamp> : null}
-            <GrowUp height={PODIUM_HEIGHT[place]!} delay={place * 90} style={[styles.block, place === 0 && styles.blockFirst]}>
+            <GrowUp height={PODIUM_HEIGHT[tier]!} delay={place * 90} style={[styles.block, first && styles.blockFirst]}>
               <View style={styles.blockInner}>
-                <CountUp value={row.score} delay={place * 90} style={[styles.podiumScore, place === 0 && styles.podiumScoreFirst]} />
-                <Text style={[styles.podiumRank, place === 0 && styles.podiumRankFirst]}>{row.rank}</Text>
+                <CountUp value={row.score} delay={place * 90} style={[styles.podiumScore, first && styles.podiumScoreFirst]} />
+                <Text style={[styles.podiumRank, first && styles.podiumRankFirst]}>{row.rank}</Text>
               </View>
             </GrowUp>
           </Pressable>
