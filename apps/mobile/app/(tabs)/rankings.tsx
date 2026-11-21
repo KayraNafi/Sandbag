@@ -42,24 +42,30 @@ function Chase({ rows, myId }: { rows: RankingRow[]; myId: string | undefined })
   );
 }
 
-// Tallest in the middle, the way a real podium stands.
+// Tallest in the middle, the way a real podium stands. When the top is shared there's no middle to
+// stand in, so the steps read left to right, whoever got there first on the left.
 const PODIUM_ORDER = [1, 0, 2];
+const SHARED_TOP_ORDER = [0, 1, 2];
 // Indexed by rank, not by slot: people tied on points share a step.
 const PODIUM_HEIGHT = [120, 88, 64];
+const PODIUM_PLACE = ['FIRST', 'SECOND', 'THIRD'];
 
 function Podium({ rows, onPick }: { rows: RankingRow[]; onPick: (row: RankingRow) => void }) {
   return (
     <View style={styles.podium}>
-      {PODIUM_ORDER.map((place) => {
+      {(rows[1]?.rank === 1 ? SHARED_TOP_ORDER : PODIUM_ORDER).map((place) => {
         const row = rows[place];
         if (!row) return <View key={place} style={styles.step} />;
         const tier = row.rank - 1;
         const first = tier === 0;
+        // Level on points, and the server put them ahead for getting there first. Nobody gets there first at zero.
+        const technically = row.score > 0 && rows[place + 1]?.score === row.score && rows[place - 1]?.score !== row.score;
         return (
           <Pressable key={row.user.id} accessibilityRole="button" accessibilityLabel={`${row.rank}. ${row.user.displayName}, ${row.score} points`} onPress={() => onPick(row)} style={styles.step}>
             <Avatar user={row.user} size={first ? 64 : 52} />
             <Text numberOfLines={1} style={styles.podiumName}>{row.user.displayName}</Text>
             {row.wearingSandbag ? <Stamp delay={500}><Text style={styles.badge}>SANDBAG</Text></Stamp> : null}
+            {technically ? <Stamp delay={600}><Text numberOfLines={1} style={styles.technically}>{PODIUM_PLACE[tier]}, TECHNICALLY</Text></Stamp> : null}
             <GrowUp height={PODIUM_HEIGHT[tier]!} delay={place * 90} style={[styles.block, first && styles.blockFirst]}>
               <View style={styles.blockInner}>
                 <CountUp value={row.score} delay={place * 90} style={[styles.podiumScore, first && styles.podiumScoreFirst]} />
@@ -178,6 +184,7 @@ const styles = StyleSheet.create({
   rank: { fontFamily: fonts.display, fontSize: 24, color: colors.ink3, width: 24, textAlign: 'center' },
   name: { fontFamily: fonts.bodyStrong, fontSize: 17, color: colors.ink },
   badge: { fontFamily: fonts.display, fontSize: 13, letterSpacing: 1, color: colors.warn },
+  technically: { fontFamily: fonts.display, fontSize: 12, letterSpacing: 0.5, color: colors.volt },
   score: { fontFamily: fonts.display, fontSize: 28, lineHeight: 34, color: colors.ink, minWidth: 44, textAlign: 'right' },
   scoreMine: { color: colors.volt },
   breakdownTop: { gap: space.sm, marginBottom: space.xs },
