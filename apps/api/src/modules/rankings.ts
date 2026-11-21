@@ -37,17 +37,18 @@ export async function crewTable(db: DbOrTx, userId: string, period: RankingPerio
     const goals = goalsOf(person);
     // Read on their own calendar, so on time means by their own midnight.
     const on = (at: Date) => dateIn(person.timeZone, at);
-    const own = {
+    // Everything that can move a score, each with the moment it landed.
+    const all = {
       workouts: workouts.filter((workout) => workout.ownerId === person.id)
-        .map((workout) => ({ date: workout.date, entries: workout.entries, loggedOn: on(workout.loggedAt), recordedOn: on(workout.recordedAt) })),
-      runs: crewRuns.filter((run) => run.ownerId === person.id).map((run) => ({ ...run, loggedOn: on(run.loggedAt) })),
+        .map((workout) => ({ at: workout.loggedAt, date: workout.date, entries: workout.entries, loggedOn: on(workout.loggedAt), recordedOn: on(workout.recordedAt) })),
+      runs: crewRuns.filter((run) => run.ownerId === person.id).map((run) => ({ ...run, at: run.loggedAt, loggedOn: on(run.loggedAt) })),
+      calls: (settled.get(person.id) ?? [])
+        .map(({ at, points }) => ({ at, day: dateIn(person.timeZone, at), points }))
+        .filter((call) => call.day <= day)
+        .map((call) => ({ ...call, monday: mondayOf(call.day) })),
     };
     // Running has no goal, so only the gym makes a streak, and only the gym counts days trained.
-    const streak = weekStreak(trainedDates(own.workouts), goals, day);
-    const calls = (settled.get(person.id) ?? [])
-      .map(({ at, points }) => ({ day: dateIn(person.timeZone, at), points }))
-      .filter((call) => call.day <= day)
-      .map((call) => ({ day: call.day, monday: mondayOf(call.day), points: call.points }));
+    const streak = weekStreak(trainedDates(all.workouts), goals, day);
     const shared = {
       user: toPublic(person),
       rank: 0,
@@ -56,39 +57,52 @@ export async function crewTable(db: DbOrTx, userId: string, period: RankingPerio
       streak: streak.current,
       shields: streak.shields,
     };
-    if (period === 'all') {
-      const callsByWeek = new Map([...new Set(calls.map((call) => call.monday))]
-        .map((monday) => [monday, cappedCallPoints(calls.filter((call) => call.monday === monday))]));
+    const tally = (own: typeof all) => {
+      const { calls } = own;
+      if (period === 'all') {
+        const callsByWeek = new Map([...new Set(calls.map((call) => call.monday))]
+          .map((monday) => [monday, cappedCallPoints(calls.filter((call) => call.monday === monday))]));
+        return {
+          // Getting stronger needs a before to compare with, and all time has none.
+          progress: 0,
+          workouts: trainedDates(own.workouts).length,
+          consistency: 0,
+          bonuses: null,
+          running: runningStats(own.runs, null, day),
+          calls: [...callsByWeek.values()].reduce((sum, points) => sum + points, 0),
+          score: allTimeScore(own, goals, day, callsByWeek),
+        };
+      }
+      const start = addDays(day, 1 - periodDays(period, day));
+      const stats = periodStats(own.workouts, period, goals, day);
+      const bonuses = period === 'week' ? weekBonuses(own.workouts, goals, day) : null;
+      const running = runningStats(own.runs, start, day);
+      const callPoints = cappedCallPoints(calls.filter((call) => call.day >= start));
       return {
-        ...shared,
-        // Getting stronger needs a before to compare with, and all time has none.
-        progress: 0,
-        workouts: trainedDates(own.workouts).length,
-        consistency: 0,
-        bonuses: null,
-        running: runningStats(own.runs, null, day),
-        calls: [...callsByWeek.values()].reduce((sum, points) => sum + points, 0),
-        score: allTimeScore(own, goals, day, callsByWeek),
+        ...stats,
+        bonuses,
+        running,
+        calls: callPoints,
+        // Calls can cost points, but never below nothing.
+        score: Math.max(0, stats.score + (bonuses?.total ?? 0) + running.points + callPoints),
       };
-    }
-    const start = addDays(day, 1 - periodDays(period, day));
-    const stats = periodStats(own.workouts, period, goals, day);
-    const bonuses = period === 'week' ? weekBonuses(own.workouts, goals, day) : null;
-    const running = runningStats(own.runs, start, day);
-    const callPoints = cappedCallPoints(calls.filter((call) => call.day >= start));
-    return {
-      ...shared,
-      ...stats,
-      bonuses,
-      running,
-      calls: callPoints,
-      // Calls can cost points, but never below nothing.
-      score: Math.max(0, stats.score + (bonuses?.total ?? 0) + running.points + callPoints),
     };
+    const row = { ...shared, ...tally(all) };
+    // When they got to this score: walking back from the newest, the first thing whose absence changes it.
+    // Things that moved nothing, like a session logged too late to count, don't make anyone later.
+    const moments = [...new Set([...all.workouts, ...all.runs, ...all.calls].map((thing) => thing.at.getTime()))].sort((a, b) => b - a);
+    const before = (moment: number) => ({
+      workouts: all.workouts.filter((thing) => thing.at.getTime() < moment),
+      runs: all.runs.filter((thing) => thing.at.getTime() < moment),
+      calls: all.calls.filter((thing) => thing.at.getTime() < moment),
+    });
+    const reachedAt = moments.find((moment) => tally(before(moment)).score !== row.score) ?? 0;
+    return { row, reachedAt };
   });
-  rows.sort((a, b) => b.score - a.score || a.user.displayName.localeCompare(b.user.displayName));
+  // Level on points, whoever got there first stands ahead. Their rank stays shared.
+  rows.sort((a, b) => b.row.score - a.row.score || a.reachedAt - b.reachedAt || a.row.user.displayName.localeCompare(b.row.user.displayName));
   // Equal scores share a rank, and the next person skips it: 1, 2, 3, 3, 5.
-  return rows.map((row) => ({ ...row, rank: 1 + rows.filter((other) => other.score > row.score).length }));
+  return rows.map(({ row }) => ({ ...row, rank: 1 + rows.filter((other) => other.row.score > row.score).length }));
 }
 
 export async function weekScores(db: DbOrTx, userId: string): Promise<Map<string, number>> {

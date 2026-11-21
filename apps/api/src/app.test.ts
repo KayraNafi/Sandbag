@@ -665,6 +665,15 @@ describe('rankings', () => {
     const rows = await call<RankingRow[]>('GET', '/rankings?period=week', founder.token);
     expect(rows.body.map((row) => row.rank)).toEqual([1, 1, 3]);
   });
+
+  it('puts whoever reached a shared score first ahead, on the same rank', async () => {
+    const { founder, friend } = await crew();
+    await sync(friend.token, 0, [logged('b', [entry('Curl', 10)])]);
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    await sync(founder.token, 0, [logged('a', [entry('Curl', 10)])]);
+    const rows = (await call<RankingRow[]>('GET', '/rankings?period=week', founder.token)).body;
+    expect(rows.map((row) => [row.user.id, row.rank])).toEqual([[friend.user.id, 1], [founder.user.id, 1]]);
+  });
 });
 
 describe('hardening', () => {
